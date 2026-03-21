@@ -2,8 +2,6 @@
 
 Active Directory audit and administration suite. Composes OctoDoc stratagems for sensor data and provides the interpretation layer that produces actionable domain answers.
 
-@~/.claude/dev-guide.md
-
 ## Module Identity
 
 - **Name:** monarch-kit

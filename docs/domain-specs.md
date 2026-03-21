@@ -43,13 +43,15 @@ Manages the full account lifecycle from provisioning through deletion.
 - Exclude Managed Service Accounts (MSA) and Group Managed Service Accounts (gMSA) from dormant account discovery — these are AD objects, not user accounts, and will produce false positives. Handle separately or exclude entirely.
 
 **Functions:**
-- Find-DormantAccount (Discovery) — queries AD directly with lastLogonTimestamp first pass and cross-DC LastLogon for near-threshold accounts. Excludes MSA/gMSA object types. No stratagem.
-- Suspend-DormantAccount (Remediation) — archives group memberships and source OU to extensionAttribute14 as JSON, then disables, strips groups, moves to quarantine, writes disable date to extensionAttribute15. **Destructive, requires -WhatIf.**
+- Find-DormantAccount (Discovery) — queries AD directly with lastLogonTimestamp first pass and cross-DC LastLogon for near-threshold accounts. Excludes MSA/gMSA object types. No stratagem. Returns structured objects AND exports CSV with fields: SamAccountName, DisplayName, LastLogon, DaysSinceLogon, PasswordAgeDays, MemberOfGroups, DormantReason. This CSV is the input for human review.
+- Suspend-DormantAccount (Remediation) — accepts a reviewed CSV path (human-pruned output from Find-DormantAccount) as input. Archives group memberships and source OU to extensionAttribute14 as JSON, then disables, strips groups, moves to quarantine, writes disable date to extensionAttribute15. **Destructive, requires -WhatIf.**
 - Restore-DormantAccount (Remediation) — reads extensionAttribute14, restores group memberships, moves account back to source OU, clears extensionAttribute14 and extensionAttribute15, re-enables account. **Destructive, requires -WhatIf.**
 - Get-DormantAccountMonitoringMetrics (Monitoring) — track accounts disabled, reclamation requests, re-enabled count, days in hold
 - Remove-DormantAccount (Cleanup) — permanent deletion with pre-deletion archive (7-year retention guidance), SID preservation. **Destructive, requires -WhatIf.**
 - User provisioning (template-based, OU placement, group membership). **Destructive.**
 - Stale computer account discovery
+
+**Human gate pattern:** Discovery outputs a full CSV. The human reviews it, removes accounts to keep, saves the pruned version. Remediation reads the pruned CSV. This is the core safety mechanism — the automated system never decides which accounts to disable.
 
 **v0 scripts:** Find-DormantAccounts.ps1, Disable-DormantAccounts.ps1, Delete-DormantAccounts.ps1
 
@@ -89,12 +91,21 @@ Comprehensive GPO documentation, anomaly detection, and backup.
 - GPO high-risk detection via XML string matching (not namespace-aware parsing) — see mechanism-decisions.md
 - High-risk categories: UserRightsAssignment, SecurityOptions, Scripts, SoftwareInstallation
 - Permitted GPO editors: `Domain Admins, Enterprise Admins, Group Policy Creator Owners`
-- Numbered output folder convention (00-SUMMARY, 01-HTML, 02-XML, 03-CSV, 04-Permissions) for review priority order
+- Numbered output folder convention (00-SUMMARY, 01-HTML, 02-XML, 03-CSV, 04-Permissions, 05-WMI-Filters) for review priority order
+- GPO display names must be sanitized for filesystem use (strip `\/:*?"<>|` characters) when generating HTML report filenames
+- GPO owner field included in CSV summary output
 
 **Functions:**
-- Export-GPOAudit (Discovery) — comprehensive GPO documentation in multiple formats
-- Find-UnlinkedGPO (Discovery) — orphaned policies
-- Find-GPOPermissionAnomaly (Discovery) — non-standard edit rights
+- Export-GPOAudit (Discovery) — comprehensive GPO documentation in multiple formats. Generates:
+  - HTML reports per GPO with clickable index page (styled, shows domain info, audit date, GPO count, links to each report)
+  - Full XML backup via `Backup-GPO -All` (restore-ready)
+  - CSV summary with fields: DisplayName, GUID, CreatedTime, ModifiedTime, UserEnabled, ComputerEnabled, WMIFilter, Description, HasUserRights, HasSecurityOptions, HasScripts, HasSoftwareInstall, Owner
+  - CSV linkage detail: GPOName, LinkedTo, Enabled, NoOverride, Order. Unlinked GPOs flagged as `**UNLINKED**`
+  - Executive summary text file with statistics (total GPOs, unlinked count, disabled count, high-risk settings counts) and numbered review priorities
+  - WMI filter export (optional): queries `msWMI-Som` AD objects, exports name, description, WQL query, dates
+  - Permission analysis (optional): per-GPO permissions with trustee, SID, type, permission level, inherited flag. Overpermissioned GPOs exported separately (edit rights outside permitted editors list)
+- Find-UnlinkedGPO (Discovery) — orphaned policies (also surfaced as part of Export-GPOAudit linkage CSV)
+- Find-GPOPermissionAnomaly (Discovery) — non-standard edit rights (also surfaced as part of Export-GPOAudit permission analysis)
 - Backup-GPO (Remediation) — full XML backup for restore capability
 - Compare-GPO (Discovery) — before/after or DC-to-DC comparison
 
@@ -207,10 +218,20 @@ Coordinates which functions run in which order per phase. Returns structured res
 $results = Invoke-DomainAudit -Phase Discovery
 ```
 
+**Output directory structure:** The orchestrator creates a date-stamped root directory (`Monarch-Audit-yyyyMMdd`) with numbered subdirectories per domain component:
+```
+Monarch-Audit-20260321/
+├── 01-Baseline/
+├── 02-GPO-Audit/          (uses Export-GPOAudit's own folder convention internally)
+├── 03-Privileged-Access/
+├── 04-Dormant-Accounts/
+└── 05-Infrastructure/
+```
+
 **Phases:**
 1. **Discovery** — calls Discovery functions from all domains, returns collected results
 2. **Review** — returns checklist content and findings for consumer to present (see checklists.md)
-3. **Remediation** — enforces WhatIf preview before execution
+3. **Remediation** — enforces WhatIf preview before execution. Accepts reviewed CSV path for dormant account suspend.
 4. **Monitoring** — returns metrics and hold period status (see mechanism-decisions.md)
 5. **Cleanup** — enforces WhatIf preview before permanent deletion
 
@@ -226,11 +247,14 @@ The admin-facing entry point. Replaces `Start-NetworkHandover.ps1`. This is what
 
 **The wrapper's responsibilities (things the orchestrator does NOT do):**
 - Interactive menu (1-5 phase selection, Q to quit)
-- Pre-phase guidance ("This phase will...", expected time, pre-flight checklists)
+- Pre-phase guidance ("This phase will...", expected time estimates, pre-flight checklists)
+- Timing expectations per step: Discovery overall 30-60 minutes, dormant account cross-DC query 10-20 minutes depending on domain size
 - Human confirmations before destructive operations ("Continue with remediation? yes/no")
+- Prompting for reviewed CSV path during Remediation ("Path to reviewed dormant accounts CSV")
 - Rendering structured results in human-readable format
 - Surfacing checklists inline during the Review phase
 - Surfacing monitoring metrics template and checkpoint guidance during Monitoring
+- Post-phase output summary (listing paths to each output directory)
 - Post-phase next steps ("Run: Start-MonarchAudit -Phase Monitoring")
 - Post-deletion timing warnings ("Deletions will replicate to all DCs within 15 minutes")
 - Press-any-key flow between steps
