@@ -57,12 +57,12 @@ All functions read from `$script:Config` (module-scoped variable set at import t
 
 ### Step 1: Module Foundation
 
-- [ ] **`Monarch.psd1`** — module manifest
+- [x] **`Monarch.psd1`** — module manifest
   - `RootModule = 'Monarch.psm1'`
   - `RequiredModules = @('ActiveDirectory')` — GroupPolicy and DnsServer are optional, checked at runtime
   - `FunctionsToExport` — explicit list of all public functions (no wildcards)
   - `PowerShellVersion = '5.1'`
-- [ ] **`Monarch.psm1`** — module script skeleton with `#region` blocks
+- [x] **`Monarch.psm1`** — module script skeleton with `#region` blocks
   ```
   #region Config
   #region Private Helpers
@@ -78,21 +78,21 @@ All functions read from `$script:Config` (module-scoped variable set at import t
   #region Orchestrator
   ```
   Single `.psm1` per CLAUDE.md spec. Refactor to dot-sourced files only if this becomes unwieldy.
-- [ ] **`Tests/Monarch.Tests.ps1`** — test file skeleton with `BeforeAll` block that imports the module
-- [ ] **Test: module loads** — `Import-Module` succeeds, expected functions are exported
+- [x] **`Tests/Monarch.Tests.ps1`** — test file skeleton with `BeforeAll` block that imports the module
+- [x] **Test: module loads** — `Import-Module` succeeds, manifest lists expected functions, private functions not exported
 
 ---
 
 ### Step 2: Config Layer
 
-- [ ] **`Monarch-Config.psd1`** — ships with all defaults commented out, self-documenting
-- [ ] **Built-in defaults hashtable** in `.psm1` (`$script:DefaultConfig`):
+- [x] **`Monarch-Config.psd1`** — ships with all defaults commented out, self-documenting (pre-existing)
+- [x] **Built-in defaults hashtable** in `.psm1` (`$script:DefaultConfig`):
 
   | Key | Default | Rationale |
   |-----|---------|-----------|
   | `DormancyThresholdDays` | 90 | PCI/NIST/Microsoft |
-  | `GracePeriodDays` | 60 | New account setup window |
-  | `HoldPeriodMinDays` | 30 | Minimum before deletion |
+  | `NeverLoggedOnGraceDays` | 60 | New account setup window |
+  | `HoldPeriodMinimumDays` | 30 | Minimum before deletion |
   | `QuarantineOUName` | `zQuarantine-Dormant` | z-prefix sorts to bottom |
   | `DisableDateAttribute` | `extensionAttribute15` | Less commonly claimed |
   | `RollbackDataAttribute` | `extensionAttribute14` | Same rationale |
@@ -100,16 +100,19 @@ All functions read from `$script:Config` (module-scoped variable set at import t
   | `BuiltInExclusions` | `@('Administrator','Guest','krbtgt','DefaultAccount','WDAGUtilityAccount')` | From v0 |
   | `DomainAdminWarningThreshold` | 5 | Per spec |
   | `DomainAdminCriticalThreshold` | 10 | Per spec |
-  | `AdminNamingPattern` | `'adm\|admin'` | Configurable regex |
+  | `AdminAccountPattern` | `'adm\|admin'` | Configurable regex |
   | `PermittedGPOEditors` | `@('Domain Admins','Enterprise Admins','Group Policy Creator Owners')` | Per spec |
-  | `ReplicationWarningHours` | 24 | Per spec |
-  | `DeletionRetentionYears` | 7 | Compliance guidance |
+  | `ReplicationWarningThresholdHours` | 24 | Per spec |
+  | `DeletionArchiveRetentionYears` | 7 | Compliance guidance |
+  | `KnownBackupServices` | `@{ Veeam = @(...); Acronis = @(...); ... }` | Tier 2 vendor service detection |
   | `BackupIntegration` | `$null` | Opt-in, tier 3 |
   | `HealthyDCThreshold` | 7 | For Get-HealthyDC |
 
-- [ ] **`Import-MonarchConfig`** (private) — called once at module load. Reads `Monarch-Config.psd1` from module directory if it exists, merges with built-in defaults (file wins), stores in `$script:Config`
-- [ ] **`Get-MonarchConfigValue`** (private) — takes `-Key [string]`, returns value from `$script:Config`. Single access point — never index `$script:Config` directly in function bodies
-- [ ] **Tests: config layer**
+  Key names aligned to existing `Monarch-Config.psd1` (e.g., `NeverLoggedOnGraceDays` not `GracePeriodDays`, `ReplicationWarningThresholdHours` not `ReplicationWarningHours`).
+
+- [x] **`Import-MonarchConfig`** (private) — called once at module load. Reads `Monarch-Config.psd1` from module directory if it exists, merges with built-in defaults (file wins), stores in `$script:Config`
+- [x] **`Get-MonarchConfigValue`** (private) — takes `-Key [string]`, returns value from `$script:Config`. Single access point — never index `$script:Config` directly in function bodies
+- [x] **Tests: config layer** (14 tests passing)
   - Default values are correct when no config file exists
   - Config file overrides specific keys while preserving other defaults
   - `Get-MonarchConfigValue` returns expected values
@@ -119,7 +122,7 @@ All functions read from `$script:Config` (module-scoped variable set at import t
 
 ### Step 3: Target Resolution
 
-- [ ] **`Resolve-MonarchDC`** (private)
+- [x] **`Resolve-MonarchDC`** (private)
 
   | Parameter | Type | Default |
   |-----------|------|---------|
@@ -133,10 +136,10 @@ All functions read from `$script:Config` (module-scoped variable set at import t
 
   Why the fallback: OctoDoc is MVP with stubs. If it's not installed or fails, the audit should still work.
 
-- [ ] **Tests: target resolution**
+- [x] **Tests: target resolution** (5 tests passing)
   - With OctoDoc available: returns HealthyDC source
   - With OctoDoc unavailable (mock `Get-Command` returns nothing): falls back to Discovered source
-  - With explicit domain: uses provided domain
+  - With OctoDoc throwing: falls back to Discovered source
   - With no domain: uses current domain from mocked `Get-ADDomain`
   - Return shape has DCName, Domain, Source properties
 
