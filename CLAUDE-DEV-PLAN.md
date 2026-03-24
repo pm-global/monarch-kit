@@ -349,7 +349,7 @@ Four functions, all follow the Step 4 pattern.
 
 ### Step 6: Security Posture
 
-- [ ] **6a. `Get-PasswordPolicyInventory`**
+- [x] **6a. `Get-PasswordPolicyInventory`**
 
   Return contract:
   ```
@@ -373,11 +373,11 @@ Four functions, all follow the Step 4 pattern.
 
   Logic: `Get-ADDefaultDomainPasswordPolicy` + `Get-ADFineGrainedPasswordPolicy -Filter *`. Shape into objects.
 
-- [ ] **Tests: Get-PasswordPolicyInventory**
+- [x] **Tests: Get-PasswordPolicyInventory**
   - Return shape correct
   - FineGrainedPolicies is empty array when none exist (not `$null`)
 
-- [ ] **6b. `Find-WeakAccountFlag`**
+- [x] **6b. `Find-WeakAccountFlag`**
 
   Return contract:
   ```
@@ -399,7 +399,7 @@ Four functions, all follow the Step 4 pattern.
 
   Logic: Three `Get-ADUser -Filter` queries for each flag. Union, deduplicate, cross-reference with privileged group membership.
 
-- [ ] **Tests: Find-WeakAccountFlag**
+- [x] **Tests: Find-WeakAccountFlag**
   - Account with multiple flags appears once per flag
   - `IsPrivileged` correctly set based on mocked group membership
   - `CountByFlag` totals match `Findings` array

@@ -619,6 +619,144 @@ function Get-ReplicationHealth
 # Password policies, weak flags, Protected Users gaps, legacy protocols.
 # All Discovery phase.
 
+function Get-PasswordPolicyInventory {
+    [CmdletBinding()]
+    param([string]$Server)
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $splatAD = if ($Server) { @{ Server = $Server } } else { @{} }
+
+    $defaultPolicy = $null
+    $fgPolicies = @()
+
+    # --- Section 1: Default Domain Policy ---
+    try {
+        $pol = Get-ADDefaultDomainPasswordPolicy @splatAD
+        $defaultPolicy = [PSCustomObject]@{
+            MinLength            = $pol.MinPasswordLength
+            HistoryCount         = $pol.PasswordHistoryCount
+            MaxAgeDays           = $pol.MaxPasswordAge.Days
+            MinAgeDays           = $pol.MinPasswordAge.Days
+            LockoutThreshold     = $pol.LockoutThreshold
+            LockoutDurationMin   = $pol.LockoutDuration.TotalMinutes
+            ComplexityEnabled    = $pol.ComplexityEnabled
+            ReversibleEncryption = $pol.ReversibleEncryptionEnabled
+        }
+    } catch {
+        $warnings.Add("DefaultPolicy: $_")
+    }
+
+    # --- Section 2: Fine-Grained Password Policies ---
+    try {
+        $psos = @(Get-ADFineGrainedPasswordPolicy -Filter '*' @splatAD)
+        $fgPolicies = @(foreach ($p in $psos) {
+            [PSCustomObject]@{
+                Name             = $p.Name
+                Precedence       = $p.Precedence
+                AppliesTo        = @($p.AppliesTo)
+                MinLength        = $p.MinPasswordLength
+                MaxAgeDays       = $p.MaxPasswordAge.Days
+                LockoutThreshold = $p.LockoutThreshold
+            }
+        })
+    } catch {
+        $warnings.Add("FineGrainedPolicies: $_")
+    }
+
+    [PSCustomObject]@{
+        Domain              = 'SecurityPosture'
+        Function            = 'Get-PasswordPolicyInventory'
+        Timestamp           = $timestamp
+        DefaultPolicy       = $defaultPolicy
+        FineGrainedPolicies = $fgPolicies
+        Warnings            = @($warnings)
+    }
+}
+
+function Find-WeakAccountFlag {
+    [CmdletBinding()]
+    param([string]$Server)
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $splatAD = if ($Server) { @{ Server = $Server } } else { @{} }
+
+    $findings = [System.Collections.Generic.List[PSCustomObject]]::new()
+    $userMemberOf = @{}
+
+    # --- Section 1: Query each flag type ---
+    $flagFilters = @{
+        PasswordNeverExpires = 'PasswordNeverExpires -eq $true -and Enabled -eq $true'
+        ReversibleEncryption = 'AllowReversiblePasswordEncryption -eq $true -and Enabled -eq $true'
+        DESOnly              = 'UseDESKeyOnly -eq $true -and Enabled -eq $true'
+    }
+
+    foreach ($flag in $flagFilters.Keys) {
+        try {
+            $users = @(Get-ADUser -Filter $flagFilters[$flag] -Properties DisplayName, MemberOf, ServicePrincipalName @splatAD)
+            foreach ($u in $users) {
+                if (-not $userMemberOf.ContainsKey($u.SamAccountName)) {
+                    $userMemberOf[$u.SamAccountName] = @($u.MemberOf)
+                }
+                $findings.Add([PSCustomObject]@{
+                    SamAccountName = $u.SamAccountName
+                    DisplayName    = $u.DisplayName
+                    Flag           = $flag
+                    Enabled        = $true
+                    IsPrivileged   = $false
+                })
+            }
+        } catch {
+            $warnings.Add("${flag}: $_")
+        }
+    }
+
+    # --- Section 2: Cross-reference with privileged groups ---
+    $privGroupDNs = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase)
+    try {
+        $allGroups = @(Get-ADGroup -Filter '*' -Properties SID @splatAD)
+        foreach ($g in $allGroups) {
+            $sid = $g.SID.Value
+            if ($sid -like '*-512' -or $sid -like '*-519' -or $sid -like '*-518' -or
+                $sid -eq 'S-1-5-32-544' -or $sid -eq 'S-1-5-32-548' -or
+                $sid -eq 'S-1-5-32-549' -or $sid -eq 'S-1-5-32-551') {
+                $privGroupDNs.Add($g.DistinguishedName) | Out-Null
+            }
+        }
+    } catch {
+        $warnings.Add("PrivilegedGroups: $_")
+    }
+
+    foreach ($f in $findings) {
+        if ($userMemberOf.ContainsKey($f.SamAccountName)) {
+            foreach ($groupDN in $userMemberOf[$f.SamAccountName]) {
+                if ($privGroupDNs.Contains($groupDN)) {
+                    $f.IsPrivileged = $true
+                    break
+                }
+            }
+        }
+    }
+
+    # --- Build CountByFlag ---
+    $countByFlag = @{}
+    foreach ($f in @($findings)) {
+        if (-not $countByFlag.ContainsKey($f.Flag)) { $countByFlag[$f.Flag] = 0 }
+        $countByFlag[$f.Flag]++
+    }
+
+    [PSCustomObject]@{
+        Domain      = 'SecurityPosture'
+        Function    = 'Find-WeakAccountFlag'
+        Timestamp   = $timestamp
+        Findings    = @($findings)
+        CountByFlag = $countByFlag
+        Warnings    = @($warnings)
+    }
+}
+
 #endregion Security Posture
 
 #region Backup and Recovery

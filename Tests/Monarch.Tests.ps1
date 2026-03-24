@@ -1327,8 +1327,223 @@ Describe 'Get-ReplicationHealth' {
 
 # =============================================================================
 # Step 6: Security Posture
-# Tests added in Step 6 implementation.
 # =============================================================================
+
+Describe 'Get-PasswordPolicyInventory' {
+
+    BeforeAll {
+        & (Get-Module Monarch) {
+            function script:Get-ADDefaultDomainPasswordPolicy
+            { param([string]$Server)
+            }
+            function script:Get-ADFineGrainedPasswordPolicy
+            { param([string]$Filter, [string]$Server)
+            }
+        }
+    }
+
+    Context 'when all sections succeed' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADDefaultDomainPasswordPolicy {
+                [PSCustomObject]@{
+                    MinPasswordLength           = 12
+                    PasswordHistoryCount        = 24
+                    MaxPasswordAge              = New-TimeSpan -Days 90
+                    MinPasswordAge              = New-TimeSpan -Days 1
+                    LockoutThreshold            = 5
+                    LockoutDuration             = New-TimeSpan -Minutes 30
+                    ComplexityEnabled           = $true
+                    ReversibleEncryptionEnabled = $false
+                }
+            }
+
+            Mock -ModuleName Monarch Get-ADFineGrainedPasswordPolicy {
+                @([PSCustomObject]@{
+                    Name             = 'ServiceAccountPSO'
+                    Precedence       = 10
+                    AppliesTo        = @('CN=SvcAccounts,DC=test,DC=local')
+                    MinPasswordLength = 20
+                    MaxPasswordAge   = New-TimeSpan -Days 60
+                    LockoutThreshold = 0
+                })
+            }
+
+            $script:result = Get-PasswordPolicyInventory
+        }
+
+        It 'returns correct shape and metadata' {
+            $result.Domain   | Should -Be 'SecurityPosture'
+            $result.Function | Should -Be 'Get-PasswordPolicyInventory'
+            $result.Timestamp | Should -BeOfType [datetime]
+            $result.PSObject.Properties.Name | Should -Contain 'DefaultPolicy'
+            $result.PSObject.Properties.Name | Should -Contain 'FineGrainedPolicies'
+            $result.PSObject.Properties.Name | Should -Contain 'Warnings'
+            $result.Warnings | Should -HaveCount 0
+        }
+
+        It 'populates default policy values from mock' {
+            $result.DefaultPolicy.MinLength        | Should -Be 12
+            $result.DefaultPolicy.HistoryCount     | Should -Be 24
+            $result.DefaultPolicy.MaxAgeDays       | Should -Be 90
+            $result.DefaultPolicy.MinAgeDays       | Should -Be 1
+            $result.DefaultPolicy.LockoutThreshold | Should -Be 5
+            $result.DefaultPolicy.LockoutDurationMin | Should -Be 30
+            $result.DefaultPolicy.ComplexityEnabled | Should -BeTrue
+            $result.DefaultPolicy.ReversibleEncryption | Should -BeFalse
+        }
+    }
+
+    Context 'when no fine-grained policies exist' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADDefaultDomainPasswordPolicy {
+                [PSCustomObject]@{
+                    MinPasswordLength           = 8
+                    PasswordHistoryCount        = 12
+                    MaxPasswordAge              = New-TimeSpan -Days 60
+                    MinPasswordAge              = New-TimeSpan -Days 0
+                    LockoutThreshold            = 3
+                    LockoutDuration             = New-TimeSpan -Minutes 15
+                    ComplexityEnabled           = $false
+                    ReversibleEncryptionEnabled = $false
+                }
+            }
+
+            Mock -ModuleName Monarch Get-ADFineGrainedPasswordPolicy { @() }
+
+            $script:result = Get-PasswordPolicyInventory
+        }
+
+        It 'returns empty array for FineGrainedPolicies not null' {
+            $result.FineGrainedPolicies -is [array] | Should -BeTrue
+            @($result.FineGrainedPolicies).Count | Should -Be 0
+        }
+    }
+}
+
+Describe 'Find-WeakAccountFlag' {
+
+    BeforeAll {
+        & (Get-Module Monarch) {
+            function script:Get-ADUser
+            { param([string]$Filter, [string[]]$Properties, [string]$Server)
+            }
+            function script:Get-ADGroup
+            { param([string]$Filter, [string[]]$Properties, [string]$Server)
+            }
+        }
+
+        $script:domainAdminsDN = 'CN=Domain Admins,CN=Users,DC=test,DC=local'
+    }
+
+    Context 'with mixed flag accounts' {
+
+        BeforeAll {
+            # user1: has PasswordNeverExpires AND ReversibleEncryption, is Domain Admin
+            # user2: has ReversibleEncryption only, not privileged
+            # user3: has DESOnly only, not privileged
+            $user1 = [PSCustomObject]@{
+                SamAccountName = 'user1'
+                DisplayName    = 'User One'
+                MemberOf       = @($domainAdminsDN)
+            }
+            $user2 = [PSCustomObject]@{
+                SamAccountName = 'user2'
+                DisplayName    = 'User Two'
+                MemberOf       = @('CN=RegularGroup,DC=test,DC=local')
+            }
+            $user3 = [PSCustomObject]@{
+                SamAccountName = 'user3'
+                DisplayName    = 'User Three'
+                MemberOf       = @()
+            }
+
+            Mock -ModuleName Monarch Get-ADUser -ParameterFilter {
+                $Filter -like '*PasswordNeverExpires*'
+            } { @($user1) }
+
+            Mock -ModuleName Monarch Get-ADUser -ParameterFilter {
+                $Filter -like '*AllowReversiblePasswordEncryption*'
+            } { @($user1, $user2) }
+
+            Mock -ModuleName Monarch Get-ADUser -ParameterFilter {
+                $Filter -like '*UseDESKeyOnly*'
+            } { @($user3) }
+
+            Mock -ModuleName Monarch Get-ADGroup {
+                @(
+                    [PSCustomObject]@{
+                        DistinguishedName = $domainAdminsDN
+                        SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                    },
+                    [PSCustomObject]@{
+                        DistinguishedName = 'CN=RegularGroup,DC=test,DC=local'
+                        SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-1001' }
+                    }
+                )
+            }
+
+            $script:result = Find-WeakAccountFlag
+        }
+
+        It 'creates one finding per flag per user' {
+            $result.Findings | Should -HaveCount 4
+            @($result.Findings | Where-Object SamAccountName -eq 'user1') | Should -HaveCount 2
+            @($result.Findings | Where-Object SamAccountName -eq 'user2') | Should -HaveCount 1
+            @($result.Findings | Where-Object SamAccountName -eq 'user3') | Should -HaveCount 1
+        }
+
+        It 'sets IsPrivileged correctly from group membership' {
+            $result.Findings | Where-Object SamAccountName -eq 'user1' |
+                ForEach-Object { $_.IsPrivileged | Should -BeTrue }
+            $result.Findings | Where-Object SamAccountName -eq 'user2' |
+                ForEach-Object { $_.IsPrivileged | Should -BeFalse }
+            $result.Findings | Where-Object SamAccountName -eq 'user3' |
+                ForEach-Object { $_.IsPrivileged | Should -BeFalse }
+        }
+
+        It 'builds CountByFlag matching findings' {
+            $result.CountByFlag['PasswordNeverExpires'] | Should -Be 1
+            $result.CountByFlag['ReversibleEncryption'] | Should -Be 2
+            $result.CountByFlag['DESOnly'] | Should -Be 1
+        }
+    }
+
+    Context 'when one flag query fails' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADUser -ParameterFilter {
+                $Filter -like '*PasswordNeverExpires*'
+            } { throw 'Access denied' }
+
+            Mock -ModuleName Monarch Get-ADUser -ParameterFilter {
+                $Filter -like '*AllowReversiblePasswordEncryption*'
+            } { @() }
+
+            Mock -ModuleName Monarch Get-ADUser -ParameterFilter {
+                $Filter -like '*UseDESKeyOnly*'
+            } {
+                @([PSCustomObject]@{
+                    SamAccountName = 'svc1'
+                    DisplayName    = 'Service One'
+                    MemberOf       = @()
+                })
+            }
+
+            Mock -ModuleName Monarch Get-ADGroup { @() }
+
+            $script:result = Find-WeakAccountFlag
+        }
+
+        It 'still returns other flags and adds warning' {
+            $result.Findings | Should -HaveCount 1
+            $result.Findings[0].Flag | Should -Be 'DESOnly'
+            $result.Warnings | Should -Not -BeNullOrEmpty
+            $result.Warnings[0] | Should -BeLike '*PasswordNeverExpires*'
+        }
+    }
+}
 
 # =============================================================================
 # Step 7: Privileged Access
