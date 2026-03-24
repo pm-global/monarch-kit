@@ -149,7 +149,7 @@ All functions read from `$script:Config` (module-scoped variable set at import t
 
 This is the first API function built. It establishes the pattern all subsequent functions follow.
 
-- [ ] **`New-DomainBaseline`** function
+- [x] **`New-DomainBaseline`** function
 
   Signature:
   ```
@@ -204,7 +204,7 @@ This is the first API function built. It establishes the pattern all subsequent 
   - DNS zones removed (belongs to DNS domain functions)
   - DHCP removed (not in spec)
 
-- [ ] **Tests: New-DomainBaseline**
+- [x] **Tests: New-DomainBaseline** (27 tests — 11 shape/metadata, 9 resilience, 7 CSV export)
   - Return object has all required properties
   - `Domain` = `'AuditCompliance'`, `Function` = `'New-DomainBaseline'`
   - `Timestamp` is populated and recent
