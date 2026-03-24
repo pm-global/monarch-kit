@@ -219,7 +219,7 @@ This is the first API function built. It establishes the pattern all subsequent 
 
 Four functions, all follow the Step 4 pattern.
 
-- [ ] **5a. `Get-FSMORolePlacement`**
+- [x] **5a. `Get-FSMORolePlacement`**
 
   | Parameter | Type |
   |-----------|------|
@@ -245,13 +245,13 @@ Four functions, all follow the Step 4 pattern.
 
   Logic: `Get-ADDomain` + `Get-ADForest` for role holders, then `Test-Connection -Count 1` each. Lightweight.
 
-- [ ] **Tests: Get-FSMORolePlacement**
+- [x] **Tests: Get-FSMORolePlacement**
   - Return shape correct
   - `AllOnOneDC` = `$true` when all mocked roles point to same DC
   - `AllOnOneDC` = `$false` when roles are distributed
   - Unreachable DC (mock Test-Connection to fail) shows `Reachable = $false` and increments `UnreachableCount`
 
-- [ ] **5b. `Get-ReplicationHealth`**
+- [x] **5b. `Get-ReplicationHealth`**
 
   | Parameter | Type |
   |-----------|------|
@@ -284,7 +284,7 @@ Four functions, all follow the Step 4 pattern.
 
   V0 reference: `Create-NetworkBaseline.ps1` replication section — carry per-DC iteration, add partition awareness and DiagnosticHints.
 
-- [ ] **Tests: Get-ReplicationHealth**
+- [x] **Tests: Get-ReplicationHealth**
   - Healthy link (last success 2 hours ago) → Status = 'Healthy'
   - Warning link (last success 30 hours ago, default 24h threshold) → Status = 'Warning'
   - Failed link (consecutive failures > 0) → Status = 'Failed'
@@ -292,7 +292,7 @@ Four functions, all follow the Step 4 pattern.
   - DiagnosticHints generated when one partition fails but another succeeds on same link
   - Config override: custom `ReplicationWarningHours` changes threshold
 
-- [ ] **5c. `Get-SiteTopology`**
+- [x] **5c. `Get-SiteTopology`**
 
   Return contract:
   ```
@@ -315,12 +315,12 @@ Four functions, all follow the Step 4 pattern.
 
   Logic: `Get-ADReplicationSite -Filter *`, `Get-ADReplicationSubnet -Filter *`. Subnets where `.Site` is null → UnassignedSubnets. Sites with no matching DC → EmptySites.
 
-- [ ] **Tests: Get-SiteTopology**
+- [x] **Tests: Get-SiteTopology**
   - Subnet with no site → appears in `UnassignedSubnets`
   - Site with no DCs → appears in `EmptySites`
   - Counts match mocked data
 
-- [ ] **5d. `Get-ForestDomainLevel`**
+- [x] **5d. `Get-ForestDomainLevel`**
 
   Trivial function. Returns functional levels and schema version.
 
@@ -341,7 +341,7 @@ Four functions, all follow the Step 4 pattern.
 
   Note: Overlaps with `New-DomainBaseline`. Intentional — baseline is a snapshot document, this is a focused check. Both are cheap AD queries.
 
-- [ ] **Tests: Get-ForestDomainLevel**
+- [x] **Tests: Get-ForestDomainLevel**
   - Return shape correct
   - Schema version populated from mocked AD object
 
