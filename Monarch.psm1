@@ -223,9 +223,9 @@ function New-DomainBaseline
     $warnings = [System.Collections.Generic.List[string]]::new()
     $outputFiles = [System.Collections.Generic.List[string]]::new()
     $splatAD = if ($Server)
-    { @{ Server = $Server } 
+    { @{ Server = $Server }
     } else
-    { @{} 
+    { @{}
     }
 
     # Initialize all result variables so the return contract is always complete.
@@ -286,7 +286,7 @@ function New-DomainBaseline
     # --- Section 4: Domain Controllers ---
     try
     {
-        $dcObjects = @(Get-ADDomainController -Filter * @splatAD)
+        $dcObjects = @(Get-ADDomainController -Filter '*' @splatAD)
         $domainControllers = @(foreach ($dc in $dcObjects)
             {
                 [PSCustomObject]@{
@@ -306,7 +306,7 @@ function New-DomainBaseline
     # --- Section 5: Sites ---
     try
     {
-        $siteCount = @(Get-ADReplicationSite -Filter * @splatAD).Count
+        $siteCount = @(Get-ADReplicationSite -Filter '*' @splatAD).Count
     } catch
     {
         $warnings.Add("Sites: $_")
@@ -315,7 +315,7 @@ function New-DomainBaseline
     # --- Section 6: OUs & Object Counts ---
     try
     {
-        $ouCount = @(Get-ADOrganizationalUnit -Filter * @splatAD).Count
+        $ouCount = @(Get-ADOrganizationalUnit -Filter '*' @splatAD).Count
     } catch
     {
         $warnings.Add("OUCount: $_")
@@ -323,7 +323,7 @@ function New-DomainBaseline
 
     try
     {
-        $allUsers = @(Get-ADUser -Filter * @splatAD)
+        $allUsers = @(Get-ADUser -Filter '*' @splatAD)
         $userCount = [PSCustomObject]@{
             Total   = $allUsers.Count
             Enabled = @($allUsers | Where-Object Enabled -eq $true).Count
@@ -335,7 +335,7 @@ function New-DomainBaseline
 
     try
     {
-        $allComputers = @(Get-ADComputer -Filter * @splatAD)
+        $allComputers = @(Get-ADComputer -Filter '*' @splatAD)
         $computerCount = [PSCustomObject]@{
             Total   = $allComputers.Count
             Enabled = @($allComputers | Where-Object Enabled -eq $true).Count
@@ -347,7 +347,7 @@ function New-DomainBaseline
 
     try
     {
-        $groupCount = @(Get-ADGroup -Filter * @splatAD).Count
+        $groupCount = @(Get-ADGroup -Filter '*' @splatAD).Count
     } catch
     {
         $warnings.Add("GroupCount: $_")
@@ -378,14 +378,14 @@ function New-DomainBaseline
                 DomainNetBIOS         = $domainInfo.NetBIOSName
                 DomainFunctionalLevel = $domainInfo.DomainMode
                 ForestName            = if ($forestInfo)
-                { $forestInfo.Name 
+                { $forestInfo.Name
                 } else
-                { $null 
+                { $null
                 }
                 ForestFunctionalLevel = if ($forestInfo)
-                { $forestInfo.ForestMode 
+                { $forestInfo.ForestMode
                 } else
-                { $null 
+                { $null
                 }
                 SchemaVersion         = $schemaVersion
             } | Export-Csv -Path $csvPath -NoTypeInformation
@@ -411,24 +411,24 @@ function New-DomainBaseline
             $csvPath = Join-Path $OutputPath 'object-counts.csv'
             [PSCustomObject]@{
                 TotalUsers       = if ($userCount)
-                { $userCount.Total 
+                { $userCount.Total
                 } else
-                { $null 
+                { $null
                 }
                 EnabledUsers     = if ($userCount)
-                { $userCount.Enabled 
+                { $userCount.Enabled
                 } else
-                { $null 
+                { $null
                 }
                 TotalComputers   = if ($computerCount)
-                { $computerCount.Total 
+                { $computerCount.Total
                 } else
-                { $null 
+                { $null
                 }
                 EnabledComputers = if ($computerCount)
-                { $computerCount.Enabled 
+                { $computerCount.Enabled
                 } else
-                { $null 
+                { $null
                 }
                 Groups           = $groupCount
                 OUs              = $ouCount
@@ -451,29 +451,29 @@ function New-DomainBaseline
         Timestamp             = $timestamp
         Server                = $Server
         DomainDNSRoot         = if ($domainInfo)
-        { $domainInfo.DNSRoot 
+        { $domainInfo.DNSRoot
         } else
-        { $null 
+        { $null
         }
         DomainNetBIOS         = if ($domainInfo)
-        { $domainInfo.NetBIOSName 
+        { $domainInfo.NetBIOSName
         } else
-        { $null 
+        { $null
         }
         DomainFunctionalLevel = if ($domainInfo)
-        { $domainInfo.DomainMode 
+        { $domainInfo.DomainMode
         } else
-        { $null 
+        { $null
         }
         ForestName            = if ($forestInfo)
-        { $forestInfo.Name 
+        { $forestInfo.Name
         } else
-        { $null 
+        { $null
         }
         ForestFunctionalLevel = if ($forestInfo)
-        { $forestInfo.ForestMode 
+        { $forestInfo.ForestMode
         } else
-        { $null 
+        { $null
         }
         SchemaVersion         = $schemaVersion
         DomainControllers     = $domainControllers

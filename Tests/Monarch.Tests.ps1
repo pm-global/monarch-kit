@@ -742,6 +742,126 @@ Describe 'New-DomainBaseline' {
             $result.Warnings.Count | Should -BeGreaterOrEqual 5
         }
     }
+
+    Context 'CSV export with OutputPath' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADDomain {
+                [PSCustomObject]@{
+                    DNSRoot = 'csv.local'; NetBIOSName = 'CSV'; DomainMode = 'Windows2016Domain'
+                    PDCEmulator = 'DC01'; RIDMaster = 'DC01'; InfrastructureMaster = 'DC01'
+                    DistinguishedName = 'DC=csv,DC=local'
+                }
+            }
+            Mock -ModuleName Monarch Get-ADForest {
+                [PSCustomObject]@{ Name = 'csv.local'; ForestMode = 'Windows2016Forest'; SchemaMaster = 'DC01'; DomainNamingMaster = 'DC01' }
+            }
+            Mock -ModuleName Monarch Get-ADObject { [PSCustomObject]@{ objectVersion = 88 } }
+            Mock -ModuleName Monarch Get-ADDomainController {
+                @([PSCustomObject]@{
+                        HostName = 'DC01'; Site = 'Site1'; OperatingSystem = 'WS2019'
+                        IPv4Address = '10.0.0.1'; IsGlobalCatalog = $true; IsReadOnly = $false
+                    })
+            }
+            Mock -ModuleName Monarch Get-ADReplicationSite { @([PSCustomObject]@{ Name = 'Site1' }) }
+            Mock -ModuleName Monarch Get-ADOrganizationalUnit { @([PSCustomObject]@{ Name = 'Users' }) }
+            Mock -ModuleName Monarch Get-ADUser { @([PSCustomObject]@{ Enabled = $true }) }
+            Mock -ModuleName Monarch Get-ADComputer { @([PSCustomObject]@{ Enabled = $true }) }
+            Mock -ModuleName Monarch Get-ADGroup { @([PSCustomObject]@{ Name = 'G1' }) }
+            Mock -ModuleName Monarch Get-ADDefaultDomainPasswordPolicy { [PSCustomObject]@{ MinPasswordLength = 12 } }
+
+            $script:csvDir = Join-Path $TestDrive 'baseline-output'
+            $script:csvResult = New-DomainBaseline -OutputPath $csvDir
+        }
+
+        It 'creates the output directory' {
+            Test-Path $csvDir | Should -BeTrue
+        }
+
+        It 'writes expected CSV files' {
+            Test-Path (Join-Path $csvDir 'domain-info.csv') | Should -BeTrue
+            Test-Path (Join-Path $csvDir 'domain-controllers.csv') | Should -BeTrue
+            Test-Path (Join-Path $csvDir 'fsmo-roles.csv') | Should -BeTrue
+            Test-Path (Join-Path $csvDir 'object-counts.csv') | Should -BeTrue
+            Test-Path (Join-Path $csvDir 'password-policy.csv') | Should -BeTrue
+        }
+
+        It 'populates OutputFiles with paths to written CSVs' {
+            $csvResult.OutputFiles.Count | Should -Be 5
+            $csvResult.OutputFiles | ForEach-Object { Test-Path $_ | Should -BeTrue }
+        }
+    }
+
+    Context 'CSV export without OutputPath' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADDomain {
+                [PSCustomObject]@{
+                    DNSRoot = 'no.local'; NetBIOSName = 'NO'; DomainMode = 'Windows2016Domain'
+                    PDCEmulator = 'DC01'; RIDMaster = 'DC01'; InfrastructureMaster = 'DC01'
+                    DistinguishedName = 'DC=no,DC=local'
+                }
+            }
+            Mock -ModuleName Monarch Get-ADForest {
+                [PSCustomObject]@{ Name = 'no.local'; ForestMode = 'Windows2016Forest'; SchemaMaster = 'DC01'; DomainNamingMaster = 'DC01' }
+            }
+            Mock -ModuleName Monarch Get-ADObject { [PSCustomObject]@{ objectVersion = 88 } }
+            Mock -ModuleName Monarch Get-ADDomainController { @() }
+            Mock -ModuleName Monarch Get-ADReplicationSite { @() }
+            Mock -ModuleName Monarch Get-ADOrganizationalUnit { @() }
+            Mock -ModuleName Monarch Get-ADUser { @() }
+            Mock -ModuleName Monarch Get-ADComputer { @() }
+            Mock -ModuleName Monarch Get-ADGroup { @() }
+            Mock -ModuleName Monarch Get-ADDefaultDomainPasswordPolicy { [PSCustomObject]@{ MinPasswordLength = 12 } }
+
+            $script:noPathResult = New-DomainBaseline
+        }
+
+        It 'returns empty OutputFiles' {
+            @($noPathResult.OutputFiles).Count | Should -Be 0
+        }
+    }
+
+    Context 'CSV export with partial section failure' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADDomain { throw 'fail' }
+            Mock -ModuleName Monarch Get-ADForest { throw 'fail' }
+            Mock -ModuleName Monarch Get-ADObject { throw 'fail' }
+            Mock -ModuleName Monarch Get-ADDomainController {
+                @([PSCustomObject]@{
+                        HostName = 'DC01'; Site = 'Site1'; OperatingSystem = 'WS2019'
+                        IPv4Address = '10.0.0.1'; IsGlobalCatalog = $true; IsReadOnly = $false
+                    })
+            }
+            Mock -ModuleName Monarch Get-ADReplicationSite { @([PSCustomObject]@{ Name = 'Site1' }) }
+            Mock -ModuleName Monarch Get-ADOrganizationalUnit { @([PSCustomObject]@{ Name = 'Users' }) }
+            Mock -ModuleName Monarch Get-ADUser { @([PSCustomObject]@{ Enabled = $true }) }
+            Mock -ModuleName Monarch Get-ADComputer { @([PSCustomObject]@{ Enabled = $true }) }
+            Mock -ModuleName Monarch Get-ADGroup { @([PSCustomObject]@{ Name = 'G1' }) }
+            Mock -ModuleName Monarch Get-ADDefaultDomainPasswordPolicy { [PSCustomObject]@{ MinPasswordLength = 12 } }
+
+            $script:partialDir = Join-Path $TestDrive 'partial-output'
+            $script:partialResult = New-DomainBaseline -OutputPath $partialDir
+        }
+
+        It 'writes CSVs for successful sections only' {
+            Test-Path (Join-Path $partialDir 'domain-controllers.csv') | Should -BeTrue
+            Test-Path (Join-Path $partialDir 'object-counts.csv') | Should -BeTrue
+            Test-Path (Join-Path $partialDir 'password-policy.csv') | Should -BeTrue
+        }
+
+        It 'does not write CSVs for failed sections' {
+            Test-Path (Join-Path $partialDir 'domain-info.csv') | Should -BeFalse
+            Test-Path (Join-Path $partialDir 'fsmo-roles.csv') | Should -BeFalse
+        }
+
+        It 'only lists written files in OutputFiles' {
+            $partialResult.OutputFiles | ForEach-Object { Test-Path $_ | Should -BeTrue }
+            ($partialResult.OutputFiles | Where-Object { $_ -match 'domain-info' }) | Should -BeNullOrEmpty
+            ($partialResult.OutputFiles | Where-Object { $_ -match 'fsmo-roles' }) | Should -BeNullOrEmpty
+        }
+    }
 }
 
 # =============================================================================
