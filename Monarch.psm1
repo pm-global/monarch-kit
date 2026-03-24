@@ -607,6 +607,162 @@ function Get-ReplicationHealth
 # Group membership audit, AdminCount orphans, Kerberoastable/AS-REP roastable.
 # All Discovery phase except Remove-AdminCountOrphan (Remediation, Plan 2).
 
+function Get-PrivilegedGroupMembership {
+    [CmdletBinding()]
+    param([string]$Server)
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $splatAD = if ($Server) { @{ Server = $Server } } else { @{} }
+
+    $groups = [System.Collections.Generic.List[PSCustomObject]]::new()
+
+    # --- Section 1: Discover privileged groups ---
+    $privGroups = @()
+    try {
+        $allGroups = @(Get-ADGroup -Filter '*' -Properties SID @splatAD)
+        foreach ($g in $allGroups) {
+            $sid = $g.SID.Value
+            if ($sid -like '*-512' -or $sid -like '*-519' -or $sid -like '*-518' -or
+                $sid -eq 'S-1-5-32-544' -or $sid -eq 'S-1-5-32-548' -or
+                $sid -eq 'S-1-5-32-549' -or $sid -eq 'S-1-5-32-551') {
+                $privGroups += [PSCustomObject]@{
+                    DN   = $g.DistinguishedName
+                    Name = $g.Name
+                    SID  = $sid
+                }
+            }
+        }
+    } catch {
+        $warnings.Add("GroupDiscovery: $_")
+    }
+
+    # --- Section 2: Enumerate members per group ---
+    foreach ($pg in $privGroups) {
+        try {
+            $directMembers = @(Get-ADGroupMember -Identity $pg.DN @splatAD)
+            $allMembers = @(Get-ADGroupMember -Identity $pg.DN -Recursive @splatAD)
+
+            $directSAMs = [System.Collections.Generic.HashSet[string]]::new(
+                [System.StringComparer]::OrdinalIgnoreCase)
+            foreach ($dm in $directMembers) { $directSAMs.Add($dm.SamAccountName) | Out-Null }
+
+            $memberObjects = [System.Collections.Generic.List[PSCustomObject]]::new()
+            $seen = [System.Collections.Generic.HashSet[string]]::new(
+                [System.StringComparer]::OrdinalIgnoreCase)
+
+            foreach ($m in $allMembers) {
+                if ($seen.Add($m.SamAccountName)) {
+                    $userDetail = $null
+                    try {
+                        $userDetail = Get-ADUser -Identity $m.SamAccountName -Properties DisplayName, Enabled, LastLogonDate @splatAD
+                    } catch {
+                        $warnings.Add("UserDetail($($m.SamAccountName)): $_")
+                    }
+
+                    $memberObjects.Add([PSCustomObject]@{
+                        SamAccountName = $m.SamAccountName
+                        DisplayName    = if ($userDetail) { $userDetail.DisplayName } else { $null }
+                        ObjectType     = $m.objectClass
+                        IsDirect       = $directSAMs.Contains($m.SamAccountName)
+                        IsEnabled      = if ($userDetail) { $userDetail.Enabled } else { $null }
+                        LastLogon      = if ($userDetail) { $userDetail.LastLogonDate } else { $null }
+                    })
+                }
+            }
+
+            $groups.Add([PSCustomObject]@{
+                GroupName   = $pg.Name
+                GroupSID    = $pg.SID
+                MemberCount = $memberObjects.Count
+                Members     = @($memberObjects)
+            })
+        } catch {
+            $warnings.Add("GroupMembers($($pg.Name)): $_")
+        }
+    }
+
+    # --- Section 3: Domain Admin status ---
+    $daGroup = $groups | Where-Object { $_.GroupSID -like '*-512' }
+    $daCount = if ($daGroup) { $daGroup.MemberCount } else { 0 }
+    $warnThreshold = Get-MonarchConfigValue 'DomainAdminWarningThreshold'
+    $critThreshold = Get-MonarchConfigValue 'DomainAdminCriticalThreshold'
+    $daStatus = if ($daCount -ge $critThreshold) { 'Critical' }
+                elseif ($daCount -ge $warnThreshold) { 'Warning' }
+                else { 'OK' }
+
+    [PSCustomObject]@{
+        Domain            = 'PrivilegedAccess'
+        Function          = 'Get-PrivilegedGroupMembership'
+        Timestamp         = $timestamp
+        Groups            = @($groups)
+        DomainAdminCount  = $daCount
+        DomainAdminStatus = $daStatus
+        Warnings          = @($warnings)
+    }
+}
+
+function Find-AdminCountOrphan {
+    [CmdletBinding()]
+    param([string]$Server)
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $splatAD = if ($Server) { @{ Server = $Server } } else { @{} }
+
+    $orphans = [System.Collections.Generic.List[PSCustomObject]]::new()
+
+    # --- Section 1: Get privileged group DNs ---
+    $privGroupDNs = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase)
+    try {
+        $allGroups = @(Get-ADGroup -Filter '*' -Properties SID @splatAD)
+        foreach ($g in $allGroups) {
+            $sid = $g.SID.Value
+            if ($sid -like '*-512' -or $sid -like '*-519' -or $sid -like '*-518' -or
+                $sid -eq 'S-1-5-32-544' -or $sid -eq 'S-1-5-32-548' -or
+                $sid -eq 'S-1-5-32-549' -or $sid -eq 'S-1-5-32-551') {
+                $privGroupDNs.Add($g.DistinguishedName) | Out-Null
+            }
+        }
+    } catch {
+        $warnings.Add("GroupDiscovery: $_")
+    }
+
+    # --- Section 2: Find AdminCount=1 users not in any privileged group ---
+    try {
+        $acUsers = @(Get-ADUser -Filter 'AdminCount -eq 1' -Properties AdminCount, MemberOf, DisplayName, Enabled @splatAD)
+        foreach ($u in $acUsers) {
+            $isPrivileged = $false
+            foreach ($groupDN in @($u.MemberOf)) {
+                if ($privGroupDNs.Contains($groupDN)) {
+                    $isPrivileged = $true
+                    break
+                }
+            }
+            if (-not $isPrivileged) {
+                $orphans.Add([PSCustomObject]@{
+                    SamAccountName = $u.SamAccountName
+                    DisplayName    = $u.DisplayName
+                    Enabled        = $u.Enabled
+                    MemberOf       = @($u.MemberOf)
+                })
+            }
+        }
+    } catch {
+        $warnings.Add("AdminCountQuery: $_")
+    }
+
+    [PSCustomObject]@{
+        Domain    = 'PrivilegedAccess'
+        Function  = 'Find-AdminCountOrphan'
+        Timestamp = $timestamp
+        Orphans   = @($orphans)
+        Count     = $orphans.Count
+        Warnings  = @($warnings)
+    }
+}
+
 #endregion Privileged Access
 
 #region Group Policy

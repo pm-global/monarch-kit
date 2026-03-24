@@ -1769,8 +1769,277 @@ Describe 'Find-LegacyProtocolExposure' {
 
 # =============================================================================
 # Step 7: Privileged Access
-# Tests added in Step 7 implementation.
 # =============================================================================
+
+Describe 'Get-PrivilegedGroupMembership' {
+
+    BeforeAll {
+        & (Get-Module Monarch) {
+            function script:Get-ADGroup
+            { param([string]$Filter, [string[]]$Properties, [string]$Server)
+            }
+            function script:Get-ADGroupMember
+            { param([string]$Identity, [switch]$Recursive, [string]$Server)
+            }
+            function script:Get-ADUser
+            { param([string]$Filter, [string]$Identity, [string[]]$Properties, [string]$Server)
+            }
+        }
+
+        $script:domainAdminsDN = 'CN=Domain Admins,CN=Users,DC=test,DC=local'
+        $script:schemaAdminsDN = 'CN=Schema Admins,CN=Users,DC=test,DC=local'
+    }
+
+    Context 'with domain admins and nested member' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADGroup {
+                @(
+                    [PSCustomObject]@{
+                        Name              = 'Domain Admins'
+                        DistinguishedName = $domainAdminsDN
+                        SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                    },
+                    [PSCustomObject]@{
+                        Name              = 'Schema Admins'
+                        DistinguishedName = $schemaAdminsDN
+                        SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-518' }
+                    }
+                )
+            }
+
+            # Domain Admins: direct = 3, recursive = 4 (nestedUser is nested-only)
+            Mock -ModuleName Monarch Get-ADGroupMember -ParameterFilter {
+                $Identity -eq $domainAdminsDN -and -not $Recursive
+            } {
+                @(
+                    [PSCustomObject]@{ SamAccountName = 'directUser1'; objectClass = 'user' },
+                    [PSCustomObject]@{ SamAccountName = 'directUser2'; objectClass = 'user' },
+                    [PSCustomObject]@{ SamAccountName = 'directUser3'; objectClass = 'user' }
+                )
+            }
+
+            Mock -ModuleName Monarch Get-ADGroupMember -ParameterFilter {
+                $Identity -eq $domainAdminsDN -and $Recursive
+            } {
+                @(
+                    [PSCustomObject]@{ SamAccountName = 'directUser1'; objectClass = 'user' },
+                    [PSCustomObject]@{ SamAccountName = 'directUser2'; objectClass = 'user' },
+                    [PSCustomObject]@{ SamAccountName = 'directUser3'; objectClass = 'user' },
+                    [PSCustomObject]@{ SamAccountName = 'nestedUser'; objectClass = 'user' }
+                )
+            }
+
+            # Schema Admins: direct = 1, recursive = 1
+            Mock -ModuleName Monarch Get-ADGroupMember -ParameterFilter {
+                $Identity -eq $schemaAdminsDN -and -not $Recursive
+            } {
+                @([PSCustomObject]@{ SamAccountName = 'directUser1'; objectClass = 'user' })
+            }
+
+            Mock -ModuleName Monarch Get-ADGroupMember -ParameterFilter {
+                $Identity -eq $schemaAdminsDN -and $Recursive
+            } {
+                @([PSCustomObject]@{ SamAccountName = 'directUser1'; objectClass = 'user' })
+            }
+
+            # User details
+            Mock -ModuleName Monarch Get-ADUser {
+                [PSCustomObject]@{
+                    SamAccountName = $Identity
+                    DisplayName    = "Display $Identity"
+                    Enabled        = $true
+                    LastLogonDate  = (Get-Date).AddDays(-5)
+                }
+            }
+
+            $script:result = Get-PrivilegedGroupMembership
+        }
+
+        It 'returns correct shape and metadata' {
+            $result.Domain   | Should -Be 'PrivilegedAccess'
+            $result.Function | Should -Be 'Get-PrivilegedGroupMembership'
+            $result.Timestamp | Should -BeOfType [datetime]
+            $result.Groups | Should -HaveCount 2
+            $result.Warnings | Should -HaveCount 0
+        }
+
+        It 'marks nested member as IsDirect=false' {
+            $daGroup = $result.Groups | Where-Object GroupName -eq 'Domain Admins'
+            $nested = $daGroup.Members | Where-Object SamAccountName -eq 'nestedUser'
+            $nested.IsDirect | Should -BeFalse
+        }
+
+        It 'marks direct member as IsDirect=true' {
+            $daGroup = $result.Groups | Where-Object GroupName -eq 'Domain Admins'
+            $direct = $daGroup.Members | Where-Object SamAccountName -eq 'directUser1'
+            $direct.IsDirect | Should -BeTrue
+        }
+
+        It 'reports DomainAdminCount=4 with Status=OK' {
+            $result.DomainAdminCount  | Should -Be 4
+            $result.DomainAdminStatus | Should -Be 'OK'
+        }
+
+        It 'reports correct MemberCount per group' {
+            ($result.Groups | Where-Object GroupName -eq 'Domain Admins').MemberCount | Should -Be 4
+            ($result.Groups | Where-Object GroupName -eq 'Schema Admins').MemberCount | Should -Be 1
+        }
+    }
+
+    Context 'when DA count triggers warning' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADGroup {
+                @([PSCustomObject]@{
+                    Name              = 'Domain Admins'
+                    DistinguishedName = $domainAdminsDN
+                    SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                })
+            }
+
+            $sevenUsers = @(1..7 | ForEach-Object {
+                [PSCustomObject]@{ SamAccountName = "user$_"; objectClass = 'user' }
+            })
+
+            Mock -ModuleName Monarch Get-ADGroupMember -ParameterFilter {
+                -not $Recursive
+            } { $sevenUsers }
+
+            Mock -ModuleName Monarch Get-ADGroupMember -ParameterFilter {
+                $Recursive
+            } { $sevenUsers }
+
+            Mock -ModuleName Monarch Get-ADUser {
+                [PSCustomObject]@{
+                    SamAccountName = $Identity
+                    DisplayName    = $Identity
+                    Enabled        = $true
+                    LastLogonDate  = Get-Date
+                }
+            }
+
+            $script:result = Get-PrivilegedGroupMembership
+        }
+
+        It 'reports DomainAdminStatus=Warning for 7 members' {
+            $result.DomainAdminCount  | Should -Be 7
+            $result.DomainAdminStatus | Should -Be 'Warning'
+        }
+    }
+
+    Context 'with config override changing thresholds' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADGroup {
+                @([PSCustomObject]@{
+                    Name              = 'Domain Admins'
+                    DistinguishedName = $domainAdminsDN
+                    SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                })
+            }
+
+            $threeUsers = @(1..3 | ForEach-Object {
+                [PSCustomObject]@{ SamAccountName = "user$_"; objectClass = 'user' }
+            })
+
+            Mock -ModuleName Monarch Get-ADGroupMember -ParameterFilter {
+                -not $Recursive
+            } { $threeUsers }
+
+            Mock -ModuleName Monarch Get-ADGroupMember -ParameterFilter {
+                $Recursive
+            } { $threeUsers }
+
+            Mock -ModuleName Monarch Get-ADUser {
+                [PSCustomObject]@{
+                    SamAccountName = $Identity
+                    DisplayName    = $Identity
+                    Enabled        = $true
+                    LastLogonDate  = Get-Date
+                }
+            }
+
+            Mock -ModuleName Monarch Get-MonarchConfigValue -ParameterFilter {
+                $Key -eq 'DomainAdminWarningThreshold'
+            } { 3 }
+
+            Mock -ModuleName Monarch Get-MonarchConfigValue -ParameterFilter {
+                $Key -eq 'DomainAdminCriticalThreshold'
+            } { 6 }
+
+            $script:result = Get-PrivilegedGroupMembership
+        }
+
+        It 'respects custom thresholds from config' {
+            $result.DomainAdminCount  | Should -Be 3
+            $result.DomainAdminStatus | Should -Be 'Warning'
+        }
+    }
+}
+
+Describe 'Find-AdminCountOrphan' {
+
+    BeforeAll {
+        & (Get-Module Monarch) {
+            function script:Get-ADGroup
+            { param([string]$Filter, [string[]]$Properties, [string]$Server)
+            }
+            function script:Get-ADUser
+            { param([string]$Filter, [string]$Identity, [string[]]$Properties, [string]$Server)
+            }
+        }
+
+        $script:domainAdminsDN = 'CN=Domain Admins,CN=Users,DC=test,DC=local'
+    }
+
+    Context 'with mixed AdminCount users' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADGroup {
+                @([PSCustomObject]@{
+                    Name              = 'Domain Admins'
+                    DistinguishedName = $domainAdminsDN
+                    SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                })
+            }
+
+            Mock -ModuleName Monarch Get-ADUser {
+                @(
+                    [PSCustomObject]@{
+                        SamAccountName = 'orphanUser'
+                        DisplayName    = 'Orphan User'
+                        Enabled        = $true
+                        AdminCount     = 1
+                        MemberOf       = @('CN=RegularGroup,DC=test,DC=local')
+                    },
+                    [PSCustomObject]@{
+                        SamAccountName = 'activeAdmin'
+                        DisplayName    = 'Active Admin'
+                        Enabled        = $true
+                        AdminCount     = 1
+                        MemberOf       = @($domainAdminsDN)
+                    }
+                )
+            }
+
+            $script:result = Find-AdminCountOrphan
+        }
+
+        It 'detects orphan not in any privileged group' {
+            @($result.Orphans | Where-Object SamAccountName -eq 'orphanUser') | Should -HaveCount 1
+        }
+
+        It 'excludes active admin still in privileged group' {
+            @($result.Orphans | Where-Object SamAccountName -eq 'activeAdmin') | Should -HaveCount 0
+        }
+
+        It 'Count matches Orphans array length' {
+            $result.Count | Should -Be 1
+            $result.Orphans | Should -HaveCount $result.Count
+        }
+    }
+}
 
 # =============================================================================
 # Step 8: Find-DormantAccount

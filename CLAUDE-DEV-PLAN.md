@@ -459,7 +459,7 @@ Four functions, all follow the Step 4 pattern.
 
 ### Step 7: Privileged Access
 
-- [ ] **7a. `Get-PrivilegedGroupMembership`**
+- [x] **7a. `Get-PrivilegedGroupMembership`**
 
   Return contract:
   ```
@@ -489,7 +489,7 @@ Four functions, all follow the Step 4 pattern.
 
   DomainAdminStatus: Compare count against config thresholds (5 = Warning, 10 = Critical).
 
-- [ ] **Tests: Get-PrivilegedGroupMembership**
+- [x] **Tests: Get-PrivilegedGroupMembership**
   - Groups matched by RID suffix, not full SID
   - Nested member has `IsDirect = $false`
   - Direct member has `IsDirect = $true`
@@ -498,7 +498,7 @@ Four functions, all follow the Step 4 pattern.
   - DomainAdminCount = 12 → `DomainAdminStatus = 'Critical'`
   - Config override changes thresholds
 
-- [ ] **7b. `Find-AdminCountOrphan`**
+- [x] **7b. `Find-AdminCountOrphan`**
 
   Return contract:
   ```
@@ -521,7 +521,7 @@ Four functions, all follow the Step 4 pattern.
 
   Design decision: Queries privileged groups independently (same RID pattern logic), does NOT call `Get-PrivilegedGroupMembership` internally. Duplicating three lines of group enumeration is better than creating a function dependency.
 
-- [ ] **Tests: Find-AdminCountOrphan**
+- [x] **Tests: Find-AdminCountOrphan**
   - Account with AdminCount=1 and no privileged group → is an orphan
   - Account with AdminCount=1 in Domain Admins → not an orphan
   - Count matches Orphans array length
