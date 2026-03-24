@@ -346,6 +346,131 @@ function Get-FSMORolePlacement
     }
 }
 
+function Get-SiteTopology
+{
+    <#
+    .SYNOPSIS
+        AD site/subnet topology with anomaly detection.
+    .DESCRIPTION
+        Enumerates sites, subnets, and DCs. Detects unassigned subnets (no site)
+        and empty sites (no DCs). Each query is independent — if one fails, others still populate.
+    .PARAMETER Server
+        DC name or domain FQDN passed to AD cmdlets. Omit for local domain default.
+    #>
+    [CmdletBinding()]
+    param(
+        [string]$Server
+    )
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $splatAD = if ($Server)
+    { @{ Server = $Server }
+    } else
+    { @{}
+    }
+
+    $siteObjects = @()
+    $subnetObjects = @()
+    $dcObjects = @()
+
+    # --- Section 1: Sites ---
+    try
+    {
+        $siteObjects = @(Get-ADReplicationSite -Filter '*' @splatAD)
+    } catch
+    {
+        $warnings.Add("Sites: $_")
+    }
+
+    # --- Section 2: Subnets ---
+    try
+    {
+        $subnetObjects = @(Get-ADReplicationSubnet -Filter '*' @splatAD)
+    } catch
+    {
+        $warnings.Add("Subnets: $_")
+    }
+
+    # --- Section 3: DCs (for site-to-DC mapping) ---
+    try
+    {
+        $dcObjects = @(Get-ADDomainController -Filter '*' @splatAD)
+    } catch
+    {
+        $warnings.Add("DomainControllers: $_")
+    }
+
+    # Build site DN → name map for subnet matching
+    $siteDNMap = @{}
+    foreach ($s in $siteObjects)
+    { $siteDNMap[$s.DistinguishedName] = $s.Name
+    }
+
+    # Map subnets to sites by DN
+    $siteSubnets = @{}
+    $unassigned = [System.Collections.Generic.List[string]]::new()
+    foreach ($sub in $subnetObjects)
+    {
+        if ($sub.Site -and $siteDNMap.ContainsKey($sub.Site))
+        {
+            $siteName = $siteDNMap[$sub.Site]
+            if (-not $siteSubnets.ContainsKey($siteName))
+            { $siteSubnets[$siteName] = @()
+            }
+            $siteSubnets[$siteName] += $sub.Name
+        } else
+        {
+            $unassigned.Add($sub.Name)
+        }
+    }
+
+    # Build DC-per-site counts
+    $siteDCCount = @{}
+    foreach ($dc in $dcObjects)
+    {
+        if (-not $siteDCCount.ContainsKey($dc.Site))
+        { $siteDCCount[$dc.Site] = 0
+        }
+        $siteDCCount[$dc.Site]++
+    }
+
+    # Build site sub-objects + detect empty sites
+    $emptySites = [System.Collections.Generic.List[string]]::new()
+    $sites = @(foreach ($s in $siteObjects)
+        {
+            $dcCount = if ($siteDCCount.ContainsKey($s.Name))
+            { $siteDCCount[$s.Name]
+            } else
+            { 0
+            }
+            if ($dcCount -eq 0)
+            { $emptySites.Add($s.Name)
+            }
+            [PSCustomObject]@{
+                Name    = $s.Name
+                DCCount = $dcCount
+                Subnets = @(if ($siteSubnets.ContainsKey($s.Name))
+                    { $siteSubnets[$s.Name]
+                    } else
+                    { @()
+                    })
+            }
+        })
+
+    [PSCustomObject]@{
+        Domain            = 'InfrastructureHealth'
+        Function          = 'Get-SiteTopology'
+        Timestamp         = $timestamp
+        Sites             = $sites
+        UnassignedSubnets = @($unassigned)
+        EmptySites        = @($emptySites)
+        SiteCount         = $siteObjects.Count
+        SubnetCount       = $subnetObjects.Count
+        Warnings          = @($warnings)
+    }
+}
+
 #endregion Infrastructure Health
 
 #region Identity Lifecycle

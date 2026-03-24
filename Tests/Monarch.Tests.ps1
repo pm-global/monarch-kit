@@ -1095,6 +1095,113 @@ Describe 'Get-FSMORolePlacement' {
     }
 }
 
+Describe 'Get-SiteTopology' {
+
+    BeforeAll {
+        & (Get-Module Monarch) {
+            function script:Get-ADReplicationSite
+            { param([string]$Filter, [string]$Server)
+            }
+            function script:Get-ADReplicationSubnet
+            { param([string]$Filter, [string]$Server)
+            }
+            function script:Get-ADDomainController
+            { param([string]$Filter, [string]$Server)
+            }
+        }
+    }
+
+    Context 'when all sections succeed' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADReplicationSite {
+                @(
+                    [PSCustomObject]@{ Name = 'HQ'; DistinguishedName = 'CN=HQ,CN=Sites,CN=Configuration,DC=test,DC=local' },
+                    [PSCustomObject]@{ Name = 'Branch'; DistinguishedName = 'CN=Branch,CN=Sites,CN=Configuration,DC=test,DC=local' }
+                )
+            }
+
+            Mock -ModuleName Monarch Get-ADReplicationSubnet {
+                @(
+                    [PSCustomObject]@{ Name = '10.0.0.0/24'; Site = 'CN=HQ,CN=Sites,CN=Configuration,DC=test,DC=local' },
+                    [PSCustomObject]@{ Name = '10.1.0.0/24'; Site = 'CN=Branch,CN=Sites,CN=Configuration,DC=test,DC=local' },
+                    [PSCustomObject]@{ Name = '10.2.0.0/24'; Site = $null }
+                )
+            }
+
+            Mock -ModuleName Monarch Get-ADDomainController {
+                @(
+                    [PSCustomObject]@{ HostName = 'DC01.test.local'; Site = 'HQ' }
+                )
+            }
+
+            $script:result = Get-SiteTopology -Server 'DC01.test.local'
+        }
+
+        It 'returns correct shape and metadata' {
+            $result.Domain   | Should -Be 'InfrastructureHealth'
+            $result.Function | Should -Be 'Get-SiteTopology'
+            $result.Timestamp | Should -BeOfType [datetime]
+            $result.Warnings | Should -HaveCount 0
+            $result.PSObject.Properties.Name | Should -Contain 'Sites'
+            $result.PSObject.Properties.Name | Should -Contain 'UnassignedSubnets'
+            $result.PSObject.Properties.Name | Should -Contain 'EmptySites'
+            $result.PSObject.Properties.Name | Should -Contain 'SiteCount'
+            $result.PSObject.Properties.Name | Should -Contain 'SubnetCount'
+        }
+
+        It 'detects unassigned subnets' {
+            $result.UnassignedSubnets | Should -HaveCount 1
+            $result.UnassignedSubnets | Should -Contain '10.2.0.0/24'
+        }
+
+        It 'detects empty sites' {
+            $result.EmptySites | Should -HaveCount 1
+            $result.EmptySites | Should -Contain 'Branch'
+            $result.EmptySites | Should -Not -Contain 'HQ'
+        }
+
+        It 'returns correct counts and site sub-objects' {
+            $result.SiteCount   | Should -Be 2
+            $result.SubnetCount | Should -Be 3
+            $result.Sites | Should -HaveCount 2
+            $hq = $result.Sites | Where-Object { $_.Name -eq 'HQ' }
+            $hq.DCCount | Should -Be 1
+            $hq.Subnets | Should -Contain '10.0.0.0/24'
+        }
+    }
+
+    Context 'when subnet query fails' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADReplicationSite {
+                @(
+                    [PSCustomObject]@{ Name = 'HQ'; DistinguishedName = 'CN=HQ,CN=Sites,CN=Configuration,DC=test,DC=local' }
+                )
+            }
+
+            Mock -ModuleName Monarch Get-ADReplicationSubnet { throw 'Access denied' }
+
+            Mock -ModuleName Monarch Get-ADDomainController {
+                @(
+                    [PSCustomObject]@{ HostName = 'DC01.test.local'; Site = 'HQ' }
+                )
+            }
+
+            $script:result = Get-SiteTopology -Server 'DC01.test.local'
+        }
+
+        It 'still populates sites with empty subnets and warns' {
+            $result.SiteCount   | Should -Be 1
+            $result.SubnetCount | Should -Be 0
+            $result.Sites[0].Subnets | Should -HaveCount 0
+            $result.UnassignedSubnets | Should -HaveCount 0
+            $result.Warnings | Should -HaveCount 1
+            $result.Warnings[0] | Should -BeLike 'Subnets:*'
+        }
+    }
+}
+
 # =============================================================================
 # Step 6: Security Posture
 # Tests added in Step 6 implementation.
