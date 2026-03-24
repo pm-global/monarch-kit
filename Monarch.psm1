@@ -757,6 +757,188 @@ function Find-WeakAccountFlag {
     }
 }
 
+function Test-ProtectedUsersGap {
+    [CmdletBinding()]
+    param([string]$Server)
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $splatAD = if ($Server) { @{ Server = $Server } } else { @{} }
+
+    $protectedMembers = @()
+    $gapAccounts = [System.Collections.Generic.List[PSCustomObject]]::new()
+
+    # --- Section 1: Discover privileged and Protected Users groups ---
+    $privGroups = @()
+    $protectedUsersDN = $null
+    try {
+        $allGroups = @(Get-ADGroup -Filter '*' -Properties SID @splatAD)
+        foreach ($g in $allGroups) {
+            $sid = $g.SID.Value
+            if ($sid -like '*-525') {
+                $protectedUsersDN = $g.DistinguishedName
+            }
+            if ($sid -like '*-512' -or $sid -like '*-519' -or $sid -like '*-518' -or
+                $sid -eq 'S-1-5-32-544' -or $sid -eq 'S-1-5-32-548' -or
+                $sid -eq 'S-1-5-32-549' -or $sid -eq 'S-1-5-32-551') {
+                $privGroups += [PSCustomObject]@{
+                    DN   = $g.DistinguishedName
+                    Name = $g.Name
+                }
+            }
+        }
+    } catch {
+        $warnings.Add("GroupDiscovery: $_")
+    }
+
+    # --- Section 2: Get Protected Users members ---
+    $protectedSAMs = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase)
+    if ($protectedUsersDN) {
+        try {
+            $puMembers = @(Get-ADGroupMember -Identity $protectedUsersDN @splatAD)
+            $protectedMembers = @($puMembers.SamAccountName)
+            foreach ($m in $puMembers) { $protectedSAMs.Add($m.SamAccountName) | Out-Null }
+        } catch {
+            $warnings.Add("ProtectedUsersMembers: $_")
+        }
+    } else {
+        $warnings.Add("ProtectedUsersMembers: Protected Users group not found")
+    }
+
+    # --- Section 3: Get privileged group members, find gaps ---
+    $seen = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($pg in $privGroups) {
+        try {
+            $members = @(Get-ADGroupMember -Identity $pg.DN @splatAD)
+            foreach ($m in $members) {
+                if (-not $protectedSAMs.Contains($m.SamAccountName) -and
+                    $seen.Add($m.SamAccountName)) {
+                    $userDetail = $null
+                    try {
+                        $userDetail = Get-ADUser -Identity $m.SamAccountName -Properties ServicePrincipalName @splatAD
+                    } catch {
+                        $warnings.Add("UserDetail($($m.SamAccountName)): $_")
+                    }
+                    $hasSPN = if ($userDetail -and $userDetail.ServicePrincipalName) {
+                        @($userDetail.ServicePrincipalName).Count -gt 0
+                    } else { $false }
+
+                    $gapAccounts.Add([PSCustomObject]@{
+                        SamAccountName   = $m.SamAccountName
+                        PrivilegedGroups = @($pg.Name)
+                        HasSPN           = $hasSPN
+                    })
+                } elseif (-not $protectedSAMs.Contains($m.SamAccountName)) {
+                    $existing = $gapAccounts | Where-Object SamAccountName -eq $m.SamAccountName
+                    if ($existing) {
+                        $existing.PrivilegedGroups = @($existing.PrivilegedGroups) + $pg.Name
+                    }
+                }
+            }
+        } catch {
+            $warnings.Add("GroupMembers($($pg.Name)): $_")
+        }
+    }
+
+    # --- DiagnosticHint ---
+    $hint = $null
+    $spnAccounts = @($gapAccounts | Where-Object HasSPN)
+    if ($spnAccounts.Count -gt 0) {
+        $hint = "WARNING: $($spnAccounts.Count) gap account(s) have SPNs (service accounts). " +
+                "Adding service accounts to Protected Users disables Kerberos delegation and blocks NTLM. " +
+                "Review each account before adding — blanket addition will break service authentication."
+    }
+
+    [PSCustomObject]@{
+        Domain                = 'SecurityPosture'
+        Function              = 'Test-ProtectedUsersGap'
+        Timestamp             = $timestamp
+        ProtectedUsersMembers = $protectedMembers
+        GapAccounts           = @($gapAccounts)
+        DiagnosticHint        = $hint
+        Warnings              = @($warnings)
+    }
+}
+
+function Find-LegacyProtocolExposure {
+    [CmdletBinding()]
+    param([string]$Server)
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $splatAD = if ($Server) { @{ Server = $Server } } else { @{} }
+
+    $dcFindings = [System.Collections.Generic.List[PSCustomObject]]::new()
+
+    # --- Section 1: Get DC list ---
+    $dcs = @()
+    try {
+        $dcs = @(Get-ADDomainController -Filter '*' @splatAD)
+    } catch {
+        $warnings.Add("DCList: $_")
+    }
+
+    # --- Section 2: Query each DC for legacy protocol settings ---
+    foreach ($dc in $dcs) {
+        try {
+            $regData = Invoke-Command -ComputerName $dc.HostName -ScriptBlock {
+                $lsa = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -ErrorAction SilentlyContinue
+                $ntds = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\NTDS\Parameters' -ErrorAction SilentlyContinue
+                [PSCustomObject]@{
+                    LmCompatibilityLevel = $lsa.LmCompatibilityLevel
+                    NoLMHash             = $lsa.NoLMHash
+                    LDAPServerIntegrity  = $ntds.LDAPServerIntegrity
+                }
+            }
+
+            # NTLMv1 check
+            $lmLevel = $regData.LmCompatibilityLevel
+            if ($null -eq $lmLevel -or $lmLevel -lt 3) {
+                $dcFindings.Add([PSCustomObject]@{
+                    DCName  = $dc.HostName
+                    Finding = 'NTLMv1Enabled'
+                    Value   = "LmCompatibilityLevel=$lmLevel"
+                    Risk    = 'High'
+                })
+            }
+
+            # LM Hash storage check
+            $noLM = $regData.NoLMHash
+            if ($null -eq $noLM -or $noLM -ne 1) {
+                $dcFindings.Add([PSCustomObject]@{
+                    DCName  = $dc.HostName
+                    Finding = 'LMHashStored'
+                    Value   = "NoLMHash=$noLM"
+                    Risk    = 'High'
+                })
+            }
+
+            # LDAP Signing check
+            $ldapSigning = $regData.LDAPServerIntegrity
+            if ($null -eq $ldapSigning -or $ldapSigning -ne 2) {
+                $dcFindings.Add([PSCustomObject]@{
+                    DCName  = $dc.HostName
+                    Finding = 'LDAPSigningDisabled'
+                    Value   = "LDAPServerIntegrity=$ldapSigning"
+                    Risk    = 'Medium'
+                })
+            }
+        } catch {
+            $warnings.Add("$($dc.HostName): $_")
+        }
+    }
+
+    [PSCustomObject]@{
+        Domain     = 'SecurityPosture'
+        Function   = 'Find-LegacyProtocolExposure'
+        Timestamp  = $timestamp
+        DCFindings = @($dcFindings)
+        Warnings   = @($warnings)
+    }
+}
+
 #endregion Security Posture
 
 #region Backup and Recovery

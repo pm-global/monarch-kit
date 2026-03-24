@@ -404,7 +404,7 @@ Four functions, all follow the Step 4 pattern.
   - `IsPrivileged` correctly set based on mocked group membership
   - `CountByFlag` totals match `Findings` array
 
-- [ ] **6c. `Test-ProtectedUsersGap`**
+- [x] **6c. `Test-ProtectedUsersGap`**
 
   Return contract:
   ```
@@ -425,13 +425,13 @@ Four functions, all follow the Step 4 pattern.
 
   Critical per spec: DiagnosticHint MUST warn that adding service accounts (HasSPN = true) to Protected Users will break them. Never recommend blanket addition.
 
-- [ ] **Tests: Test-ProtectedUsersGap**
+- [x] **Tests: Test-ProtectedUsersGap**
   - Privileged account not in Protected Users → appears in GapAccounts
   - Privileged account already in Protected Users → not in GapAccounts
   - Account with SPN in GapAccounts → `HasSPN = $true`
   - DiagnosticHint contains SPN warning when any GapAccount has SPN
 
-- [ ] **6d. `Find-LegacyProtocolExposure`**
+- [x] **6d. `Find-LegacyProtocolExposure`**
 
   Return contract:
   ```
@@ -451,7 +451,7 @@ Four functions, all follow the Step 4 pattern.
 
   Logic: For each DC, query registry keys (`LmCompatibilityLevel`, `NoLMHash`, LDAP signing). Use `Invoke-Command` or direct registry queries. If remote registry fails, add to Warnings and continue.
 
-- [ ] **Tests: Find-LegacyProtocolExposure**
+- [x] **Tests: Find-LegacyProtocolExposure**
   - LmCompatibilityLevel < 3 → NTLMv1Enabled finding
   - Unreachable DC → appears in Warnings, doesn't block other DCs
 

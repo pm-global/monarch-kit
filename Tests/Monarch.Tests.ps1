@@ -1545,6 +1545,228 @@ Describe 'Find-WeakAccountFlag' {
     }
 }
 
+Describe 'Test-ProtectedUsersGap' {
+
+    BeforeAll {
+        & (Get-Module Monarch) {
+            function script:Get-ADGroup
+            { param([string]$Filter, [string[]]$Properties, [string]$Server)
+            }
+            function script:Get-ADGroupMember
+            { param([string]$Identity, [string]$Server)
+            }
+            function script:Get-ADUser
+            { param([string]$Filter, [string]$Identity, [string[]]$Properties, [string]$Server)
+            }
+        }
+
+        $script:protectedUsersDN = 'CN=Protected Users,CN=Users,DC=test,DC=local'
+        $script:domainAdminsDN   = 'CN=Domain Admins,CN=Users,DC=test,DC=local'
+        $script:schemaAdminsDN   = 'CN=Schema Admins,CN=Users,DC=test,DC=local'
+    }
+
+    Context 'with mixed membership' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADGroup {
+                @(
+                    [PSCustomObject]@{
+                        Name              = 'Protected Users'
+                        DistinguishedName = $protectedUsersDN
+                        SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-525' }
+                    },
+                    [PSCustomObject]@{
+                        Name              = 'Domain Admins'
+                        DistinguishedName = $domainAdminsDN
+                        SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                    },
+                    [PSCustomObject]@{
+                        Name              = 'Schema Admins'
+                        DistinguishedName = $schemaAdminsDN
+                        SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-518' }
+                    }
+                )
+            }
+
+            # Protected Users contains only adminUser
+            Mock -ModuleName Monarch Get-ADGroupMember -ParameterFilter {
+                $Identity -eq $protectedUsersDN
+            } {
+                @([PSCustomObject]@{ SamAccountName = 'adminUser' })
+            }
+
+            # Domain Admins contains adminUser, gapUser, svcUser
+            Mock -ModuleName Monarch Get-ADGroupMember -ParameterFilter {
+                $Identity -eq $domainAdminsDN
+            } {
+                @(
+                    [PSCustomObject]@{ SamAccountName = 'adminUser' },
+                    [PSCustomObject]@{ SamAccountName = 'gapUser' },
+                    [PSCustomObject]@{ SamAccountName = 'svcUser' }
+                )
+            }
+
+            # Schema Admins contains gapUser
+            Mock -ModuleName Monarch Get-ADGroupMember -ParameterFilter {
+                $Identity -eq $schemaAdminsDN
+            } {
+                @([PSCustomObject]@{ SamAccountName = 'gapUser' })
+            }
+
+            # User detail: gapUser has no SPN, svcUser has SPN
+            Mock -ModuleName Monarch Get-ADUser -ParameterFilter {
+                $Identity -eq 'gapUser'
+            } {
+                [PSCustomObject]@{
+                    SamAccountName        = 'gapUser'
+                    ServicePrincipalName  = @()
+                }
+            }
+
+            Mock -ModuleName Monarch Get-ADUser -ParameterFilter {
+                $Identity -eq 'svcUser'
+            } {
+                [PSCustomObject]@{
+                    SamAccountName        = 'svcUser'
+                    ServicePrincipalName  = @('HTTP/svc.test.local')
+                }
+            }
+
+            $script:result = Test-ProtectedUsersGap
+        }
+
+        It 'identifies gap accounts and protected members correctly' {
+            $result.Domain   | Should -Be 'SecurityPosture'
+            $result.Function | Should -Be 'Test-ProtectedUsersGap'
+            $result.ProtectedUsersMembers | Should -Contain 'adminUser'
+            $result.GapAccounts | Should -HaveCount 2
+            @($result.GapAccounts | Where-Object SamAccountName -eq 'adminUser') | Should -HaveCount 0
+            @($result.GapAccounts | Where-Object SamAccountName -eq 'gapUser') | Should -HaveCount 1
+            @($result.GapAccounts | Where-Object SamAccountName -eq 'svcUser') | Should -HaveCount 1
+        }
+
+        It 'lists all privileged groups for multi-group accounts' {
+            $gap = $result.GapAccounts | Where-Object SamAccountName -eq 'gapUser'
+            $gap.PrivilegedGroups | Should -Contain 'Domain Admins'
+            $gap.PrivilegedGroups | Should -Contain 'Schema Admins'
+        }
+
+        It 'sets HasSPN correctly from user SPN property' {
+            ($result.GapAccounts | Where-Object SamAccountName -eq 'svcUser').HasSPN | Should -BeTrue
+            ($result.GapAccounts | Where-Object SamAccountName -eq 'gapUser').HasSPN | Should -BeFalse
+        }
+
+        It 'generates DiagnosticHint warning about SPN accounts' {
+            $result.DiagnosticHint | Should -Not -BeNullOrEmpty
+            $result.DiagnosticHint | Should -BeLike '*service account*'
+            $result.DiagnosticHint | Should -BeLike '*delegation*'
+        }
+    }
+}
+
+Describe 'Find-LegacyProtocolExposure' {
+
+    BeforeAll {
+        & (Get-Module Monarch) {
+            function script:Get-ADDomainController
+            { param([string]$Filter, [string]$Server)
+            }
+            function script:Invoke-Command
+            { param([string]$ComputerName, [scriptblock]$ScriptBlock)
+            }
+        }
+    }
+
+    Context 'with mixed DC settings' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADDomainController {
+                @(
+                    [PSCustomObject]@{ HostName = 'DC01.test.local' },
+                    [PSCustomObject]@{ HostName = 'DC02.test.local' }
+                )
+            }
+
+            # DC01: NTLMv1 vulnerable (level 2), LM hash ok, LDAP signing ok
+            Mock -ModuleName Monarch Invoke-Command -ParameterFilter {
+                $ComputerName -eq 'DC01.test.local'
+            } {
+                [PSCustomObject]@{
+                    LmCompatibilityLevel = 2
+                    NoLMHash             = 1
+                    LDAPServerIntegrity  = 2
+                }
+            }
+
+            # DC02: NTLMv1 ok (level 5), LM hash vulnerable (0), LDAP signing not required (1)
+            Mock -ModuleName Monarch Invoke-Command -ParameterFilter {
+                $ComputerName -eq 'DC02.test.local'
+            } {
+                [PSCustomObject]@{
+                    LmCompatibilityLevel = 5
+                    NoLMHash             = 0
+                    LDAPServerIntegrity  = 1
+                }
+            }
+
+            $script:result = Find-LegacyProtocolExposure
+        }
+
+        It 'detects NTLMv1 on vulnerable DC only' {
+            $result.Domain   | Should -Be 'SecurityPosture'
+            $result.Function | Should -Be 'Find-LegacyProtocolExposure'
+            $ntlm = @($result.DCFindings | Where-Object Finding -eq 'NTLMv1Enabled')
+            $ntlm | Should -HaveCount 1
+            $ntlm[0].DCName | Should -Be 'DC01.test.local'
+            $ntlm[0].Risk   | Should -Be 'High'
+        }
+
+        It 'detects multiple findings per DC with correct risk levels' {
+            $result.DCFindings | Should -HaveCount 3
+            $dc02 = @($result.DCFindings | Where-Object DCName -eq 'DC02.test.local')
+            $dc02 | Should -HaveCount 2
+            ($dc02 | Where-Object Finding -eq 'LMHashStored').Risk | Should -Be 'High'
+            ($dc02 | Where-Object Finding -eq 'LDAPSigningDisabled').Risk | Should -Be 'Medium'
+        }
+    }
+
+    Context 'when DC is unreachable' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADDomainController {
+                @(
+                    [PSCustomObject]@{ HostName = 'DC01.test.local' },
+                    [PSCustomObject]@{ HostName = 'DC02.test.local' }
+                )
+            }
+
+            # DC01: all secure
+            Mock -ModuleName Monarch Invoke-Command -ParameterFilter {
+                $ComputerName -eq 'DC01.test.local'
+            } {
+                [PSCustomObject]@{
+                    LmCompatibilityLevel = 5
+                    NoLMHash             = 1
+                    LDAPServerIntegrity  = 2
+                }
+            }
+
+            # DC02: unreachable
+            Mock -ModuleName Monarch Invoke-Command -ParameterFilter {
+                $ComputerName -eq 'DC02.test.local'
+            } { throw 'WinRM connection failed' }
+
+            $script:result = Find-LegacyProtocolExposure
+        }
+
+        It 'adds warning for unreachable DC without blocking others' {
+            $result.DCFindings | Should -HaveCount 0
+            $result.Warnings | Should -Not -BeNullOrEmpty
+            $result.Warnings[0] | Should -BeLike '*DC02*'
+        }
+    }
+}
+
 # =============================================================================
 # Step 7: Privileged Access
 # Tests added in Step 7 implementation.
