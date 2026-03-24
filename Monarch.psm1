@@ -163,6 +163,189 @@ function Resolve-MonarchDC
 # FSMO roles, replication topology, site/subnet coverage, functional levels.
 # All Discovery phase. Direct AD queries (no stratagems until OctoDoc redesign).
 
+function Get-ForestDomainLevel
+{
+    <#
+    .SYNOPSIS
+        Domain/forest functional levels and schema version.
+    .DESCRIPTION
+        Focused check for the orchestrator. Overlaps with New-DomainBaseline intentionally —
+        baseline is a snapshot document, this is a quick level check.
+        Each query is independent — if one fails, others still populate.
+    .PARAMETER Server
+        DC name or domain FQDN passed to AD cmdlets. Omit for local domain default.
+    #>
+    [CmdletBinding()]
+    param(
+        [string]$Server
+    )
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $splatAD = if ($Server)
+    { @{ Server = $Server }
+    } else
+    { @{}
+    }
+
+    $domainInfo = $null
+    $forestInfo = $null
+    $schemaVersion = $null
+
+    # --- Section 1: Domain ---
+    try
+    {
+        $domainInfo = Get-ADDomain @splatAD
+    } catch
+    {
+        $warnings.Add("Domain: $_")
+    }
+
+    # --- Section 2: Forest ---
+    try
+    {
+        $forestInfo = Get-ADForest @splatAD
+    } catch
+    {
+        $warnings.Add("Forest: $_")
+    }
+
+    # --- Section 3: Schema Version (depends on domain DN) ---
+    try
+    {
+        $schemaDN = "CN=Schema,CN=Configuration,$($domainInfo.DistinguishedName)"
+        $schemaObj = Get-ADObject -Identity $schemaDN -Properties objectVersion @splatAD
+        $schemaVersion = $schemaObj.objectVersion
+    } catch
+    {
+        $warnings.Add("SchemaVersion: $_")
+    }
+
+    [PSCustomObject]@{
+        Domain                = 'InfrastructureHealth'
+        Function              = 'Get-ForestDomainLevel'
+        Timestamp             = $timestamp
+        DomainFunctionalLevel = if ($domainInfo) { $domainInfo.DomainMode } else { $null }
+        ForestFunctionalLevel = if ($forestInfo) { $forestInfo.ForestMode } else { $null }
+        SchemaVersion         = $schemaVersion
+        DomainDNSRoot         = if ($domainInfo) { $domainInfo.DNSRoot } else { $null }
+        ForestName            = if ($forestInfo) { $forestInfo.Name } else { $null }
+        Warnings              = @($warnings)
+    }
+}
+
+function Get-FSMORolePlacement
+{
+    <#
+    .SYNOPSIS
+        FSMO role holders with reachability and site placement.
+    .DESCRIPTION
+        Queries domain/forest for the 5 FSMO role holders, tests reachability via
+        ICMP, and maps each holder to its AD site. Deduplicates holders before pinging.
+        Domain/Forest failure returns early with contract shape — roles can't be determined.
+    .PARAMETER Server
+        DC name or domain FQDN passed to AD cmdlets. Omit for local domain default.
+    #>
+    [CmdletBinding()]
+    param(
+        [string]$Server
+    )
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $splatAD = if ($Server)
+    { @{ Server = $Server }
+    } else
+    { @{}
+    }
+
+    $roles = $null
+    $allOnOneDC = $null
+    $unreachableCount = 0
+
+    # --- Section 1: Role Holders from Domain/Forest ---
+    $domainInfo = $null
+    $forestInfo = $null
+    try
+    {
+        $domainInfo = Get-ADDomain @splatAD
+        $forestInfo = Get-ADForest @splatAD
+    } catch
+    {
+        $warnings.Add("DomainForest: $_")
+        return [PSCustomObject]@{
+            Domain           = 'InfrastructureHealth'
+            Function         = 'Get-FSMORolePlacement'
+            Timestamp        = $timestamp
+            Roles            = @()
+            AllOnOneDC       = $null
+            UnreachableCount = 0
+            Warnings         = @($warnings)
+        }
+    }
+
+    # --- Section 2: Build role list ---
+    $roleMap = @(
+        @{ Role = 'SchemaMaster';   Holder = $forestInfo.SchemaMaster }
+        @{ Role = 'DomainNaming';   Holder = $forestInfo.DomainNamingMaster }
+        @{ Role = 'PDCEmulator';    Holder = $domainInfo.PDCEmulator }
+        @{ Role = 'RIDMaster';      Holder = $domainInfo.RIDMaster }
+        @{ Role = 'Infrastructure'; Holder = $domainInfo.InfrastructureMaster }
+    )
+
+    # --- Section 3: DC site lookup ---
+    $dcSiteMap = @{}
+    try
+    {
+        $dcObjects = @(Get-ADDomainController -Filter '*' @splatAD)
+        foreach ($dc in $dcObjects)
+        { $dcSiteMap[$dc.HostName] = $dc.Site
+        }
+    } catch
+    {
+        $warnings.Add("DCSiteLookup: $_")
+    }
+
+    # --- Section 4: Reachability (deduplicate holders before pinging) ---
+    $uniqueHolders = @($roleMap.Holder | Select-Object -Unique)
+    $reachability = @{}
+    foreach ($holder in $uniqueHolders)
+    {
+        try
+        {
+            $reachability[$holder] = Test-Connection -ComputerName $holder -Count 1 -Quiet
+        } catch
+        {
+            $reachability[$holder] = $false
+            $warnings.Add("Reachability: $holder - $_")
+        }
+    }
+
+    # --- Build role sub-objects ---
+    $roles = @(foreach ($r in $roleMap)
+        {
+            [PSCustomObject]@{
+                Role      = $r.Role
+                Holder    = $r.Holder
+                Reachable = $reachability[$r.Holder]
+                Site      = $dcSiteMap[$r.Holder]
+            }
+        })
+
+    $allOnOneDC = ($uniqueHolders.Count -eq 1)
+    $unreachableCount = @($roles | Where-Object { -not $_.Reachable }).Count
+
+    [PSCustomObject]@{
+        Domain           = 'InfrastructureHealth'
+        Function         = 'Get-FSMORolePlacement'
+        Timestamp        = $timestamp
+        Roles            = $roles
+        AllOnOneDC       = $allOnOneDC
+        UnreachableCount = $unreachableCount
+        Warnings         = @($warnings)
+    }
+}
+
 #endregion Infrastructure Health
 
 #region Identity Lifecycle

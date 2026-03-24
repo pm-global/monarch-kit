@@ -11,7 +11,7 @@ monarch-kit is the process. Discovery through cleanup, with human gates, hold pe
 ## Quick Start
 
 ```powershell
-Install-Module OctoDoc    # sensor layer (dependency)
+Install-Module OctoDoc    # sensor layer (optional dependency)
 Install-Module Monarch    # audit and administration suite
 
 Import-Module Monarch

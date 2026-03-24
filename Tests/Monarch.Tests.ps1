@@ -866,8 +866,234 @@ Describe 'New-DomainBaseline' {
 
 # =============================================================================
 # Step 5: Infrastructure Health
-# Tests added in Step 5 implementation.
 # =============================================================================
+
+Describe 'Get-ForestDomainLevel' {
+
+    BeforeAll {
+        & (Get-Module Monarch) {
+            function script:Get-ADDomain
+            { param([string]$Server)
+            }
+            function script:Get-ADForest
+            { param([string]$Server)
+            }
+            function script:Get-ADObject
+            { param([string]$Identity, [string[]]$Properties, [string]$Server)
+            }
+        }
+    }
+
+    Context 'when all sections succeed' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADDomain {
+                [PSCustomObject]@{
+                    DNSRoot           = 'test.local'
+                    DomainMode        = 'Windows2016Domain'
+                    DistinguishedName = 'DC=test,DC=local'
+                }
+            }
+
+            Mock -ModuleName Monarch Get-ADForest {
+                [PSCustomObject]@{
+                    Name       = 'test.local'
+                    ForestMode = 'Windows2016Forest'
+                }
+            }
+
+            Mock -ModuleName Monarch Get-ADObject {
+                [PSCustomObject]@{ objectVersion = 88 }
+            }
+
+            $script:result = Get-ForestDomainLevel -Server 'DC01.test.local'
+        }
+
+        It 'returns correct shape and metadata' {
+            $result.Domain   | Should -Be 'InfrastructureHealth'
+            $result.Function | Should -Be 'Get-ForestDomainLevel'
+            $result.Timestamp | Should -BeOfType [datetime]
+            $result.Warnings | Should -HaveCount 0
+            $result.PSObject.Properties.Name | Should -Contain 'DomainFunctionalLevel'
+            $result.PSObject.Properties.Name | Should -Contain 'ForestFunctionalLevel'
+            $result.PSObject.Properties.Name | Should -Contain 'SchemaVersion'
+            $result.PSObject.Properties.Name | Should -Contain 'DomainDNSRoot'
+            $result.PSObject.Properties.Name | Should -Contain 'ForestName'
+        }
+
+        It 'populates schema version from AD object' {
+            $result.SchemaVersion         | Should -Be 88
+            $result.DomainFunctionalLevel | Should -Be 'Windows2016Domain'
+            $result.ForestFunctionalLevel | Should -Be 'Windows2016Forest'
+            $result.DomainDNSRoot         | Should -Be 'test.local'
+            $result.ForestName            | Should -Be 'test.local'
+        }
+    }
+
+    Context 'when Forest query fails' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADDomain {
+                [PSCustomObject]@{
+                    DNSRoot           = 'test.local'
+                    DomainMode        = 'Windows2016Domain'
+                    DistinguishedName = 'DC=test,DC=local'
+                }
+            }
+
+            Mock -ModuleName Monarch Get-ADForest { throw 'Forest unreachable' }
+
+            Mock -ModuleName Monarch Get-ADObject {
+                [PSCustomObject]@{ objectVersion = 88 }
+            }
+
+            $script:result = Get-ForestDomainLevel -Server 'DC01.test.local'
+        }
+
+        It 'still populates domain data and warns about forest failure' {
+            $result.DomainFunctionalLevel | Should -Be 'Windows2016Domain'
+            $result.DomainDNSRoot         | Should -Be 'test.local'
+            $result.ForestFunctionalLevel | Should -BeNullOrEmpty
+            $result.ForestName            | Should -BeNullOrEmpty
+            $result.Warnings | Should -HaveCount 1
+            $result.Warnings[0] | Should -BeLike 'Forest:*'
+        }
+    }
+}
+
+Describe 'Get-FSMORolePlacement' {
+
+    BeforeAll {
+        & (Get-Module Monarch) {
+            function script:Get-ADDomain
+            { param([string]$Server)
+            }
+            function script:Get-ADForest
+            { param([string]$Server)
+            }
+            function script:Get-ADDomainController
+            { param([string]$Filter, [string]$Server)
+            }
+            function script:Test-Connection
+            { param($ComputerName, $Count, [switch]$Quiet)
+            }
+        }
+    }
+
+    Context 'when all roles on one DC' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADDomain {
+                [PSCustomObject]@{
+                    PDCEmulator          = 'DC01.test.local'
+                    RIDMaster            = 'DC01.test.local'
+                    InfrastructureMaster = 'DC01.test.local'
+                }
+            }
+
+            Mock -ModuleName Monarch Get-ADForest {
+                [PSCustomObject]@{
+                    SchemaMaster       = 'DC01.test.local'
+                    DomainNamingMaster = 'DC01.test.local'
+                }
+            }
+
+            Mock -ModuleName Monarch Get-ADDomainController {
+                @(
+                    [PSCustomObject]@{
+                        HostName = 'DC01.test.local'
+                        Site     = 'Default-First-Site-Name'
+                    }
+                )
+            }
+
+            Mock -ModuleName Monarch Test-Connection { $true }
+
+            $script:result = Get-FSMORolePlacement -Server 'DC01.test.local'
+        }
+
+        It 'returns 5 roles with correct shape' {
+            $result.Domain   | Should -Be 'InfrastructureHealth'
+            $result.Function | Should -Be 'Get-FSMORolePlacement'
+            $result.Timestamp | Should -BeOfType [datetime]
+            $result.Roles | Should -HaveCount 5
+            $result.Roles[0].PSObject.Properties.Name | Should -Contain 'Role'
+            $result.Roles[0].PSObject.Properties.Name | Should -Contain 'Holder'
+            $result.Roles[0].PSObject.Properties.Name | Should -Contain 'Reachable'
+            $result.Roles[0].PSObject.Properties.Name | Should -Contain 'Site'
+        }
+
+        It 'reports AllOnOneDC = true' {
+            $result.AllOnOneDC       | Should -BeTrue
+            $result.UnreachableCount | Should -Be 0
+        }
+
+        It 'populates site from DC lookup' {
+            $result.Roles | ForEach-Object { $_.Site | Should -Be 'Default-First-Site-Name' }
+        }
+    }
+
+    Context 'when roles distributed across DCs with one unreachable' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADDomain {
+                [PSCustomObject]@{
+                    PDCEmulator          = 'DC01.test.local'
+                    RIDMaster            = 'DC01.test.local'
+                    InfrastructureMaster = 'DC01.test.local'
+                }
+            }
+
+            Mock -ModuleName Monarch Get-ADForest {
+                [PSCustomObject]@{
+                    SchemaMaster       = 'DC02.test.local'
+                    DomainNamingMaster = 'DC02.test.local'
+                }
+            }
+
+            Mock -ModuleName Monarch Get-ADDomainController {
+                @(
+                    [PSCustomObject]@{ HostName = 'DC01.test.local'; Site = 'Site-A' },
+                    [PSCustomObject]@{ HostName = 'DC02.test.local'; Site = 'Site-B' }
+                )
+            }
+
+            Mock -ModuleName Monarch Test-Connection { param($ComputerName)
+                if ($ComputerName -eq 'DC02.test.local') { $false } else { $true }
+            }
+
+            $script:result = Get-FSMORolePlacement -Server 'DC01.test.local'
+        }
+
+        It 'reports AllOnOneDC = false with correct unreachable count' {
+            $result.AllOnOneDC       | Should -BeFalse
+            $result.UnreachableCount | Should -Be 2
+            ($result.Roles | Where-Object { $_.Role -eq 'SchemaMaster' }).Reachable | Should -BeFalse
+            ($result.Roles | Where-Object { $_.Role -eq 'PDCEmulator' }).Reachable | Should -BeTrue
+        }
+    }
+
+    Context 'when Domain/Forest query fails' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADDomain { throw 'AD unreachable' }
+            Mock -ModuleName Monarch Get-ADForest { throw 'AD unreachable' }
+            Mock -ModuleName Monarch Get-ADDomainController { @() }
+            Mock -ModuleName Monarch Test-Connection { $true }
+
+            $script:result = Get-FSMORolePlacement -Server 'DC01.test.local'
+        }
+
+        It 'returns contract shape with empty roles and warning' {
+            $result.Domain   | Should -Be 'InfrastructureHealth'
+            $result.Function | Should -Be 'Get-FSMORolePlacement'
+            $result.Roles    | Should -HaveCount 0
+            $result.AllOnOneDC | Should -BeNullOrEmpty
+            $result.Warnings | Should -Not -HaveCount 0
+            $result.Warnings[0] | Should -BeLike 'DomainForest:*'
+        }
+    }
+}
 
 # =============================================================================
 # Step 6: Security Posture
