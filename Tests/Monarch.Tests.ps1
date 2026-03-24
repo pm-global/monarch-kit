@@ -1202,6 +1202,129 @@ Describe 'Get-SiteTopology' {
     }
 }
 
+Describe 'Get-ReplicationHealth' {
+
+    BeforeAll {
+        & (Get-Module Monarch) {
+            function script:Get-ADDomainController
+            { param([string]$Filter, [string]$Server)
+            }
+            function script:Get-ADReplicationPartnerMetadata
+            { param($Target, [string]$Server)
+            }
+        }
+    }
+
+    Context 'with mixed health states' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADDomainController {
+                @([PSCustomObject]@{ HostName = 'DC01.test.local' })
+            }
+
+            Mock -ModuleName Monarch Get-ADReplicationPartnerMetadata {
+                @(
+                    [PSCustomObject]@{
+                        Partner                        = 'DC02.test.local'
+                        Partition                      = 'DC=test,DC=local'
+                        LastReplicationSuccess          = (Get-Date).AddHours(-2)
+                        LastReplicationAttempt          = (Get-Date).AddHours(-2)
+                        ConsecutiveReplicationFailures = 0
+                    },
+                    [PSCustomObject]@{
+                        Partner                        = 'DC02.test.local'
+                        Partition                      = 'CN=Configuration,DC=test,DC=local'
+                        LastReplicationSuccess          = (Get-Date).AddHours(-30)
+                        LastReplicationAttempt          = (Get-Date).AddHours(-1)
+                        ConsecutiveReplicationFailures = 0
+                    },
+                    [PSCustomObject]@{
+                        Partner                        = 'DC02.test.local'
+                        Partition                      = 'DC=DomainDnsZones,DC=test,DC=local'
+                        LastReplicationSuccess          = (Get-Date).AddHours(-2)
+                        LastReplicationAttempt          = (Get-Date).AddHours(-1)
+                        ConsecutiveReplicationFailures = 3
+                    }
+                )
+            }
+
+            $script:result = Get-ReplicationHealth -Server 'DC01.test.local'
+        }
+
+        It 'returns correct shape and metadata' {
+            $result.Domain   | Should -Be 'InfrastructureHealth'
+            $result.Function | Should -Be 'Get-ReplicationHealth'
+            $result.Timestamp | Should -BeOfType [datetime]
+            $result.PSObject.Properties.Name | Should -Contain 'Links'
+            $result.PSObject.Properties.Name | Should -Contain 'HealthyLinkCount'
+            $result.PSObject.Properties.Name | Should -Contain 'WarningLinkCount'
+            $result.PSObject.Properties.Name | Should -Contain 'FailedLinkCount'
+            $result.PSObject.Properties.Name | Should -Contain 'DiagnosticHints'
+        }
+
+        It 'classifies healthy link correctly' {
+            $domainLink = $result.Links | Where-Object { $_.Partition -eq 'Domain' }
+            $domainLink.Status | Should -Be 'Healthy'
+        }
+
+        It 'classifies warning link correctly' {
+            $configLink = $result.Links | Where-Object { $_.Partition -eq 'Configuration' }
+            $configLink.Status | Should -Be 'Warning'
+        }
+
+        It 'classifies failed link correctly' {
+            $dnsLink = $result.Links | Where-Object { $_.Partition -eq 'DomainDNS' }
+            $dnsLink.Status | Should -Be 'Failed'
+            $dnsLink.ConsecutiveFailures | Should -Be 3
+        }
+
+        It 'returns correct counts' {
+            $result.HealthyLinkCount | Should -Be 1
+            $result.WarningLinkCount | Should -Be 1
+            $result.FailedLinkCount  | Should -Be 1
+        }
+
+        It 'generates DiagnosticHints for partial-partition failure' {
+            $result.DiagnosticHints | Should -Not -HaveCount 0
+            $result.DiagnosticHints[0] | Should -BeLike '*DC01*DC02*healthy*DomainDNS*failed*'
+        }
+    }
+
+    Context 'with config override changing threshold' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADDomainController {
+                @([PSCustomObject]@{ HostName = 'DC01.test.local' })
+            }
+
+            Mock -ModuleName Monarch Get-ADReplicationPartnerMetadata {
+                @(
+                    [PSCustomObject]@{
+                        Partner                        = 'DC02.test.local'
+                        Partition                      = 'CN=Configuration,DC=test,DC=local'
+                        LastReplicationSuccess          = (Get-Date).AddHours(-30)
+                        LastReplicationAttempt          = (Get-Date).AddHours(-1)
+                        ConsecutiveReplicationFailures = 0
+                    }
+                )
+            }
+
+            # Override threshold to 48h — 30-hour-old link should now be Healthy
+            Mock -ModuleName Monarch Get-MonarchConfigValue { 48 } -ParameterFilter {
+                $Key -eq 'ReplicationWarningThresholdHours'
+            }
+
+            $script:result = Get-ReplicationHealth -Server 'DC01.test.local'
+        }
+
+        It 'respects custom threshold from config' {
+            $result.Links[0].Status | Should -Be 'Healthy'
+            $result.HealthyLinkCount | Should -Be 1
+            $result.WarningLinkCount | Should -Be 0
+        }
+    }
+}
+
 # =============================================================================
 # Step 6: Security Posture
 # Tests added in Step 6 implementation.

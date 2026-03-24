@@ -471,6 +471,130 @@ function Get-SiteTopology
     }
 }
 
+function Get-ReplicationHealth
+{
+    <#
+    .SYNOPSIS
+        Per-partition replication health with graduated confidence.
+    .DESCRIPTION
+        Queries each DC for replication partner metadata. Classifies each link as
+        Healthy/Warning/Failed based on configurable time threshold and consecutive failures.
+        Generates DiagnosticHints when one partition fails but another succeeds on the same DC pair.
+        Per-DC query failures are isolated — unreachable DCs add warnings, don't block others.
+    .PARAMETER Server
+        DC name or domain FQDN passed to AD cmdlets. Omit for local domain default.
+    #>
+    [CmdletBinding()]
+    param(
+        [string]$Server
+    )
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $splatAD = if ($Server)
+    { @{ Server = $Server }
+    } else
+    { @{}
+    }
+    $thresholdHours = Get-MonarchConfigValue 'ReplicationWarningThresholdHours'
+
+    # --- Section 1: Get all DCs ---
+    $dcObjects = @()
+    try
+    {
+        $dcObjects = @(Get-ADDomainController -Filter '*' @splatAD)
+    } catch
+    {
+        $warnings.Add("DomainControllers: $_")
+    }
+
+    # --- Section 2: Collect replication metadata per DC ---
+    $links = [System.Collections.Generic.List[PSCustomObject]]::new()
+    foreach ($dc in $dcObjects)
+    {
+        try
+        {
+            $metadata = @(Get-ADReplicationPartnerMetadata -Target $dc.HostName @splatAD)
+            foreach ($m in $metadata)
+            {
+                # Partition name normalization — string matching, not structured DN parsing
+                $partition = switch -Regex ($m.Partition)
+                {
+                    '^CN=Schema'         { 'Schema' }
+                    '^CN=Configuration'  { 'Configuration' }
+                    '^DC=DomainDnsZones' { 'DomainDNS' }
+                    '^DC=ForestDnsZones' { 'ForestDNS' }
+                    default              { 'Domain' }
+                }
+
+                $status = if ($m.ConsecutiveReplicationFailures -gt 0)
+                {
+                    'Failed'
+                } elseif ($m.LastReplicationSuccess -and
+                    ((Get-Date) - $m.LastReplicationSuccess).TotalHours -gt (2 * $thresholdHours))
+                {
+                    'Failed'
+                } elseif ($m.LastReplicationSuccess -and
+                    ((Get-Date) - $m.LastReplicationSuccess).TotalHours -gt $thresholdHours)
+                {
+                    'Warning'
+                } else
+                {
+                    'Healthy'
+                }
+
+                $links.Add([PSCustomObject]@{
+                    SourceDC            = $dc.HostName
+                    PartnerDC           = $m.Partner
+                    Partition           = $partition
+                    LastSuccess         = $m.LastReplicationSuccess
+                    LastAttempt         = $m.LastReplicationAttempt
+                    ConsecutiveFailures = $m.ConsecutiveReplicationFailures
+                    Status              = $status
+                })
+            }
+        } catch
+        {
+            $warnings.Add("Replication: $($dc.HostName) - $_")
+        }
+    }
+
+    # --- Section 3: DiagnosticHints for partial-partition failures ---
+    $hints = [System.Collections.Generic.List[string]]::new()
+    $linkArray = @($links)
+    $dcPairs = $linkArray | Select-Object SourceDC, PartnerDC -Unique
+    foreach ($pair in $dcPairs)
+    {
+        $pairLinks = $linkArray | Where-Object {
+            $_.SourceDC -eq $pair.SourceDC -and $_.PartnerDC -eq $pair.PartnerDC
+        }
+        $healthy = @($pairLinks | Where-Object { $_.Status -eq 'Healthy' })
+        $failed  = @($pairLinks | Where-Object { $_.Status -eq 'Failed' })
+        if ($healthy.Count -gt 0 -and $failed.Count -gt 0)
+        {
+            $hNames = ($healthy.Partition | Sort-Object) -join ', '
+            $fNames = ($failed.Partition | Sort-Object) -join ', '
+            $hints.Add("$($pair.SourceDC)->$($pair.PartnerDC): $hNames healthy but $fNames failed")
+        }
+    }
+
+    $healthyCount = @($linkArray | Where-Object { $_.Status -eq 'Healthy' }).Count
+    $warningCount = @($linkArray | Where-Object { $_.Status -eq 'Warning' }).Count
+    $failedCount  = @($linkArray | Where-Object { $_.Status -eq 'Failed' }).Count
+
+    [PSCustomObject]@{
+        Domain           = 'InfrastructureHealth'
+        Function         = 'Get-ReplicationHealth'
+        Timestamp        = $timestamp
+        Links            = $linkArray
+        HealthyLinkCount = $healthyCount
+        WarningLinkCount = $warningCount
+        FailedLinkCount  = $failedCount
+        DiagnosticHints  = @($hints)
+        Warnings         = @($warnings)
+    }
+}
+
 #endregion Infrastructure Health
 
 #region Identity Lifecycle
