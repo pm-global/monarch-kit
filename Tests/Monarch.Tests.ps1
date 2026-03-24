@@ -247,19 +247,19 @@ Describe 'Resolve-MonarchDC' {
             if (-not (Get-Command 'Get-ADDomain' -ErrorAction SilentlyContinue))
             {
                 function script:Get-ADDomain
-                { 
+                {
                 }
             }
             if (-not (Get-Command 'Get-ADDomainController' -ErrorAction SilentlyContinue))
             {
                 function script:Get-ADDomainController
-                { 
+                {
                 }
             }
             if (-not (Get-Command 'Get-HealthyDC' -ErrorAction SilentlyContinue))
             {
                 function script:Get-HealthyDC
-                { 
+                {
                 }
             }
         }
@@ -268,9 +268,9 @@ Describe 'Resolve-MonarchDC' {
             & (Get-Module Monarch) {
                 param($d)
                 if ($d)
-                { Resolve-MonarchDC -Domain $d 
+                { Resolve-MonarchDC -Domain $d
                 } else
-                { Resolve-MonarchDC 
+                { Resolve-MonarchDC
                 }
             } $Domain
         }
@@ -394,8 +394,221 @@ Describe 'Resolve-MonarchDC' {
 
 # =============================================================================
 # Step 4: New-DomainBaseline
-# Tests added in Step 4 implementation.
 # =============================================================================
+
+Describe 'New-DomainBaseline' {
+
+    BeforeAll {
+        # Define AD cmdlet stubs inside the module scope so Pester can mock them.
+        # Parameters declared so splatted args bind correctly for mock assertions.
+        & (Get-Module Monarch) {
+            function script:Get-ADDomain
+            { param([string]$Server)
+            }
+            function script:Get-ADForest
+            { param([string]$Server)
+            }
+            function script:Get-ADObject
+            { param([string]$Identity, [string[]]$Properties, [string]$Server)
+            }
+            function script:Get-ADDomainController
+            { param([string]$Filter, [string]$Server)
+            }
+            function script:Get-ADReplicationSite
+            { param([string]$Filter, [string]$Server)
+            }
+            function script:Get-ADOrganizationalUnit
+            { param([string]$Filter, [string]$Server)
+            }
+            function script:Get-ADUser
+            { param([string]$Filter, [string]$Server)
+            }
+            function script:Get-ADComputer
+            { param([string]$Filter, [string]$Server)
+            }
+            function script:Get-ADGroup
+            { param([string]$Filter, [string]$Server)
+            }
+            function script:Get-ADDefaultDomainPasswordPolicy
+            { param([string]$Server)
+            }
+        }
+    }
+
+    Context 'when all sections succeed' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADDomain {
+                [PSCustomObject]@{
+                    DNSRoot              = 'test.local'
+                    NetBIOSName          = 'TEST'
+                    DomainMode           = 'Windows2016Domain'
+                    PDCEmulator          = 'DC01.test.local'
+                    RIDMaster            = 'DC01.test.local'
+                    InfrastructureMaster = 'DC01.test.local'
+                    DistinguishedName    = 'DC=test,DC=local'
+                }
+            }
+
+            Mock -ModuleName Monarch Get-ADForest {
+                [PSCustomObject]@{
+                    Name               = 'test.local'
+                    ForestMode         = 'Windows2016Forest'
+                    SchemaMaster       = 'DC01.test.local'
+                    DomainNamingMaster = 'DC01.test.local'
+                }
+            }
+
+            Mock -ModuleName Monarch Get-ADObject {
+                [PSCustomObject]@{ objectVersion = 88 }
+            }
+
+            Mock -ModuleName Monarch Get-ADDomainController {
+                @(
+                    [PSCustomObject]@{
+                        HostName          = 'DC01.test.local'
+                        Site              = 'Default-First-Site-Name'
+                        OperatingSystem   = 'Windows Server 2019'
+                        IPv4Address       = '10.0.0.1'
+                        IsGlobalCatalog   = $true
+                        IsReadOnly        = $false
+                    }
+                )
+            }
+
+            Mock -ModuleName Monarch Get-ADReplicationSite {
+                @(
+                    [PSCustomObject]@{ Name = 'Default-First-Site-Name' },
+                    [PSCustomObject]@{ Name = 'Branch-Site' }
+                )
+            }
+
+            Mock -ModuleName Monarch Get-ADOrganizationalUnit {
+                @(
+                    [PSCustomObject]@{ Name = 'Users' },
+                    [PSCustomObject]@{ Name = 'Computers' },
+                    [PSCustomObject]@{ Name = 'Servers' }
+                )
+            }
+
+            Mock -ModuleName Monarch Get-ADUser {
+                @(
+                    [PSCustomObject]@{ SamAccountName = 'user1'; Enabled = $true },
+                    [PSCustomObject]@{ SamAccountName = 'user2'; Enabled = $true },
+                    [PSCustomObject]@{ SamAccountName = 'user3'; Enabled = $false }
+                )
+            }
+
+            Mock -ModuleName Monarch Get-ADComputer {
+                @(
+                    [PSCustomObject]@{ Name = 'PC01'; Enabled = $true },
+                    [PSCustomObject]@{ Name = 'PC02'; Enabled = $false }
+                )
+            }
+
+            Mock -ModuleName Monarch Get-ADGroup {
+                @(
+                    [PSCustomObject]@{ Name = 'Domain Admins' },
+                    [PSCustomObject]@{ Name = 'Domain Users' }
+                )
+            }
+
+            Mock -ModuleName Monarch Get-ADDefaultDomainPasswordPolicy {
+                [PSCustomObject]@{
+                    MinPasswordLength    = 12
+                    PasswordHistoryCount = 24
+                    MaxPasswordAge       = New-TimeSpan -Days 90
+                    MinPasswordAge       = New-TimeSpan -Days 1
+                    LockoutThreshold     = 5
+                    LockoutDuration      = New-TimeSpan -Minutes 30
+                    ComplexityEnabled    = $true
+                }
+            }
+
+            $script:baseline = New-DomainBaseline -Server 'DC01.test.local'
+        }
+
+        It 'returns an object with all required properties' {
+            $requiredProps = @(
+                'Domain', 'Function', 'Timestamp', 'Server',
+                'DomainDNSRoot', 'DomainNetBIOS', 'DomainFunctionalLevel',
+                'ForestName', 'ForestFunctionalLevel', 'SchemaVersion',
+                'DomainControllers', 'FSMORoles', 'SiteCount', 'OUCount',
+                'UserCount', 'ComputerCount', 'GroupCount',
+                'PasswordPolicy', 'OutputFiles', 'Warnings'
+            )
+            foreach ($prop in $requiredProps)
+            {
+                $baseline.PSObject.Properties.Name | Should -Contain $prop
+            }
+        }
+
+        It 'sets Domain to AuditCompliance' {
+            $baseline.Domain | Should -Be 'AuditCompliance'
+        }
+
+        It 'sets Function to New-DomainBaseline' {
+            $baseline.Function | Should -Be 'New-DomainBaseline'
+        }
+
+        It 'sets Timestamp within 60 seconds of now' {
+            $baseline.Timestamp | Should -Not -BeNullOrEmpty
+            ((Get-Date) - $baseline.Timestamp).TotalSeconds | Should -BeLessThan 60
+        }
+
+        It 'returns zero warnings when all sections succeed' {
+            @($baseline.Warnings).Count | Should -Be 0
+        }
+
+        It 'returns DomainControllers as an array with correct sub-properties' {
+            @($baseline.DomainControllers).Count | Should -BeGreaterThan 0
+            $dc = $baseline.DomainControllers[0]
+            $dc.PSObject.Properties.Name | Should -Contain 'HostName'
+            $dc.PSObject.Properties.Name | Should -Contain 'Site'
+            $dc.PSObject.Properties.Name | Should -Contain 'OS'
+            $dc.PSObject.Properties.Name | Should -Contain 'IPv4'
+            $dc.PSObject.Properties.Name | Should -Contain 'IsGC'
+            $dc.PSObject.Properties.Name | Should -Contain 'IsRODC'
+        }
+
+        It 'returns FSMORoles with all five role properties' {
+            $roles = $baseline.FSMORoles
+            $roles.PSObject.Properties.Name | Should -Contain 'SchemaMaster'
+            $roles.PSObject.Properties.Name | Should -Contain 'DomainNaming'
+            $roles.PSObject.Properties.Name | Should -Contain 'PDCEmulator'
+            $roles.PSObject.Properties.Name | Should -Contain 'RIDMaster'
+            $roles.PSObject.Properties.Name | Should -Contain 'Infrastructure'
+        }
+
+        It 'returns UserCount and ComputerCount with Total and Enabled' {
+            $baseline.UserCount.Total | Should -Be 3
+            $baseline.UserCount.Enabled | Should -Be 2
+            $baseline.ComputerCount.Total | Should -Be 2
+            $baseline.ComputerCount.Enabled | Should -Be 1
+        }
+
+        It 'populates correct values from mock data' {
+            $baseline.Server | Should -Be 'DC01.test.local'
+            $baseline.DomainDNSRoot | Should -Be 'test.local'
+            $baseline.DomainNetBIOS | Should -Be 'TEST'
+            $baseline.DomainFunctionalLevel | Should -Be 'Windows2016Domain'
+            $baseline.ForestName | Should -Be 'test.local'
+            $baseline.ForestFunctionalLevel | Should -Be 'Windows2016Forest'
+            $baseline.SchemaVersion | Should -Be 88
+            $baseline.SiteCount | Should -Be 2
+            $baseline.OUCount | Should -Be 3
+            $baseline.GroupCount | Should -Be 2
+        }
+
+        It 'records the Server value passed in' {
+            $baseline.Server | Should -Be 'DC01.test.local'
+        }
+
+        It 'returns empty OutputFiles when OutputPath not provided' {
+            @($baseline.OutputFiles).Count | Should -Be 0
+        }
+    }
+}
 
 # =============================================================================
 # Step 5: Infrastructure Health

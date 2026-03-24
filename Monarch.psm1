@@ -199,6 +199,296 @@ function Resolve-MonarchDC
 # Domain baselines, audit policy config, event log config.
 # All Discovery phase except Compare-DomainBaseline (Plan 4).
 
+function New-DomainBaseline
+{
+    <#
+    .SYNOPSIS
+        Comprehensive domain snapshot — functional levels, DCs, FSMO, OUs, object counts, password policy.
+    .DESCRIPTION
+        Collects baseline data across seven sections. Each section is independent —
+        if one fails, the rest still populate and the failure appears in Warnings.
+        Pattern-setting function: all subsequent API functions follow this contract.
+    .PARAMETER Server
+        DC name or domain FQDN passed to AD cmdlets. Omit for local domain default.
+    .PARAMETER OutputPath
+        Directory for per-section CSV exports. Created if missing. Omit to skip file output.
+    #>
+    [CmdletBinding()]
+    param(
+        [string]$Server,
+        [string]$OutputPath
+    )
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $outputFiles = [System.Collections.Generic.List[string]]::new()
+    $splatAD = if ($Server)
+    { @{ Server = $Server } 
+    } else
+    { @{} 
+    }
+
+    # Initialize all result variables so the return contract is always complete.
+    $domainInfo = $null
+    $forestInfo = $null
+    $schemaVersion = $null
+    $fsmoRoles = $null
+    $domainControllers = $null
+    $siteCount = $null
+    $ouCount = $null
+    $userCount = $null
+    $computerCount = $null
+    $groupCount = $null
+    $passwordPolicy = $null
+
+    # --- Section 1: Domain & Forest ---
+    try
+    {
+        $domainInfo = Get-ADDomain @splatAD
+        $forestInfo = Get-ADForest @splatAD
+    } catch
+    {
+        $warnings.Add("DomainForest: $_")
+    }
+
+    # --- Section 2: Schema Version ---
+    try
+    {
+        $schemaDN = "CN=Schema,CN=Configuration,$($domainInfo.DistinguishedName)"
+        $schemaObj = Get-ADObject -Identity $schemaDN -Properties objectVersion @splatAD
+        $schemaVersion = $schemaObj.objectVersion
+    } catch
+    {
+        $warnings.Add("SchemaVersion: $_")
+    }
+
+    # --- Section 3: FSMO Roles (depends on section 1) ---
+    if ($domainInfo -and $forestInfo)
+    {
+        try
+        {
+            $fsmoRoles = [PSCustomObject]@{
+                SchemaMaster   = $forestInfo.SchemaMaster
+                DomainNaming   = $forestInfo.DomainNamingMaster
+                PDCEmulator    = $domainInfo.PDCEmulator
+                RIDMaster      = $domainInfo.RIDMaster
+                Infrastructure = $domainInfo.InfrastructureMaster
+            }
+        } catch
+        {
+            $warnings.Add("FSMORoles: $_")
+        }
+    } else
+    {
+        $warnings.Add('FSMORoles: skipped — Domain/Forest data unavailable.')
+    }
+
+    # --- Section 4: Domain Controllers ---
+    try
+    {
+        $dcObjects = @(Get-ADDomainController -Filter * @splatAD)
+        $domainControllers = @(foreach ($dc in $dcObjects)
+            {
+                [PSCustomObject]@{
+                    HostName = $dc.HostName
+                    Site     = $dc.Site
+                    OS       = $dc.OperatingSystem
+                    IPv4     = $dc.IPv4Address
+                    IsGC     = $dc.IsGlobalCatalog
+                    IsRODC   = $dc.IsReadOnly
+                }
+            })
+    } catch
+    {
+        $warnings.Add("DomainControllers: $_")
+    }
+
+    # --- Section 5: Sites ---
+    try
+    {
+        $siteCount = @(Get-ADReplicationSite -Filter * @splatAD).Count
+    } catch
+    {
+        $warnings.Add("Sites: $_")
+    }
+
+    # --- Section 6: OUs & Object Counts ---
+    try
+    {
+        $ouCount = @(Get-ADOrganizationalUnit -Filter * @splatAD).Count
+    } catch
+    {
+        $warnings.Add("OUCount: $_")
+    }
+
+    try
+    {
+        $allUsers = @(Get-ADUser -Filter * @splatAD)
+        $userCount = [PSCustomObject]@{
+            Total   = $allUsers.Count
+            Enabled = @($allUsers | Where-Object Enabled -eq $true).Count
+        }
+    } catch
+    {
+        $warnings.Add("UserCount: $_")
+    }
+
+    try
+    {
+        $allComputers = @(Get-ADComputer -Filter * @splatAD)
+        $computerCount = [PSCustomObject]@{
+            Total   = $allComputers.Count
+            Enabled = @($allComputers | Where-Object Enabled -eq $true).Count
+        }
+    } catch
+    {
+        $warnings.Add("ComputerCount: $_")
+    }
+
+    try
+    {
+        $groupCount = @(Get-ADGroup -Filter * @splatAD).Count
+    } catch
+    {
+        $warnings.Add("GroupCount: $_")
+    }
+
+    # --- Section 7: Password Policy ---
+    try
+    {
+        $passwordPolicy = Get-ADDefaultDomainPasswordPolicy @splatAD
+    } catch
+    {
+        $warnings.Add("PasswordPolicy: $_")
+    }
+
+    # --- CSV Export ---
+    if ($OutputPath)
+    {
+        if (-not (Test-Path $OutputPath))
+        {
+            New-Item -ItemType Directory -Path $OutputPath -Force | Out-Null
+        }
+
+        if ($domainInfo)
+        {
+            $csvPath = Join-Path $OutputPath 'domain-info.csv'
+            [PSCustomObject]@{
+                DomainDNSRoot         = $domainInfo.DNSRoot
+                DomainNetBIOS         = $domainInfo.NetBIOSName
+                DomainFunctionalLevel = $domainInfo.DomainMode
+                ForestName            = if ($forestInfo)
+                { $forestInfo.Name 
+                } else
+                { $null 
+                }
+                ForestFunctionalLevel = if ($forestInfo)
+                { $forestInfo.ForestMode 
+                } else
+                { $null 
+                }
+                SchemaVersion         = $schemaVersion
+            } | Export-Csv -Path $csvPath -NoTypeInformation
+            $outputFiles.Add($csvPath)
+        }
+
+        if ($domainControllers)
+        {
+            $csvPath = Join-Path $OutputPath 'domain-controllers.csv'
+            $domainControllers | Export-Csv -Path $csvPath -NoTypeInformation
+            $outputFiles.Add($csvPath)
+        }
+
+        if ($fsmoRoles)
+        {
+            $csvPath = Join-Path $OutputPath 'fsmo-roles.csv'
+            $fsmoRoles | Export-Csv -Path $csvPath -NoTypeInformation
+            $outputFiles.Add($csvPath)
+        }
+
+        if ($null -ne $userCount -or $null -ne $computerCount)
+        {
+            $csvPath = Join-Path $OutputPath 'object-counts.csv'
+            [PSCustomObject]@{
+                TotalUsers       = if ($userCount)
+                { $userCount.Total 
+                } else
+                { $null 
+                }
+                EnabledUsers     = if ($userCount)
+                { $userCount.Enabled 
+                } else
+                { $null 
+                }
+                TotalComputers   = if ($computerCount)
+                { $computerCount.Total 
+                } else
+                { $null 
+                }
+                EnabledComputers = if ($computerCount)
+                { $computerCount.Enabled 
+                } else
+                { $null 
+                }
+                Groups           = $groupCount
+                OUs              = $ouCount
+            } | Export-Csv -Path $csvPath -NoTypeInformation
+            $outputFiles.Add($csvPath)
+        }
+
+        if ($passwordPolicy)
+        {
+            $csvPath = Join-Path $OutputPath 'password-policy.csv'
+            $passwordPolicy | Export-Csv -Path $csvPath -NoTypeInformation
+            $outputFiles.Add($csvPath)
+        }
+    }
+
+    # --- Return Contract ---
+    [PSCustomObject]@{
+        Domain                = 'AuditCompliance'
+        Function              = 'New-DomainBaseline'
+        Timestamp             = $timestamp
+        Server                = $Server
+        DomainDNSRoot         = if ($domainInfo)
+        { $domainInfo.DNSRoot 
+        } else
+        { $null 
+        }
+        DomainNetBIOS         = if ($domainInfo)
+        { $domainInfo.NetBIOSName 
+        } else
+        { $null 
+        }
+        DomainFunctionalLevel = if ($domainInfo)
+        { $domainInfo.DomainMode 
+        } else
+        { $null 
+        }
+        ForestName            = if ($forestInfo)
+        { $forestInfo.Name 
+        } else
+        { $null 
+        }
+        ForestFunctionalLevel = if ($forestInfo)
+        { $forestInfo.ForestMode 
+        } else
+        { $null 
+        }
+        SchemaVersion         = $schemaVersion
+        DomainControllers     = $domainControllers
+        FSMORoles             = $fsmoRoles
+        SiteCount             = $siteCount
+        OUCount               = $ouCount
+        UserCount             = $userCount
+        ComputerCount         = $computerCount
+        GroupCount            = $groupCount
+        PasswordPolicy        = $passwordPolicy
+        OutputFiles           = @($outputFiles)
+        Warnings              = @($warnings)
+    }
+}
+
 #endregion Audit and Compliance
 
 #region DNS
