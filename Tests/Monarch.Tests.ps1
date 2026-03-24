@@ -608,6 +608,140 @@ Describe 'New-DomainBaseline' {
             @($baseline.OutputFiles).Count | Should -Be 0
         }
     }
+
+    Context 'when Domain/Forest section fails' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADDomain { throw 'DC unreachable' }
+            Mock -ModuleName Monarch Get-ADForest { throw 'DC unreachable' }
+            Mock -ModuleName Monarch Get-ADObject { [PSCustomObject]@{ objectVersion = 88 } }
+            Mock -ModuleName Monarch Get-ADDomainController {
+                @([PSCustomObject]@{
+                        HostName = 'DC01'; Site = 'Site1'; OperatingSystem = 'WS2019'
+                        IPv4Address = '10.0.0.1'; IsGlobalCatalog = $true; IsReadOnly = $false
+                    })
+            }
+            Mock -ModuleName Monarch Get-ADReplicationSite { @([PSCustomObject]@{ Name = 'Site1' }) }
+            Mock -ModuleName Monarch Get-ADOrganizationalUnit { @([PSCustomObject]@{ Name = 'Users' }) }
+            Mock -ModuleName Monarch Get-ADUser { @([PSCustomObject]@{ Enabled = $true }) }
+            Mock -ModuleName Monarch Get-ADComputer { @([PSCustomObject]@{ Enabled = $true }) }
+            Mock -ModuleName Monarch Get-ADGroup { @([PSCustomObject]@{ Name = 'G1' }) }
+            Mock -ModuleName Monarch Get-ADDefaultDomainPasswordPolicy { [PSCustomObject]@{ MinPasswordLength = 12 } }
+
+            $script:result = New-DomainBaseline
+        }
+
+        It 'returns null for domain properties but populates DomainControllers' {
+            $result.DomainDNSRoot | Should -BeNullOrEmpty
+            $result.DomainControllers | Should -Not -BeNullOrEmpty
+        }
+
+        It 'cascades to FSMO gracefully with a warning' {
+            $result.FSMORoles | Should -BeNullOrEmpty
+            $result.Warnings | Should -Contain 'FSMORoles: skipped — Domain/Forest data unavailable.'
+        }
+
+        It 'includes the DomainForest error in Warnings' {
+            ($result.Warnings | Where-Object { $_ -match 'DomainForest:' }) | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'when DC query fails' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADDomain {
+                [PSCustomObject]@{
+                    DNSRoot = 'test.local'; NetBIOSName = 'TEST'; DomainMode = 'Windows2016Domain'
+                    PDCEmulator = 'DC01'; RIDMaster = 'DC01'; InfrastructureMaster = 'DC01'
+                    DistinguishedName = 'DC=test,DC=local'
+                }
+            }
+            Mock -ModuleName Monarch Get-ADForest {
+                [PSCustomObject]@{ Name = 'test.local'; ForestMode = 'Windows2016Forest'; SchemaMaster = 'DC01'; DomainNamingMaster = 'DC01' }
+            }
+            Mock -ModuleName Monarch Get-ADObject { [PSCustomObject]@{ objectVersion = 88 } }
+            Mock -ModuleName Monarch Get-ADDomainController { throw 'RPC unavailable' }
+            Mock -ModuleName Monarch Get-ADReplicationSite { @([PSCustomObject]@{ Name = 'Site1' }) }
+            Mock -ModuleName Monarch Get-ADOrganizationalUnit { @([PSCustomObject]@{ Name = 'Users' }) }
+            Mock -ModuleName Monarch Get-ADUser {
+                @([PSCustomObject]@{ Enabled = $true }, [PSCustomObject]@{ Enabled = $false })
+            }
+            Mock -ModuleName Monarch Get-ADComputer { @([PSCustomObject]@{ Enabled = $true }) }
+            Mock -ModuleName Monarch Get-ADGroup { @([PSCustomObject]@{ Name = 'G1' }) }
+            Mock -ModuleName Monarch Get-ADDefaultDomainPasswordPolicy { [PSCustomObject]@{ MinPasswordLength = 12 } }
+
+            $script:result = New-DomainBaseline
+        }
+
+        It 'returns null DomainControllers but populates UserCount' {
+            $result.DomainControllers | Should -BeNullOrEmpty
+            $result.UserCount.Total | Should -Be 2
+            $result.UserCount.Enabled | Should -Be 1
+        }
+
+        It 'includes the DomainControllers error in Warnings' {
+            ($result.Warnings | Where-Object { $_ -match 'DomainControllers:' }) | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'when multiple sections fail' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADDomain { throw 'fail 1' }
+            Mock -ModuleName Monarch Get-ADForest { throw 'fail 1b' }
+            Mock -ModuleName Monarch Get-ADObject { throw 'fail 2' }
+            Mock -ModuleName Monarch Get-ADDomainController { throw 'fail 3' }
+            Mock -ModuleName Monarch Get-ADReplicationSite { @([PSCustomObject]@{ Name = 'Site1' }) }
+            Mock -ModuleName Monarch Get-ADOrganizationalUnit { @([PSCustomObject]@{ Name = 'OU1' }) }
+            Mock -ModuleName Monarch Get-ADUser { @([PSCustomObject]@{ Enabled = $true }) }
+            Mock -ModuleName Monarch Get-ADComputer { @([PSCustomObject]@{ Enabled = $true }) }
+            Mock -ModuleName Monarch Get-ADGroup { @([PSCustomObject]@{ Name = 'G1' }) }
+            Mock -ModuleName Monarch Get-ADDefaultDomainPasswordPolicy { [PSCustomObject]@{ MinPasswordLength = 12 } }
+
+            $script:result = New-DomainBaseline
+        }
+
+        It 'accumulates warnings from all failed sections' {
+            # DomainForest + SchemaVersion + FSMORoles (cascade) + DomainControllers = 4
+            $result.Warnings.Count | Should -BeGreaterOrEqual 4
+        }
+
+        It 'still populates surviving sections' {
+            $result.SiteCount | Should -Be 1
+            $result.OUCount | Should -Be 1
+            $result.UserCount.Total | Should -Be 1
+            $result.GroupCount | Should -Be 1
+        }
+    }
+
+    Context 'when all sections fail' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADDomain { throw 'fail' }
+            Mock -ModuleName Monarch Get-ADForest { throw 'fail' }
+            Mock -ModuleName Monarch Get-ADObject { throw 'fail' }
+            Mock -ModuleName Monarch Get-ADDomainController { throw 'fail' }
+            Mock -ModuleName Monarch Get-ADReplicationSite { throw 'fail' }
+            Mock -ModuleName Monarch Get-ADOrganizationalUnit { throw 'fail' }
+            Mock -ModuleName Monarch Get-ADUser { throw 'fail' }
+            Mock -ModuleName Monarch Get-ADComputer { throw 'fail' }
+            Mock -ModuleName Monarch Get-ADGroup { throw 'fail' }
+            Mock -ModuleName Monarch Get-ADDefaultDomainPasswordPolicy { throw 'fail' }
+
+            $script:result = New-DomainBaseline
+        }
+
+        It 'still returns the contract shape with Domain, Function, and Timestamp' {
+            $result.Domain | Should -Be 'AuditCompliance'
+            $result.Function | Should -Be 'New-DomainBaseline'
+            $result.Timestamp | Should -Not -BeNullOrEmpty
+        }
+
+        It 'returns Warnings as a populated array' {
+            $result.Warnings | Should -Not -BeNullOrEmpty
+            $result.Warnings.Count | Should -BeGreaterOrEqual 5
+        }
+    }
 }
 
 # =============================================================================
