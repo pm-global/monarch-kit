@@ -763,6 +763,127 @@ function Find-AdminCountOrphan {
     }
 }
 
+function Find-KerberoastableAccount {
+    [CmdletBinding()]
+    param([string]$Server)
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $splatAD = if ($Server) { @{ Server = $Server } } else { @{} }
+
+    $accounts = [System.Collections.Generic.List[PSCustomObject]]::new()
+
+    # --- Section 1: Get privileged group DNs ---
+    $privGroupDNs = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase)
+    try {
+        $allGroups = @(Get-ADGroup -Filter '*' -Properties SID @splatAD)
+        foreach ($g in $allGroups) {
+            $sid = $g.SID.Value
+            if ($sid -like '*-512' -or $sid -like '*-519' -or $sid -like '*-518' -or
+                $sid -eq 'S-1-5-32-544' -or $sid -eq 'S-1-5-32-548' -or
+                $sid -eq 'S-1-5-32-549' -or $sid -eq 'S-1-5-32-551') {
+                $privGroupDNs.Add($g.DistinguishedName) | Out-Null
+            }
+        }
+    } catch {
+        $warnings.Add("GroupDiscovery: $_")
+    }
+
+    # --- Section 2: Query users with SPNs ---
+    try {
+        $spnUsers = @(Get-ADUser -Filter 'ServicePrincipalName -like "*"' -Properties ServicePrincipalName, DisplayName, MemberOf, PasswordLastSet, Enabled @splatAD)
+        foreach ($u in $spnUsers) {
+            $isPriv = $false
+            foreach ($groupDN in @($u.MemberOf)) {
+                if ($privGroupDNs.Contains($groupDN)) { $isPriv = $true; break }
+            }
+            $pwdAge = if ($u.PasswordLastSet) {
+                [int]($timestamp - $u.PasswordLastSet).TotalDays
+            } else { -1 }
+
+            $accounts.Add([PSCustomObject]@{
+                SamAccountName  = $u.SamAccountName
+                DisplayName     = $u.DisplayName
+                SPNs            = @($u.ServicePrincipalName)
+                IsPrivileged    = $isPriv
+                PasswordAgeDays = $pwdAge
+                Enabled         = $u.Enabled
+            })
+        }
+    } catch {
+        $warnings.Add("SPNQuery: $_")
+    }
+
+    $privCount = @($accounts | Where-Object IsPrivileged).Count
+
+    [PSCustomObject]@{
+        Domain          = 'PrivilegedAccess'
+        Function        = 'Find-KerberoastableAccount'
+        Timestamp       = $timestamp
+        Accounts        = @($accounts)
+        TotalCount      = $accounts.Count
+        PrivilegedCount = $privCount
+        Warnings        = @($warnings)
+    }
+}
+
+function Find-ASREPRoastableAccount {
+    [CmdletBinding()]
+    param([string]$Server)
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $splatAD = if ($Server) { @{ Server = $Server } } else { @{} }
+
+    $accounts = [System.Collections.Generic.List[PSCustomObject]]::new()
+
+    # --- Section 1: Get privileged group DNs ---
+    $privGroupDNs = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase)
+    try {
+        $allGroups = @(Get-ADGroup -Filter '*' -Properties SID @splatAD)
+        foreach ($g in $allGroups) {
+            $sid = $g.SID.Value
+            if ($sid -like '*-512' -or $sid -like '*-519' -or $sid -like '*-518' -or
+                $sid -eq 'S-1-5-32-544' -or $sid -eq 'S-1-5-32-548' -or
+                $sid -eq 'S-1-5-32-549' -or $sid -eq 'S-1-5-32-551') {
+                $privGroupDNs.Add($g.DistinguishedName) | Out-Null
+            }
+        }
+    } catch {
+        $warnings.Add("GroupDiscovery: $_")
+    }
+
+    # --- Section 2: Query users with pre-auth disabled ---
+    try {
+        $users = @(Get-ADUser -Filter 'DoesNotRequirePreAuth -eq $true' -Properties DisplayName, MemberOf, Enabled @splatAD)
+        foreach ($u in $users) {
+            $isPriv = $false
+            foreach ($groupDN in @($u.MemberOf)) {
+                if ($privGroupDNs.Contains($groupDN)) { $isPriv = $true; break }
+            }
+            $accounts.Add([PSCustomObject]@{
+                SamAccountName = $u.SamAccountName
+                DisplayName    = $u.DisplayName
+                IsPrivileged   = $isPriv
+                Enabled        = $u.Enabled
+            })
+        }
+    } catch {
+        $warnings.Add("ASREPQuery: $_")
+    }
+
+    [PSCustomObject]@{
+        Domain    = 'PrivilegedAccess'
+        Function  = 'Find-ASREPRoastableAccount'
+        Timestamp = $timestamp
+        Accounts  = @($accounts)
+        Count     = $accounts.Count
+        Warnings  = @($warnings)
+    }
+}
+
 #endregion Privileged Access
 
 #region Group Policy

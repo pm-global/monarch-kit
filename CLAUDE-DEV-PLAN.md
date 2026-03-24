@@ -526,7 +526,7 @@ Four functions, all follow the Step 4 pattern.
   - Account with AdminCount=1 in Domain Admins → not an orphan
   - Count matches Orphans array length
 
-- [ ] **7c. `Find-KerberoastableAccount`**
+- [x] **7c. `Find-KerberoastableAccount`**
 
   Return contract:
   ```
@@ -550,13 +550,13 @@ Four functions, all follow the Step 4 pattern.
 
   Per spec: Return ALL accounts with SPNs, not just privileged ones. `IsPrivileged` flag lets consumers filter.
 
-- [ ] **Tests: Find-KerberoastableAccount**
+- [x] **Tests: Find-KerberoastableAccount**
   - Non-privileged account with SPN → included, `IsPrivileged = $false`
   - Privileged account with SPN → included, `IsPrivileged = $true`
   - `PrivilegedCount` counts only `IsPrivileged = $true` entries
   - `TotalCount` = total entries
 
-- [ ] **7d. `Find-ASREPRoastableAccount`**
+- [x] **7d. `Find-ASREPRoastableAccount`**
 
   Return contract:
   ```
@@ -577,7 +577,7 @@ Four functions, all follow the Step 4 pattern.
 
   Logic: `Get-ADUser -Filter {DoesNotRequirePreAuth -eq $true}`.
 
-- [ ] **Tests: Find-ASREPRoastableAccount**
+- [x] **Tests: Find-ASREPRoastableAccount**
   - Return shape correct
   - Count matches array length
 

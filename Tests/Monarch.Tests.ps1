@@ -2041,6 +2041,138 @@ Describe 'Find-AdminCountOrphan' {
     }
 }
 
+Describe 'Find-KerberoastableAccount' {
+
+    BeforeAll {
+        & (Get-Module Monarch) {
+            function script:Get-ADGroup
+            { param([string]$Filter, [string[]]$Properties, [string]$Server)
+            }
+            function script:Get-ADUser
+            { param([string]$Filter, [string]$Identity, [string[]]$Properties, [string]$Server)
+            }
+        }
+
+        $script:domainAdminsDN = 'CN=Domain Admins,CN=Users,DC=test,DC=local'
+    }
+
+    Context 'with mixed SPN accounts' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADGroup {
+                @([PSCustomObject]@{
+                    Name              = 'Domain Admins'
+                    DistinguishedName = $domainAdminsDN
+                    SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                })
+            }
+
+            Mock -ModuleName Monarch Get-ADUser {
+                @(
+                    [PSCustomObject]@{
+                        SamAccountName       = 'svcAcct'
+                        DisplayName          = 'Service Account'
+                        ServicePrincipalName = @('MSSQLSvc/db01.test.local:1433')
+                        MemberOf             = @($domainAdminsDN)
+                        PasswordLastSet      = (Get-Date).AddDays(-200)
+                        Enabled              = $true
+                    },
+                    [PSCustomObject]@{
+                        SamAccountName       = 'appAcct'
+                        DisplayName          = 'App Account'
+                        ServicePrincipalName = @('HTTP/app.test.local')
+                        MemberOf             = @()
+                        PasswordLastSet      = (Get-Date).AddDays(-30)
+                        Enabled              = $true
+                    }
+                )
+            }
+
+            $script:result = Find-KerberoastableAccount
+        }
+
+        It 'includes non-privileged SPN account' {
+            $app = $result.Accounts | Where-Object SamAccountName -eq 'appAcct'
+            $app | Should -Not -BeNullOrEmpty
+            $app.IsPrivileged | Should -BeFalse
+        }
+
+        It 'includes privileged SPN account' {
+            $svc = $result.Accounts | Where-Object SamAccountName -eq 'svcAcct'
+            $svc | Should -Not -BeNullOrEmpty
+            $svc.IsPrivileged | Should -BeTrue
+        }
+
+        It 'PrivilegedCount counts only privileged entries' {
+            $result.PrivilegedCount | Should -Be 1
+        }
+
+        It 'TotalCount equals total entries' {
+            $result.TotalCount | Should -Be 2
+        }
+    }
+}
+
+Describe 'Find-ASREPRoastableAccount' {
+
+    BeforeAll {
+        & (Get-Module Monarch) {
+            function script:Get-ADGroup
+            { param([string]$Filter, [string[]]$Properties, [string]$Server)
+            }
+            function script:Get-ADUser
+            { param([string]$Filter, [string]$Identity, [string[]]$Properties, [string]$Server)
+            }
+        }
+
+        $script:domainAdminsDN = 'CN=Domain Admins,CN=Users,DC=test,DC=local'
+    }
+
+    Context 'with AS-REP roastable accounts' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADGroup {
+                @([PSCustomObject]@{
+                    Name              = 'Domain Admins'
+                    DistinguishedName = $domainAdminsDN
+                    SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                })
+            }
+
+            Mock -ModuleName Monarch Get-ADUser {
+                @(
+                    [PSCustomObject]@{
+                        SamAccountName = 'asrepUser'
+                        DisplayName    = 'ASREP User'
+                        MemberOf       = @()
+                        Enabled        = $true
+                    },
+                    [PSCustomObject]@{
+                        SamAccountName = 'asrepAdmin'
+                        DisplayName    = 'ASREP Admin'
+                        MemberOf       = @($domainAdminsDN)
+                        Enabled        = $true
+                    }
+                )
+            }
+
+            $script:result = Find-ASREPRoastableAccount
+        }
+
+        It 'returns correct shape with all accounts' {
+            $result.Domain   | Should -Be 'PrivilegedAccess'
+            $result.Function | Should -Be 'Find-ASREPRoastableAccount'
+            $result.Accounts | Should -HaveCount 2
+        }
+
+        It 'Count matches array and IsPrivileged set correctly' {
+            $result.Count | Should -Be 2
+            ($result.Accounts | Where-Object SamAccountName -eq 'asrepAdmin').IsPrivileged | Should -BeTrue
+            ($result.Accounts | Where-Object SamAccountName -eq 'asrepUser').IsPrivileged | Should -BeFalse
+        }
+    }
+}
+
 # =============================================================================
 # Step 8: Find-DormantAccount
 # Tests added in Step 8 implementation.
