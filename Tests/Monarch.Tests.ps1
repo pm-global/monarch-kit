@@ -2175,8 +2175,232 @@ Describe 'Find-ASREPRoastableAccount' {
 
 # =============================================================================
 # Step 8: Find-DormantAccount
-# Tests added in Step 8 implementation.
 # =============================================================================
+
+Describe 'Find-DormantAccount' {
+
+    BeforeAll {
+        & (Get-Module Monarch) {
+            function script:Get-ADUser
+            { param([string]$Filter, [string]$Identity, [string[]]$Properties, [string]$Server)
+            }
+            function script:Get-ADGroup
+            { param([string]$Filter, [string]$Identity, [string[]]$Properties, [string]$Server)
+            }
+            function script:Get-ADDomainController
+            { param([string]$Filter, [string]$Server)
+            }
+        }
+
+        $script:domainAdminsDN = 'CN=Domain Admins,CN=Users,DC=test,DC=local'
+        $script:now = Get-Date
+    }
+
+    Context 'with mixed accounts' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADGroup -ParameterFilter { $Filter } {
+                @([PSCustomObject]@{
+                    Name              = 'Domain Admins'
+                    DistinguishedName = $domainAdminsDN
+                    SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                })
+            }
+
+            Mock -ModuleName Monarch Get-ADGroup -ParameterFilter { $Identity } {
+                [PSCustomObject]@{ Name = 'Domain Admins' }
+            }
+
+            Mock -ModuleName Monarch Get-ADUser {
+                @(
+                    [PSCustomObject]@{
+                        SamAccountName       = 'dormant100'
+                        DisplayName          = 'Dormant User'
+                        lastLogonTimestamp    = $now.AddDays(-100).ToFileTime()
+                        WhenCreated          = $now.AddDays(-200)
+                        PasswordLastSet      = $now.AddDays(-50)
+                        PasswordNeverExpires = $false
+                        ServicePrincipalName = @()
+                        MemberOf             = @()
+                        objectClass          = 'user'
+                        DistinguishedName    = 'CN=dormant100,OU=Users,DC=test,DC=local'
+                        Enabled              = $true
+                    },
+                    [PSCustomObject]@{
+                        SamAccountName       = 'recent30'
+                        DisplayName          = 'Recent User'
+                        lastLogonTimestamp    = $now.AddDays(-30).ToFileTime()
+                        WhenCreated          = $now.AddDays(-200)
+                        PasswordLastSet      = $now.AddDays(-10)
+                        PasswordNeverExpires = $false
+                        ServicePrincipalName = @()
+                        MemberOf             = @()
+                        objectClass          = 'user'
+                        DistinguishedName    = 'CN=recent30,OU=Users,DC=test,DC=local'
+                        Enabled              = $true
+                    },
+                    [PSCustomObject]@{
+                        SamAccountName       = 'Administrator'
+                        DisplayName          = 'Built-in Admin'
+                        lastLogonTimestamp    = $now.AddDays(-5).ToFileTime()
+                        WhenCreated          = $now.AddDays(-365)
+                        PasswordLastSet      = $now.AddDays(-30)
+                        PasswordNeverExpires = $false
+                        ServicePrincipalName = @()
+                        MemberOf             = @()
+                        objectClass          = 'user'
+                        DistinguishedName    = 'CN=Administrator,CN=Users,DC=test,DC=local'
+                        Enabled              = $true
+                    },
+                    [PSCustomObject]@{
+                        SamAccountName       = 'pwdNeverExp'
+                        DisplayName          = 'Pwd Never Expires'
+                        lastLogonTimestamp    = $now.AddDays(-100).ToFileTime()
+                        WhenCreated          = $now.AddDays(-200)
+                        PasswordLastSet      = $now.AddDays(-100)
+                        PasswordNeverExpires = $true
+                        ServicePrincipalName = @()
+                        MemberOf             = @()
+                        objectClass          = 'user'
+                        DistinguishedName    = 'CN=pwdNeverExp,OU=Users,DC=test,DC=local'
+                        Enabled              = $true
+                    },
+                    [PSCustomObject]@{
+                        SamAccountName       = 'spnAccount'
+                        DisplayName          = 'SPN Account'
+                        lastLogonTimestamp    = $now.AddDays(-100).ToFileTime()
+                        WhenCreated          = $now.AddDays(-200)
+                        PasswordLastSet      = $now.AddDays(-100)
+                        PasswordNeverExpires = $false
+                        ServicePrincipalName = @('HTTP/web.test.local')
+                        MemberOf             = @()
+                        objectClass          = 'user'
+                        DistinguishedName    = 'CN=spnAccount,OU=Users,DC=test,DC=local'
+                        Enabled              = $true
+                    },
+                    [PSCustomObject]@{
+                        SamAccountName       = 'SVC-Backup'
+                        DisplayName          = 'Backup Service'
+                        lastLogonTimestamp    = $now.AddDays(-100).ToFileTime()
+                        WhenCreated          = $now.AddDays(-200)
+                        PasswordLastSet      = $now.AddDays(-100)
+                        PasswordNeverExpires = $false
+                        ServicePrincipalName = @()
+                        MemberOf             = @()
+                        objectClass          = 'user'
+                        DistinguishedName    = 'CN=SVC-Backup,OU=Users,DC=test,DC=local'
+                        Enabled              = $true
+                    },
+                    [PSCustomObject]@{
+                        SamAccountName       = 'msaAccount'
+                        DisplayName          = 'Managed Service'
+                        lastLogonTimestamp    = $now.AddDays(-100).ToFileTime()
+                        WhenCreated          = $now.AddDays(-200)
+                        PasswordLastSet      = $now.AddDays(-100)
+                        PasswordNeverExpires = $false
+                        ServicePrincipalName = @()
+                        MemberOf             = @()
+                        objectClass          = 'msDS-ManagedServiceAccount'
+                        DistinguishedName    = 'CN=msaAccount,CN=Managed Service Accounts,DC=test,DC=local'
+                        Enabled              = $true
+                    },
+                    [PSCustomObject]@{
+                        SamAccountName       = 'privUser'
+                        DisplayName          = 'Privileged User'
+                        lastLogonTimestamp    = $now.AddDays(-100).ToFileTime()
+                        WhenCreated          = $now.AddDays(-200)
+                        PasswordLastSet      = $now.AddDays(-100)
+                        PasswordNeverExpires = $false
+                        ServicePrincipalName = @()
+                        MemberOf             = @($domainAdminsDN)
+                        objectClass          = 'user'
+                        DistinguishedName    = 'CN=privUser,OU=Users,DC=test,DC=local'
+                        Enabled              = $true
+                    },
+                    [PSCustomObject]@{
+                        SamAccountName       = 'neverNew'
+                        DisplayName          = 'Never New'
+                        lastLogonTimestamp    = $null
+                        WhenCreated          = $now.AddDays(-10)
+                        PasswordLastSet      = $null
+                        PasswordNeverExpires = $false
+                        ServicePrincipalName = @()
+                        MemberOf             = @()
+                        objectClass          = 'user'
+                        DistinguishedName    = 'CN=neverNew,OU=Users,DC=test,DC=local'
+                        Enabled              = $true
+                    },
+                    [PSCustomObject]@{
+                        SamAccountName       = 'neverOld'
+                        DisplayName          = 'Never Old'
+                        lastLogonTimestamp    = $null
+                        WhenCreated          = $now.AddDays(-90)
+                        PasswordLastSet      = $null
+                        PasswordNeverExpires = $false
+                        ServicePrincipalName = @()
+                        MemberOf             = @()
+                        objectClass          = 'user'
+                        DistinguishedName    = 'CN=neverOld,OU=Users,DC=test,DC=local'
+                        Enabled              = $true
+                    }
+                )
+            }
+
+            $script:result = Find-DormantAccount
+        }
+
+        It 'includes dormant account with correct DormantReason' {
+            $acct = $result.Accounts | Where-Object SamAccountName -eq 'dormant100'
+            $acct | Should -Not -BeNullOrEmpty
+            $acct.DormantReason | Should -Match 'No logon for'
+        }
+
+        It 'excludes account with recent logon' {
+            @($result.Accounts | Where-Object SamAccountName -eq 'recent30') | Should -HaveCount 0
+        }
+
+        It 'excludes built-in account' {
+            @($result.Accounts | Where-Object SamAccountName -eq 'Administrator') | Should -HaveCount 0
+        }
+
+        It 'excludes PasswordNeverExpires account' {
+            @($result.Accounts | Where-Object SamAccountName -eq 'pwdNeverExp') | Should -HaveCount 0
+        }
+
+        It 'excludes SPN account' {
+            @($result.Accounts | Where-Object SamAccountName -eq 'spnAccount') | Should -HaveCount 0
+        }
+
+        It 'excludes keyword-matching account' {
+            @($result.Accounts | Where-Object SamAccountName -eq 'SVC-Backup') | Should -HaveCount 0
+        }
+
+        It 'excludes MSA/gMSA object' {
+            @($result.Accounts | Where-Object SamAccountName -eq 'msaAccount') | Should -HaveCount 0
+        }
+
+        It 'excludes privileged group member' {
+            @($result.Accounts | Where-Object SamAccountName -eq 'privUser') | Should -HaveCount 0
+        }
+
+        It 'excludes never-logged-on account within grace period' {
+            @($result.Accounts | Where-Object SamAccountName -eq 'neverNew') | Should -HaveCount 0
+        }
+
+        It 'includes never-logged-on account past grace period' {
+            $acct = $result.Accounts | Where-Object SamAccountName -eq 'neverOld'
+            $acct | Should -Not -BeNullOrEmpty
+            $acct.DormantReason | Should -Match 'Never logged on'
+            $acct.DaysSinceLogon | Should -Be -1
+        }
+
+        It 'reports correct ExcludedCount' {
+            # 10 mock users - 1 MSA (pre-filtered) = 9 queried - 2 included = 7 excluded
+            $result.ExcludedCount | Should -Be 7
+            $result.TotalCount | Should -Be 2
+        }
+    }
+}
 
 # =============================================================================
 # Step 9: Export-GPOAudit

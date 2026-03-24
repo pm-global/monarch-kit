@@ -601,6 +601,112 @@ function Get-ReplicationHealth
 # Dormant account discovery through deletion. Find-DormantAccount is Discovery;
 # Suspend/Restore/Remove and monitoring are later phases (Plan 2).
 
+function Find-DormantAccount {
+    [CmdletBinding()]
+    param([string]$Server, [string]$OutputPath)
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $splatAD = if ($Server) { @{ Server = $Server } } else { @{} }
+
+    $thresholdDays = Get-MonarchConfigValue 'DormancyThresholdDays'
+    $graceDays     = Get-MonarchConfigValue 'NeverLoggedOnGraceDays'
+    $keywords      = Get-MonarchConfigValue 'ServiceAccountKeywords'
+    $builtIns      = Get-MonarchConfigValue 'BuiltInExclusions'
+    $cutoffDate    = $timestamp.AddDays(-$thresholdDays)
+
+    # --- Section 1: Query all enabled users, filter MSA/gMSA ---
+    $allUsers = @()
+    try {
+        $allUsers = @(Get-ADUser -Filter 'Enabled -eq $true' -Properties lastLogonTimestamp, WhenCreated, PasswordLastSet, PasswordNeverExpires, ServicePrincipalName, MemberOf, DisplayName, objectClass, DistinguishedName @splatAD |
+            Where-Object { $_.objectClass -notin @('msDS-ManagedServiceAccount', 'msDS-GroupManagedServiceAccount') })
+    } catch {
+        $warnings.Add("UserQuery: $_")
+    }
+    $totalQueried = $allUsers.Count
+
+    # --- Section 2: Privileged group discovery + exclusion filtering ---
+    $privGroupDNs = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    try {
+        foreach ($g in @(Get-ADGroup -Filter '*' -Properties SID @splatAD)) {
+            $sid = $g.SID.Value
+            if ($sid -like '*-512' -or $sid -like '*-519' -or $sid -like '*-518' -or
+                $sid -eq 'S-1-5-32-544' -or $sid -eq 'S-1-5-32-548' -or
+                $sid -eq 'S-1-5-32-549' -or $sid -eq 'S-1-5-32-551') {
+                $privGroupDNs.Add($g.DistinguishedName) | Out-Null
+            }
+        }
+    } catch { $warnings.Add("GroupDiscovery: $_") }
+
+    $filtered = foreach ($u in $allUsers) {
+        if ($builtIns -contains $u.SamAccountName) { continue }
+        if ($u.PasswordNeverExpires) { continue }
+        if (@($u.ServicePrincipalName).Count -gt 0) { continue }
+        $kwMatch = $false
+        foreach ($kw in $keywords) { if ($u.SamAccountName -match [regex]::Escape($kw)) { $kwMatch = $true; break } }
+        if ($kwMatch) { continue }
+        $inPriv = $false
+        foreach ($dn in @($u.MemberOf)) { if ($privGroupDNs.Contains($dn)) { $inPriv = $true; break } }
+        if ($inPriv) { continue }
+        $u
+    }
+    $filtered = @($filtered)
+
+    # --- Section 3: Dormancy classification ---
+    $accounts = [System.Collections.Generic.List[PSCustomObject]]::new()
+    foreach ($u in $filtered) {
+        $lastLogon = if ($u.lastLogonTimestamp -and $u.lastLogonTimestamp -gt 0) {
+            [DateTime]::FromFileTime($u.lastLogonTimestamp)
+        } else { $null }
+
+        $dormantReason = $null
+        if ($null -eq $lastLogon) {
+            $accountAge = ($timestamp - $u.WhenCreated).Days
+            if ($accountAge -ge $graceDays) {
+                $dormantReason = "Never logged on (created $accountAge days ago)"
+            }
+        } elseif ($lastLogon -lt $cutoffDate) {
+            $dormantReason = "No logon for $(($timestamp - $lastLogon).Days) days"
+        }
+
+        if (-not $dormantReason) { continue }
+
+        $pwdAge = if ($u.PasswordLastSet) { ($timestamp - $u.PasswordLastSet).Days } else { -1 }
+        $memberGroups = @($u.MemberOf | ForEach-Object {
+            try { (Get-ADGroup -Identity $_ @splatAD).Name } catch { $null }
+        } | Where-Object { $_ }) -join '; '
+
+        $accounts.Add([PSCustomObject]@{
+            SamAccountName    = $u.SamAccountName
+            DisplayName       = $u.DisplayName
+            LastLogon         = $lastLogon
+            DaysSinceLogon    = if ($lastLogon) { ($timestamp - $lastLogon).Days } else { -1 }
+            PasswordLastSet   = $u.PasswordLastSet
+            PasswordAgeDays   = $pwdAge
+            MemberOfGroups    = $memberGroups
+            DormantReason     = $dormantReason
+            DistinguishedName = $u.DistinguishedName
+        })
+    }
+
+    # --- Section 4: Return ---
+    $neverCount = @($accounts | Where-Object { $_.DaysSinceLogon -eq -1 }).Count
+    $csvPath = $null
+
+    [PSCustomObject]@{
+        Domain             = 'IdentityLifecycle'
+        Function           = 'Find-DormantAccount'
+        Timestamp          = $timestamp
+        ThresholdDays      = $thresholdDays
+        Accounts           = @($accounts)
+        CSVPath            = $csvPath
+        TotalCount         = $accounts.Count
+        NeverLoggedOnCount = $neverCount
+        ExcludedCount      = $totalQueried - $accounts.Count
+        Warnings           = @($warnings)
+    }
+}
+
 #endregion Identity Lifecycle
 
 #region Privileged Access
