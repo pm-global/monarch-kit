@@ -126,4 +126,15 @@
     #     CLIArgs = 'query last-backup --format json'
     # }
 
+    # =========================================================================
+    # Reporting
+    # =========================================================================
+
+    # Primary accent color for HTML reports (headers, links, section titles).
+    # Any valid CSS hex color. Critical severity red is not configurable.
+    # ReportAccentPrimary = '#2E5090'
+
+    # Secondary accent color, reserved for future use.
+    # ReportAccentSecondary = '#B85C14'
+
 }

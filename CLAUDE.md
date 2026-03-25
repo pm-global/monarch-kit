@@ -112,6 +112,7 @@ The orchestrator (`Invoke-DomainAudit`) calls functions by phase. See `@docs/dom
 - Read-only operations never modify state.
 - All configurable values use the config layer — no hardcoded values in function bodies. See `@docs/mechanism-decisions.md` for the config model.
 - Audit workflow language throughout: "audit cycle", "audit phase" — never "handover" or "takeover."
+- All visual output (HTML reports, console formatting) follows @docs/design-system.md — spacing, type scale, color, and component grammar.
 
 ## Three-Tier Output Model
 

@@ -55,6 +55,7 @@ Manages the full account lifecycle from provisioning through deletion.
 
 **v0 scripts:** Find-DormantAccounts.ps1, Disable-DormantAccounts.ps1, Delete-DormantAccounts.ps1
 
+**Visual language:** The wrapper's console output follows the design system in docs/design-system.md — console color mapping, spacing translation, and severity prefix conventions.
 ---
 
 ## 3. Privileged Access
