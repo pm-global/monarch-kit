@@ -2644,6 +2644,86 @@ Describe 'Find-GPOPermissionAnomaly' {
     }
 }
 
+Describe 'Export-GPOAudit' {
+    BeforeAll {
+        & (Get-Module Monarch) {
+            function script:Get-GPO { param([switch]$All, [string]$Server) }
+            function script:Get-GPOReport { param([string]$Guid, [string]$ReportType, [string]$Path, [string]$Server) }
+            function script:Backup-GPO { param([switch]$All, [string]$Path, [string]$Server) }
+            function script:Get-GPPermission { param([string]$Guid, [switch]$All, [string]$Server) }
+        }
+    }
+
+    Context 'with mixed GPOs' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-GPO {
+                @(
+                    [PSCustomObject]@{
+                        DisplayName      = 'Security Baseline'
+                        Id               = 'sec-1111'
+                        CreationTime     = (Get-Date).AddDays(-180)
+                        ModificationTime = (Get-Date).AddDays(-10)
+                        User             = [PSCustomObject]@{ Enabled = $true }
+                        Computer         = [PSCustomObject]@{ Enabled = $true }
+                        WmiFilter        = $null
+                        Description      = 'Baseline security settings'
+                        Owner            = 'DOMAIN\Admin'
+                    },
+                    [PSCustomObject]@{
+                        DisplayName      = 'Old Test Policy'
+                        Id               = 'old-2222'
+                        CreationTime     = (Get-Date).AddDays(-365)
+                        ModificationTime = (Get-Date).AddDays(-200)
+                        User             = [PSCustomObject]@{ Enabled = $false }
+                        Computer         = [PSCustomObject]@{ Enabled = $false }
+                        WmiFilter        = $null
+                        Description      = 'Old test'
+                        Owner            = 'DOMAIN\Admin'
+                    }
+                )
+            }
+
+            Mock -ModuleName Monarch Get-GPOReport -ParameterFilter { $Guid -eq 'sec-1111' } {
+                [xml]@'
+<GPO xmlns="http://www.microsoft.com/GroupPolicy/Settings">
+  <Computer><ExtensionData><Extension><UserRightsAssignment/><SecurityOptions/></Extension></ExtensionData></Computer>
+  <LinksTo><SOMPath>OU=Workstations,DC=test,DC=local</SOMPath><Enabled>true</Enabled><NoOverride>false</NoOverride><Order>1</Order></LinksTo>
+</GPO>
+'@
+            }
+
+            Mock -ModuleName Monarch Get-GPOReport -ParameterFilter { $Guid -eq 'old-2222' } {
+                [xml]'<GPO xmlns="http://www.microsoft.com/GroupPolicy/Settings"><Computer><ExtensionData><Extension><AuditSetting/></Extension></ExtensionData></Computer></GPO>'
+            }
+
+            $script:result = Export-GPOAudit
+        }
+
+        It 'returns correct shape and counts' {
+            $result.Domain    | Should -Be 'GroupPolicy'
+            $result.Function  | Should -Be 'Export-GPOAudit'
+            $result.TotalGPOs | Should -Be 2
+            $result.UnlinkedCount | Should -Be 1
+            $result.DisabledCount | Should -Be 1
+        }
+
+        It 'detects high-risk GPO settings via string matching' {
+            $result.HighRiskCounts.UserRights      | Should -Be 1
+            $result.HighRiskCounts.SecurityOptions  | Should -Be 1
+            $result.HighRiskCounts.Scripts          | Should -Be 0
+            $result.HighRiskCounts.SoftwareInstall  | Should -Be 0
+        }
+
+        It 'counts unlinked GPOs' {
+            $result.UnlinkedCount | Should -Be 1
+        }
+
+        It 'OverpermissionedCount is null without -IncludePermissions' {
+            $result.OverpermissionedCount | Should -BeNullOrEmpty
+        }
+    }
+}
+
 # =============================================================================
 # Step 10: Backup & Recovery
 # Tests added in Step 10 implementation.

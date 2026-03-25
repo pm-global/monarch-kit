@@ -1121,6 +1121,139 @@ function Find-GPOPermissionAnomaly {
     }
 }
 
+function Export-GPOAudit {
+    [CmdletBinding()]
+    param(
+        [string]$Server,
+        [string]$OutputPath,
+        [switch]$IncludePermissions,
+        [switch]$IncludeWMIFilters
+    )
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $splatAD = if ($Server) { @{ Server = $Server } } else { @{} }
+
+    # Create output directories (numbered for review priority order)
+    $paths = @{
+        Summary     = if ($OutputPath) { Join-Path $OutputPath '00-SUMMARY' } else { $null }
+        HTML        = if ($OutputPath) { Join-Path $OutputPath '01-HTML-Reports' } else { $null }
+        XML         = if ($OutputPath) { Join-Path $OutputPath '02-XML-Backup' } else { $null }
+        CSV         = if ($OutputPath) { Join-Path $OutputPath '03-CSV-Analysis' } else { $null }
+        Permissions = if ($OutputPath) { Join-Path $OutputPath '04-Permissions' } else { $null }
+        WMI         = if ($OutputPath) { Join-Path $OutputPath '05-WMI-Filters' } else { $null }
+    }
+    if ($OutputPath) {
+        foreach ($p in $paths.Values) { if ($p) { New-Item -ItemType Directory -Path $p -Force | Out-Null } }
+    }
+
+    $allGPOs = @()
+    try { $allGPOs = @(Get-GPO -All @splatAD) } catch { $warnings.Add("GPOQuery: $_") }
+
+    $gpoSummary = [System.Collections.Generic.List[PSCustomObject]]::new()
+    $linkageDetails = [System.Collections.Generic.List[PSCustomObject]]::new()
+
+    foreach ($gpo in $allGPOs) {
+        try {
+            [xml]$report = Get-GPOReport -Guid $gpo.Id -ReportType Xml @splatAD
+            $xmlContent = $report.OuterXml
+
+            # High-risk string matching (not XML parsing — namespace handling varies, see mechanism-decisions.md)
+            $hasUserRights     = [bool]($xmlContent -match 'UserRightsAssignment')
+            $hasSecurityOpts   = [bool]($xmlContent -match 'SecurityOptions')
+            $hasScripts        = [bool]($xmlContent -match '<Script>')
+            $hasSoftwareInst   = [bool]($xmlContent -match 'SoftwareInstallation')
+
+            $gpoSummary.Add([PSCustomObject]@{
+                DisplayName        = $gpo.DisplayName
+                GUID               = $gpo.Id
+                CreatedTime        = $gpo.CreationTime
+                ModifiedTime       = $gpo.ModificationTime
+                UserEnabled        = $gpo.User.Enabled
+                ComputerEnabled    = $gpo.Computer.Enabled
+                WMIFilter          = if ($gpo.WmiFilter) { $gpo.WmiFilter.Name } else { $null }
+                Description        = $gpo.Description
+                HasUserRights      = $hasUserRights
+                HasSecurityOptions = $hasSecurityOpts
+                HasScripts         = $hasScripts
+                HasSoftwareInstall = $hasSoftwareInst
+                Owner              = $gpo.Owner
+            })
+
+            # Linkage — use indexer for strict-mode-safe namespace XML access
+            $links = $report.GPO['LinksTo']
+            if ($links) {
+                foreach ($link in @($links)) {
+                    $linkageDetails.Add([PSCustomObject]@{
+                        GPOName    = $gpo.DisplayName
+                        LinkedTo   = $link.SOMPath
+                        Enabled    = $link.Enabled
+                        NoOverride = $link.NoOverride
+                        Order      = $link.Order
+                    })
+                }
+            } else {
+                $linkageDetails.Add([PSCustomObject]@{
+                    GPOName    = $gpo.DisplayName
+                    LinkedTo   = '**UNLINKED**'
+                    Enabled    = 'N/A'
+                    NoOverride = 'N/A'
+                    Order      = 'N/A'
+                })
+            }
+        } catch { $warnings.Add("GPOAnalysis($($gpo.DisplayName)): $_") }
+    }
+
+    if ($OutputPath -and $gpoSummary.Count -gt 0) {
+        $gpoSummary | Export-Csv -Path (Join-Path $paths.CSV 'gpo-summary.csv') -NoTypeInformation
+        $linkageDetails | Export-Csv -Path (Join-Path $paths.CSV 'gpo-linkage.csv') -NoTypeInformation
+    }
+
+    $unlinkedCount = @($linkageDetails | Where-Object LinkedTo -eq '**UNLINKED**').Count
+    $disabledCount = @($allGPOs | Where-Object { -not $_.User.Enabled -and -not $_.Computer.Enabled }).Count
+    $hrUserRights  = @($gpoSummary | Where-Object HasUserRights).Count
+    $hrSecOpts     = @($gpoSummary | Where-Object HasSecurityOptions).Count
+    $hrScripts     = @($gpoSummary | Where-Object HasScripts).Count
+    $hrSoftware    = @($gpoSummary | Where-Object HasSoftwareInstall).Count
+
+    if ($OutputPath) {
+        $summaryText = @"
+GROUP POLICY AUDIT SUMMARY
+Domain Audit Date: $timestamp
+Total GPOs: $($allGPOs.Count)
+Unlinked GPOs: $unlinkedCount
+Disabled GPOs: $disabledCount
+High-Risk: UserRights=$hrUserRights, SecurityOptions=$hrSecOpts, Scripts=$hrScripts, SoftwareInstall=$hrSoftware
+"@
+        $summaryText | Out-File -FilePath (Join-Path $paths.Summary 'EXECUTIVE-SUMMARY.txt') -Encoding UTF8
+    }
+
+    [PSCustomObject]@{
+        Domain                = 'GroupPolicy'
+        Function              = 'Export-GPOAudit'
+        Timestamp             = $timestamp
+        TotalGPOs             = $allGPOs.Count
+        UnlinkedCount         = $unlinkedCount
+        DisabledCount         = $disabledCount
+        HighRiskCounts        = [PSCustomObject]@{
+            UserRights      = $hrUserRights
+            SecurityOptions = $hrSecOpts
+            Scripts         = $hrScripts
+            SoftwareInstall = $hrSoftware
+        }
+        OverpermissionedCount = $null
+        OutputPaths           = [PSCustomObject]@{
+            Summary     = $paths.Summary
+            HTML        = $null
+            XML         = $null
+            CSV         = $paths.CSV
+            Permissions = $null
+            WMI         = $null
+        }
+        Warnings              = @($warnings)
+    }
+}
+
 #endregion Group Policy
 
 #region Security Posture
