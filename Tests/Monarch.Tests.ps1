@@ -2831,6 +2831,7 @@ Describe 'Get-BackupReadinessStatus' {
             function script:Get-ADOptionalFeature { param([string]$Filter, [string]$Server) }
             function script:Get-Service { param([string[]]$Name, [string]$ComputerName, [string]$ErrorAction) }
             function script:Get-ADObject { param([string]$Filter, [string]$Identity, [string[]]$Properties, [string]$Server) }
+            function script:Get-ItemProperty { param([string]$Path, [string]$Name, [string]$ErrorAction) }
         }
     }
 
@@ -2911,6 +2912,105 @@ Describe 'Get-BackupReadinessStatus' {
         It 'defaults tombstone to 180 when attribute is null' {
             $result.TombstoneLifetimeDays | Should -Be 180
         }
+    }
+
+    Context 'Tier 3 — backup age within tombstone' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADRootDSE {
+                [PSCustomObject]@{ configurationNamingContext = 'CN=Configuration,DC=test,DC=local' }
+            }
+            Mock -ModuleName Monarch Get-ADObject {
+                [PSCustomObject]@{ tombstoneLifetime = 180 }
+            }
+            Mock -ModuleName Monarch Get-ADOptionalFeature {
+                [PSCustomObject]@{ EnabledScopes = @('CN=Partitions') }
+            }
+            Mock -ModuleName Monarch Get-Service {}
+            Mock -ModuleName Monarch Get-MonarchConfigValue -ParameterFilter { $Key -eq 'KnownBackupServices' } {
+                @{ 'TestVendor' = @('TestSvc') }
+            }
+            Mock -ModuleName Monarch Get-MonarchConfigValue -ParameterFilter { $Key -eq 'BackupIntegration' } {
+                @{ Type = 'Registry'; RegistryKey = 'HKLM:\SOFTWARE\Backup'; RegistryValue = 'LastBackup' }
+            }
+            Mock -ModuleName Monarch Get-ItemProperty {
+                @{ LastBackup = (Get-Date).AddDays(-100) }
+            }
+
+            $script:result = Get-BackupReadinessStatus
+        }
+
+        It 'reports Healthy when backup within tombstone' {
+            $result.DetectionTier | Should -Be 3
+            $result.CriticalGap   | Should -Be $false
+            $result.Status         | Should -Be 'Healthy'
+        }
+    }
+
+    Context 'Tier 3 — backup age exceeds tombstone' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADRootDSE {
+                [PSCustomObject]@{ configurationNamingContext = 'CN=Configuration,DC=test,DC=local' }
+            }
+            Mock -ModuleName Monarch Get-ADObject {
+                [PSCustomObject]@{ tombstoneLifetime = 180 }
+            }
+            Mock -ModuleName Monarch Get-ADOptionalFeature {
+                [PSCustomObject]@{ EnabledScopes = @('CN=Partitions') }
+            }
+            Mock -ModuleName Monarch Get-Service {}
+            Mock -ModuleName Monarch Get-MonarchConfigValue -ParameterFilter { $Key -eq 'KnownBackupServices' } {
+                @{ 'TestVendor' = @('TestSvc') }
+            }
+            Mock -ModuleName Monarch Get-MonarchConfigValue -ParameterFilter { $Key -eq 'BackupIntegration' } {
+                @{ Type = 'Registry'; RegistryKey = 'HKLM:\SOFTWARE\Backup'; RegistryValue = 'LastBackup' }
+            }
+            Mock -ModuleName Monarch Get-ItemProperty {
+                @{ LastBackup = (Get-Date).AddDays(-200) }
+            }
+
+            $script:result = Get-BackupReadinessStatus
+        }
+
+        It 'reports Degraded with USN rollback warning when backup exceeds tombstone' {
+            $result.DetectionTier  | Should -Be 3
+            $result.CriticalGap    | Should -Be $true
+            $result.Status          | Should -Be 'Degraded'
+            $result.DiagnosticHint  | Should -Match 'USN rollback'
+        }
+    }
+}
+
+Describe 'Test-TombstoneGap' {
+    BeforeAll {
+        & (Get-Module Monarch) {
+            function script:Get-ADRootDSE { param([string]$Server) }
+            function script:Get-ADObject { param([string]$Filter, [string]$Identity, [string[]]$Properties, [string]$Server) }
+        }
+        Mock -ModuleName Monarch Get-ADRootDSE {
+            [PSCustomObject]@{ configurationNamingContext = 'CN=Configuration,DC=test,DC=local' }
+        }
+        Mock -ModuleName Monarch Get-ADObject {
+            [PSCustomObject]@{ tombstoneLifetime = 180 }
+        }
+    }
+
+    It 'returns no gap when backup within tombstone' {
+        $r = Test-TombstoneGap -BackupAgeDays 100
+        $r.CriticalGap | Should -Be $false
+        $r.TombstoneLifetimeDays | Should -Be 180
+    }
+
+    It 'returns critical gap when backup exceeds tombstone' {
+        $r = Test-TombstoneGap -BackupAgeDays 200
+        $r.CriticalGap | Should -Be $true
+        $r.DiagnosticHint | Should -Match 'USN rollback'
+    }
+
+    It 'returns null CriticalGap when BackupAgeDays omitted' {
+        $r = Test-TombstoneGap
+        $r.CriticalGap | Should -BeNullOrEmpty
+        $r.BackupAgeDays | Should -BeNullOrEmpty
+        $r.DiagnosticHint | Should -Match 'Backup age not provided'
     }
 }
 

@@ -1710,6 +1710,34 @@ function Get-BackupReadinessStatus {
         }
     }
 
+    # Tier 3 — Vendor-specific integration (opt-in)
+    $integration = Get-MonarchConfigValue 'BackupIntegration'
+    if ($integration) {
+        $detectionTier = 3
+        $backupAgeSource = 'VendorIntegration'
+        try {
+            $backupDate = switch ($integration.Type) {
+                'VeeamModule' {
+                    $mod = Import-Module $integration.ModuleName -PassThru -ErrorAction Stop
+                    $session = Get-VBRBackupSession -Name '*' | Sort-Object EndTime -Descending | Select-Object -First 1
+                    $session.EndTime
+                }
+                'Registry' {
+                    $regVal = Get-ItemProperty -Path $integration.RegistryKey -Name $integration.RegistryValue -ErrorAction Stop
+                    [datetime]$regVal.($integration.RegistryValue)
+                }
+                'CLI' {
+                    $output = & $integration.CLIPath $integration.CLIArgs 2>&1
+                    [datetime]$output
+                }
+                default { $null }
+            }
+            if ($backupDate) {
+                $lastBackupAge = $timestamp - $backupDate
+            }
+        } catch { $warnings.Add("Tier3Integration($($integration.Type)): $_") }
+    }
+
     # Status classification
     $criticalGap = $false
     $status = 'Unknown'
@@ -1743,6 +1771,48 @@ function Get-BackupReadinessStatus {
         DetectionTier         = $detectionTier
         CriticalGap           = $criticalGap
         Status                = $status
+        DiagnosticHint        = $hint
+        Warnings              = @($warnings)
+    }
+}
+
+function Test-TombstoneGap {
+    [CmdletBinding()]
+    param(
+        [string]$Server,
+        [int]$BackupAgeDays
+    )
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $splatAD = if ($Server) { @{ Server = $Server } } else { @{} }
+
+    $tombstoneLifetime = 180
+    try {
+        $rootDSE = Get-ADRootDSE @splatAD
+        $dsConfigDN = "CN=Directory Service,CN=Windows NT,CN=Services,$($rootDSE.configurationNamingContext)"
+        $dsConfig = Get-ADObject -Identity $dsConfigDN -Properties tombstoneLifetime @splatAD
+        if ($dsConfig.tombstoneLifetime) { $tombstoneLifetime = $dsConfig.tombstoneLifetime }
+    } catch { $warnings.Add("TombstoneLookup: $_") }
+
+    $criticalGap = $null
+    $hint = 'Backup age not provided — supply -BackupAgeDays for gap analysis.'
+    if ($PSBoundParameters.ContainsKey('BackupAgeDays')) {
+        $criticalGap = $BackupAgeDays -gt $tombstoneLifetime
+        $hint = if ($criticalGap) {
+            "Last backup ($BackupAgeDays days) exceeds tombstone lifetime ($tombstoneLifetime days) — recovery may cause USN rollback."
+        } else {
+            "Backup age ($BackupAgeDays days) is within tombstone lifetime ($tombstoneLifetime days)."
+        }
+    }
+
+    [PSCustomObject]@{
+        Domain                = 'BackupReadiness'
+        Function              = 'Test-TombstoneGap'
+        Timestamp             = $timestamp
+        TombstoneLifetimeDays = $tombstoneLifetime
+        BackupAgeDays         = if ($PSBoundParameters.ContainsKey('BackupAgeDays')) { $BackupAgeDays } else { $null }
+        CriticalGap           = $criticalGap
         DiagnosticHint        = $hint
         Warnings              = @($warnings)
     }
