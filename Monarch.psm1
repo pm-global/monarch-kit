@@ -1209,6 +1209,76 @@ function Export-GPOAudit {
         $linkageDetails | Export-Csv -Path (Join-Path $paths.CSV 'gpo-linkage.csv') -NoTypeInformation
     }
 
+    # HTML reports — per-GPO HTML + clickable index
+    if ($OutputPath) {
+        $htmlIndex = [System.Collections.Generic.List[PSCustomObject]]::new()
+        foreach ($gpo in $allGPOs) {
+            try {
+                $safeName = $gpo.DisplayName -replace '[\\/:*?"<>|]', '_'
+                Get-GPOReport -Guid $gpo.Id -ReportType Html -Path (Join-Path $paths.HTML "$safeName.html") @splatAD
+                $htmlIndex.Add([PSCustomObject]@{ DisplayName = $gpo.DisplayName; FileName = "$safeName.html"; GUID = $gpo.Id })
+            } catch { $warnings.Add("HTMLReport($($gpo.DisplayName)): $_") }
+        }
+        $indexRows = ($htmlIndex | ForEach-Object {
+            "<tr><td>$($_.DisplayName)</td><td style='font-family:monospace'>$($_.GUID)</td><td><a href='$($_.FileName)'>View</a></td></tr>"
+        }) -join "`n"
+        @"
+<!DOCTYPE html><html><head><title>GPO Audit Index</title>
+<style>body{font-family:'Segoe UI',sans-serif;margin:20px}table{border-collapse:collapse;width:100%}th{background:#0078d4;color:white;padding:12px;text-align:left}td{padding:10px;border-bottom:1px solid #ddd}tr:hover{background:#f1f1f1}a{color:#0078d4}</style>
+</head><body><h1>GPO Audit Index</h1><p>Total GPOs: $($allGPOs.Count) | Generated: $timestamp</p>
+<table><thead><tr><th>GPO Name</th><th>GUID</th><th>Report</th></tr></thead><tbody>
+$indexRows
+</tbody></table></body></html>
+"@ | Out-File -FilePath (Join-Path $paths.HTML '00-INDEX.html') -Encoding UTF8
+    }
+
+    # XML backup — restore-ready via Backup-GPO
+    if ($OutputPath) {
+        try { Backup-GPO -All -Path $paths.XML @splatAD | Out-Null } catch { $warnings.Add("XMLBackup: $_") }
+    }
+
+    # Permission analysis (when -IncludePermissions)
+    $overpermCount = $null
+    if ($IncludePermissions) {
+        $permittedEditors = Get-MonarchConfigValue 'PermittedGPOEditors'
+        $permReport = [System.Collections.Generic.List[PSCustomObject]]::new()
+        foreach ($gpo in $allGPOs) {
+            try {
+                $perms = @(Get-GPPermission -Guid $gpo.Id -All @splatAD)
+                foreach ($perm in $perms) {
+                    $permReport.Add([PSCustomObject]@{
+                        GPOName    = $gpo.DisplayName
+                        Trustee    = $perm.Trustee.Name
+                        TrusteeSID = $perm.Trustee.Sid
+                        Permission = $perm.Permission
+                        Inherited  = $perm.Inherited
+                        Denied     = $perm.Denied
+                    })
+                }
+            } catch { $warnings.Add("Permissions($($gpo.DisplayName)): $_") }
+        }
+        if ($OutputPath -and $permReport.Count -gt 0) {
+            $permReport | Export-Csv -Path (Join-Path $paths.Permissions 'gpo-permissions.csv') -NoTypeInformation
+        }
+        $suspects = @($permReport | Where-Object { $_.Permission -like '*Edit*' -and $_.Trustee -notin $permittedEditors -and -not $_.Denied })
+        $overpermCount = $suspects.Count
+        if ($OutputPath -and $suspects.Count -gt 0) {
+            $suspects | Export-Csv -Path (Join-Path $paths.Permissions 'REVIEW-overpermissioned-gpos.csv') -NoTypeInformation
+        }
+    }
+
+    # WMI filter export (when -IncludeWMIFilters)
+    if ($IncludeWMIFilters) {
+        try {
+            $wmiFilters = @(Get-ADObject -Filter "objectClass -eq 'msWMI-Som'" -Properties 'msWMI-Name', 'msWMI-Parm2', 'whenCreated', 'whenChanged' @splatAD)
+            if ($wmiFilters.Count -gt 0 -and $OutputPath) {
+                $wmiFilters | ForEach-Object {
+                    [PSCustomObject]@{ Name = $_.'msWMI-Name'; Query = $_.'msWMI-Parm2'; Created = $_.whenCreated; Modified = $_.whenChanged }
+                } | Export-Csv -Path (Join-Path $paths.WMI 'wmi-filters.csv') -NoTypeInformation
+            }
+        } catch { $warnings.Add("WMIFilters: $_") }
+    }
+
     $unlinkedCount = @($linkageDetails | Where-Object LinkedTo -eq '**UNLINKED**').Count
     $disabledCount = @($allGPOs | Where-Object { -not $_.User.Enabled -and -not $_.Computer.Enabled }).Count
     $hrUserRights  = @($gpoSummary | Where-Object HasUserRights).Count
@@ -1241,14 +1311,14 @@ High-Risk: UserRights=$hrUserRights, SecurityOptions=$hrSecOpts, Scripts=$hrScri
             Scripts         = $hrScripts
             SoftwareInstall = $hrSoftware
         }
-        OverpermissionedCount = $null
+        OverpermissionedCount = $overpermCount
         OutputPaths           = [PSCustomObject]@{
             Summary     = $paths.Summary
-            HTML        = $null
-            XML         = $null
+            HTML        = $paths.HTML
+            XML         = $paths.XML
             CSV         = $paths.CSV
-            Permissions = $null
-            WMI         = $null
+            Permissions = if ($IncludePermissions) { $paths.Permissions } else { $null }
+            WMI         = if ($IncludeWMIFilters) { $paths.WMI } else { $null }
         }
         Warnings              = @($warnings)
     }

@@ -2651,10 +2651,11 @@ Describe 'Export-GPOAudit' {
             function script:Get-GPOReport { param([string]$Guid, [string]$ReportType, [string]$Path, [string]$Server) }
             function script:Backup-GPO { param([switch]$All, [string]$Path, [string]$Server) }
             function script:Get-GPPermission { param([string]$Guid, [switch]$All, [string]$Server) }
+            function script:Get-ADObject { param([string]$Filter, [string]$Identity, [string[]]$Properties, [string]$Server) }
         }
     }
 
-    Context 'with mixed GPOs' {
+    Context 'with mixed GPOs (no OutputPath)' {
         BeforeAll {
             Mock -ModuleName Monarch Get-GPO {
                 @(
@@ -2720,6 +2721,101 @@ Describe 'Export-GPOAudit' {
 
         It 'OverpermissionedCount is null without -IncludePermissions' {
             $result.OverpermissionedCount | Should -BeNullOrEmpty
+        }
+    }
+
+    Context 'with OutputPath and all switches' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-GPO {
+                @(
+                    [PSCustomObject]@{
+                        DisplayName      = 'Security Baseline'
+                        Id               = 'sec-1111'
+                        CreationTime     = (Get-Date).AddDays(-180)
+                        ModificationTime = (Get-Date).AddDays(-10)
+                        User             = [PSCustomObject]@{ Enabled = $true }
+                        Computer         = [PSCustomObject]@{ Enabled = $true }
+                        WmiFilter        = $null
+                        Description      = 'Baseline'
+                        Owner            = 'DOMAIN\Admin'
+                    },
+                    [PSCustomObject]@{
+                        DisplayName      = 'Old Test Policy'
+                        Id               = 'old-2222'
+                        CreationTime     = (Get-Date).AddDays(-365)
+                        ModificationTime = (Get-Date).AddDays(-200)
+                        User             = [PSCustomObject]@{ Enabled = $false }
+                        Computer         = [PSCustomObject]@{ Enabled = $false }
+                        WmiFilter        = $null
+                        Description      = 'Old'
+                        Owner            = 'DOMAIN\Admin'
+                    },
+                    [PSCustomObject]@{
+                        DisplayName      = 'Bad/Name:Test*Policy'
+                        Id               = 'bad-3333'
+                        CreationTime     = (Get-Date).AddDays(-30)
+                        ModificationTime = (Get-Date).AddDays(-5)
+                        User             = [PSCustomObject]@{ Enabled = $true }
+                        Computer         = [PSCustomObject]@{ Enabled = $true }
+                        WmiFilter        = $null
+                        Description      = 'Bad chars'
+                        Owner            = 'DOMAIN\Admin'
+                    }
+                )
+            }
+
+            Mock -ModuleName Monarch Get-GPOReport -ParameterFilter { $Guid -eq 'sec-1111' -and $ReportType -eq 'Xml' } {
+                [xml]@'
+<GPO xmlns="http://www.microsoft.com/GroupPolicy/Settings">
+  <Computer><ExtensionData><Extension><UserRightsAssignment/></Extension></ExtensionData></Computer>
+  <LinksTo><SOMPath>OU=Workstations,DC=test,DC=local</SOMPath><Enabled>true</Enabled><NoOverride>false</NoOverride><Order>1</Order></LinksTo>
+</GPO>
+'@
+            }
+            Mock -ModuleName Monarch Get-GPOReport -ParameterFilter { $Guid -eq 'old-2222' -and $ReportType -eq 'Xml' } {
+                [xml]'<GPO xmlns="http://www.microsoft.com/GroupPolicy/Settings"></GPO>'
+            }
+            Mock -ModuleName Monarch Get-GPOReport -ParameterFilter { $Guid -eq 'bad-3333' -and $ReportType -eq 'Xml' } {
+                [xml]@'
+<GPO xmlns="http://www.microsoft.com/GroupPolicy/Settings">
+  <LinksTo><SOMPath>OU=Servers,DC=test,DC=local</SOMPath><Enabled>true</Enabled><NoOverride>false</NoOverride><Order>1</Order></LinksTo>
+</GPO>
+'@
+            }
+            Mock -ModuleName Monarch Get-GPOReport -ParameterFilter { $ReportType -eq 'Html' } {}
+            Mock -ModuleName Monarch Backup-GPO {}
+            Mock -ModuleName Monarch Get-GPPermission {
+                @(
+                    [PSCustomObject]@{ Trustee = [PSCustomObject]@{ Name = 'Domain Admins'; Sid = 'S-1-5-21-512' }; Permission = 'GpoEditDeleteModifySecurity'; Inherited = $false; Denied = $false },
+                    [PSCustomObject]@{ Trustee = [PSCustomObject]@{ Name = 'HelpDesk-Team'; Sid = 'S-1-5-21-9999' }; Permission = 'GpoEdit'; Inherited = $false; Denied = $false }
+                )
+            }
+            Mock -ModuleName Monarch Get-ADObject {
+                @([PSCustomObject]@{ 'msWMI-Name' = 'Win10 Filter'; 'msWMI-Parm2' = 'SELECT * FROM Win32_OperatingSystem WHERE Version LIKE "10.%"'; whenCreated = (Get-Date).AddDays(-90); whenChanged = (Get-Date).AddDays(-30) })
+            }
+
+            $script:tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) "gpo-test-$(Get-Random)"
+            $script:result2 = Export-GPOAudit -OutputPath $tmpDir -IncludePermissions -IncludeWMIFilters
+        }
+
+        AfterAll {
+            if (Test-Path $script:tmpDir) { Remove-Item $script:tmpDir -Recurse -Force }
+        }
+
+        It 'populates all OutputPaths when OutputPath provided' {
+            $result2.OutputPaths.Summary     | Should -BeLike '*00-SUMMARY*'
+            $result2.OutputPaths.HTML        | Should -BeLike '*01-HTML*'
+            $result2.OutputPaths.XML         | Should -BeLike '*02-XML*'
+            $result2.OutputPaths.CSV         | Should -BeLike '*03-CSV*'
+            $result2.OutputPaths.Permissions | Should -BeLike '*04-Permissions*'
+            $result2.OutputPaths.WMI         | Should -BeLike '*05-WMI*'
+        }
+
+        It 'sanitizes filenames by stripping invalid characters' {
+            $indexPath = Join-Path $tmpDir '01-HTML-Reports' '00-INDEX.html'
+            $indexContent = Get-Content $indexPath -Raw
+            # Filename in href is sanitized, display name preserved
+            $indexContent | Should -Match "href='Bad_Name_Test_Policy\.html'"
         }
     }
 }
