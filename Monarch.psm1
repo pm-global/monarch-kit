@@ -1222,14 +1222,12 @@ function Export-GPOAudit {
         $indexRows = ($htmlIndex | ForEach-Object {
             "<tr><td>$($_.DisplayName)</td><td style='font-family:monospace'>$($_.GUID)</td><td><a href='$($_.FileName)'>View</a></td></tr>"
         }) -join "`n"
-        @"
-<!DOCTYPE html><html><head><title>GPO Audit Index</title>
-<style>body{font-family:'Segoe UI',sans-serif;margin:20px}table{border-collapse:collapse;width:100%}th{background:#0078d4;color:white;padding:12px;text-align:left}td{padding:10px;border-bottom:1px solid #ddd}tr:hover{background:#f1f1f1}a{color:#0078d4}</style>
-</head><body><h1>GPO Audit Index</h1><p>Total GPOs: $($allGPOs.Count) | Generated: $timestamp</p>
-<table><thead><tr><th>GPO Name</th><th>GUID</th><th>Report</th></tr></thead><tbody>
-$indexRows
-</tbody></table></body></html>
-"@ | Out-File -FilePath (Join-Path $paths.HTML '00-INDEX.html') -Encoding UTF8
+        $style = 'body{font-family:Segoe UI,sans-serif;margin:20px}table{border-collapse:collapse;width:100%}th{background:#0078d4;color:white;padding:12px;text-align:left}td{padding:10px;border-bottom:1px solid #ddd}tr:hover{background:#f1f1f1}a{color:#0078d4}'
+        $indexHtml = "<!DOCTYPE html><html><head><title>GPO Audit Index</title><style>$style</style></head>" +
+            "<body><h1>GPO Audit Index</h1><p>Total GPOs: $($allGPOs.Count) | Generated: $timestamp</p>" +
+            "<table><thead><tr><th>GPO Name</th><th>GUID</th><th>Report</th></tr></thead><tbody>" +
+            "$indexRows</tbody></table></body></html>"
+        $indexHtml | Out-File -FilePath (Join-Path $paths.HTML '00-INDEX.html') -Encoding UTF8
     }
 
     # XML backup — restore-ready via Backup-GPO
@@ -1287,14 +1285,12 @@ $indexRows
     $hrSoftware    = @($gpoSummary | Where-Object HasSoftwareInstall).Count
 
     if ($OutputPath) {
-        $summaryText = @"
-GROUP POLICY AUDIT SUMMARY
-Domain Audit Date: $timestamp
-Total GPOs: $($allGPOs.Count)
-Unlinked GPOs: $unlinkedCount
-Disabled GPOs: $disabledCount
-High-Risk: UserRights=$hrUserRights, SecurityOptions=$hrSecOpts, Scripts=$hrScripts, SoftwareInstall=$hrSoftware
-"@
+        $summaryText = "GROUP POLICY AUDIT SUMMARY`n" +
+            "Domain Audit Date: $timestamp`n" +
+            "Total GPOs: $($allGPOs.Count)`n" +
+            "Unlinked GPOs: $unlinkedCount`n" +
+            "Disabled GPOs: $disabledCount`n" +
+            "High-Risk: UserRights=$hrUserRights, SecurityOptions=$hrSecOpts, Scripts=$hrScripts, SoftwareInstall=$hrSoftware"
         $summaryText | Out-File -FilePath (Join-Path $paths.Summary 'EXECUTIVE-SUMMARY.txt') -Encoding UTF8
     }
 
