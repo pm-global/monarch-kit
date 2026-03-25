@@ -657,7 +657,7 @@ Most complex single function. Heaviest v0 reference.
 
 Most complex output function. Multiple files in multiple formats.
 
-- [ ] **`Export-GPOAudit`**
+- [x] **`Export-GPOAudit`**
 
   Signature:
   ```
@@ -719,7 +719,7 @@ Most complex output function. Multiple files in multiple formats.
 - [x] **`Find-UnlinkedGPO`** — standalone function sharing GPO query logic (not a wrapper around Export-GPOAudit). Returns just the unlinked GPOs without file generation.
 - [x] **`Find-GPOPermissionAnomaly`** — standalone function. Returns overpermissioned GPOs without file generation. Uses config for permitted editors.
 
-- [ ] **Tests: Export-GPOAudit**
+- [x] **Tests: Export-GPOAudit**
   - Return shape correct
   - High-risk detection: GPO XML containing "UserRightsAssignment" → counted (string match, not XML parse — per mechanism-decisions.md)
   - Unlinked GPO (no LinksTo in report) → counted and flagged as `**UNLINKED**` in linkage CSV
