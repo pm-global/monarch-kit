@@ -2114,6 +2114,109 @@ function New-DomainBaseline
     }
 }
 
+function Get-AuditPolicyConfiguration {
+    [CmdletBinding()]
+    param([string]$Server)
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $splatAD = if ($Server) { @{ Server = $Server } } else { @{} }
+    $dcResults = @()
+
+    try {
+        $dcs = @(Get-ADDomainController -Filter '*' @splatAD)
+    } catch {
+        $warnings.Add("DCDiscovery: $_")
+        $dcs = @()
+    }
+
+    foreach ($dc in $dcs) {
+        try {
+            $csvOutput = Invoke-Command -ComputerName $dc.HostName -ScriptBlock {
+                auditpol /get /category:* /r
+            } -ErrorAction Stop
+            $parsed = $csvOutput | ConvertFrom-Csv
+            $categories = @($parsed | ForEach-Object {
+                [PSCustomObject]@{
+                    Category    = $_.'Policy Target'
+                    Subcategory = $_.'Subcategory'
+                    Setting     = $_.'Inclusion Setting'
+                }
+            })
+            $dcResults += [PSCustomObject]@{
+                DCName     = $dc.HostName
+                Categories = $categories
+            }
+        } catch { $warnings.Add("AuditPolicy($($dc.HostName)): $_") }
+    }
+
+    $consistent = ($dcResults.Count -le 1) -or (
+        @($dcResults | ForEach-Object {
+            ($_.Categories | Sort-Object Subcategory | ForEach-Object { "$($_.Subcategory)=$($_.Setting)" }) -join ';'
+        } | Sort-Object -Unique).Count -eq 1
+    )
+
+    [PSCustomObject]@{
+        Domain     = 'AuditCompliance'
+        Function   = 'Get-AuditPolicyConfiguration'
+        Timestamp  = $timestamp
+        DCs        = @($dcResults)
+        Consistent = $consistent
+        Warnings   = @($warnings)
+    }
+}
+
+function Get-EventLogConfiguration {
+    [CmdletBinding()]
+    param([string]$Server)
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $splatAD = if ($Server) { @{ Server = $Server } } else { @{} }
+    $dcResults = @()
+    $logNames = @('Security', 'System', 'Directory Service')
+
+    try {
+        $dcs = @(Get-ADDomainController -Filter '*' @splatAD)
+    } catch {
+        $warnings.Add("DCDiscovery: $_")
+        $dcs = @()
+    }
+
+    foreach ($dc in $dcs) {
+        try {
+            $logs = @()
+            $logData = Invoke-Command -ComputerName $dc.HostName -ScriptBlock {
+                param($Names)
+                foreach ($name in $Names) {
+                    Get-WinEvent -ListLog $name -ErrorAction SilentlyContinue
+                }
+            } -ArgumentList (,$logNames) -ErrorAction Stop
+
+            foreach ($log in $logData) {
+                $logs += [PSCustomObject]@{
+                    LogName        = $log.LogName
+                    MaxSizeKB      = [int]($log.MaximumSizeInBytes / 1024)
+                    RetentionDays  = [int]$log.LogRetention
+                    OverflowAction = [string]$log.LogMode
+                }
+            }
+            $dcResults += [PSCustomObject]@{
+                DCName = $dc.HostName
+                Logs   = @($logs)
+            }
+        } catch { $warnings.Add("EventLog($($dc.HostName)): $_") }
+    }
+
+    [PSCustomObject]@{
+        Domain    = 'AuditCompliance'
+        Function  = 'Get-EventLogConfiguration'
+        Timestamp = $timestamp
+        DCs       = @($dcResults)
+        Warnings  = @($warnings)
+    }
+}
+
 #endregion Audit and Compliance
 
 #region DNS

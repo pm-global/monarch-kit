@@ -3244,6 +3244,121 @@ Describe 'Get-DNSForwarderConfiguration' {
 # Tests added in Step 12 implementation.
 # =============================================================================
 
+Describe 'Get-AuditPolicyConfiguration' {
+    BeforeAll {
+        & (Get-Module Monarch) {
+            function script:Get-ADDomainController { param([string]$Filter, [string]$Server) }
+            function script:Invoke-Command { param([string]$ComputerName, [scriptblock]$ScriptBlock, [string]$ErrorAction) }
+        }
+    }
+
+    Context 'DCs with identical audit settings' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADDomainController { @(
+                [PSCustomObject]@{ HostName = 'DC1.test.local' },
+                [PSCustomObject]@{ HostName = 'DC2.test.local' }
+            ) }
+            $csvLines = @(
+                '"Machine Name","Policy Target","Subcategory","Subcategory GUID","Inclusion Setting","Exclusion Setting"',
+                '"DC","System","Security State Change","{0CCE9210-69AE-11D9-BED3-505054503030}","Success and Failure","No Auditing"',
+                '"DC","Logon/Logoff","Logon","{0CCE9215-69AE-11D9-BED3-505054503030}","Success","No Auditing"'
+            )
+            Mock -ModuleName Monarch Invoke-Command { $csvLines }
+            $script:result = Get-AuditPolicyConfiguration
+        }
+
+        It 'reports Consistent true with correct structure' {
+            $result.Domain | Should -Be 'AuditCompliance'
+            $result.DCs | Should -HaveCount 2
+            $result.Consistent | Should -Be $true
+            $result.DCs[0].Categories | Should -HaveCount 2
+            $result.DCs[0].Categories[0].Setting | Should -Be 'Success and Failure'
+        }
+    }
+
+    Context 'DCs with different audit settings' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADDomainController { @(
+                [PSCustomObject]@{ HostName = 'DC1.test.local' },
+                [PSCustomObject]@{ HostName = 'DC2.test.local' }
+            ) }
+            $csvDC1 = @(
+                '"Machine Name","Policy Target","Subcategory","Subcategory GUID","Inclusion Setting","Exclusion Setting"',
+                '"DC1","System","Security State Change","{0CCE9210}","Success and Failure","No Auditing"'
+            )
+            $csvDC2 = @(
+                '"Machine Name","Policy Target","Subcategory","Subcategory GUID","Inclusion Setting","Exclusion Setting"',
+                '"DC2","System","Security State Change","{0CCE9210}","No Auditing","No Auditing"'
+            )
+            Mock -ModuleName Monarch Invoke-Command { $csvDC1 } -ParameterFilter { $ComputerName -eq 'DC1.test.local' }
+            Mock -ModuleName Monarch Invoke-Command { $csvDC2 } -ParameterFilter { $ComputerName -eq 'DC2.test.local' }
+            $script:result = Get-AuditPolicyConfiguration
+        }
+
+        It 'reports Consistent false' {
+            $result.Consistent | Should -Be $false
+            $result.DCs[0].Categories[0].Setting | Should -Be 'Success and Failure'
+            $result.DCs[1].Categories[0].Setting | Should -Be 'No Auditing'
+        }
+    }
+}
+
+Describe 'Get-EventLogConfiguration' {
+    BeforeAll {
+        & (Get-Module Monarch) {
+            function script:Get-ADDomainController { param([string]$Filter, [string]$Server) }
+            function script:Invoke-Command { param([string]$ComputerName, [scriptblock]$ScriptBlock, $ArgumentList, [string]$ErrorAction) }
+        }
+    }
+
+    Context 'DC with event log data' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADDomainController { @(
+                [PSCustomObject]@{ HostName = 'DC1.test.local' }
+            ) }
+            Mock -ModuleName Monarch Invoke-Command { @(
+                [PSCustomObject]@{ LogName = 'Security'; MaximumSizeInBytes = 20971520; LogRetention = 0; LogMode = 'Circular' },
+                [PSCustomObject]@{ LogName = 'System'; MaximumSizeInBytes = 20971520; LogRetention = 0; LogMode = 'Circular' },
+                [PSCustomObject]@{ LogName = 'Directory Service'; MaximumSizeInBytes = 16777216; LogRetention = 7; LogMode = 'AutoBackup' }
+            ) }
+            $script:result = Get-EventLogConfiguration
+        }
+
+        It 'returns correct log properties per DC' {
+            $result.Domain | Should -Be 'AuditCompliance'
+            $result.DCs | Should -HaveCount 1
+            $result.DCs[0].Logs | Should -HaveCount 3
+            $result.DCs[0].Logs[0].LogName | Should -Be 'Security'
+            $result.DCs[0].Logs[0].MaxSizeKB | Should -Be 20480
+            $result.DCs[0].Logs[2].RetentionDays | Should -Be 7
+            $result.DCs[0].Logs[2].OverflowAction | Should -Be 'AutoBackup'
+        }
+    }
+
+    Context 'unreachable DC' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADDomainController { @(
+                [PSCustomObject]@{ HostName = 'DC1.test.local' },
+                [PSCustomObject]@{ HostName = 'DC2.test.local' }
+            ) }
+            Mock -ModuleName Monarch Invoke-Command { @(
+                [PSCustomObject]@{ LogName = 'Security'; MaximumSizeInBytes = 20971520; LogRetention = 0; LogMode = 'Circular' },
+                [PSCustomObject]@{ LogName = 'System'; MaximumSizeInBytes = 20971520; LogRetention = 0; LogMode = 'Circular' },
+                [PSCustomObject]@{ LogName = 'Directory Service'; MaximumSizeInBytes = 16777216; LogRetention = 0; LogMode = 'Circular' }
+            ) }
+            Mock -ModuleName Monarch Invoke-Command { throw 'The RPC server is unavailable' } -ParameterFilter { $ComputerName -eq 'DC2.test.local' }
+            $script:result = Get-EventLogConfiguration
+        }
+
+        It 'captures error in Warnings without blocking other DCs' {
+            $result.DCs | Should -HaveCount 1
+            $result.DCs[0].DCName | Should -Be 'DC1.test.local'
+            $result.Warnings | Should -HaveCount 1
+            $result.Warnings[0] | Should -Match 'DC2.test.local'
+        }
+    }
+}
+
 # =============================================================================
 # Step 13: Reporting
 # Tests added in Step 13 implementation.

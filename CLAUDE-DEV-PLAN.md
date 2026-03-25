@@ -889,7 +889,7 @@ All four functions require DnsServer module. Each checks availability first — 
 
 ### Step 12: Audit & Compliance (remaining)
 
-- [ ] **12a. `Get-AuditPolicyConfiguration`**
+- [x] **12a. `Get-AuditPolicyConfiguration`**
 
   Return contract:
   ```
@@ -912,7 +912,7 @@ All four functions require DnsServer module. Each checks availability first — 
 
   Logic: `auditpol /get /category:*` over remoting per DC.
 
-- [ ] **12b. `Get-EventLogConfiguration`**
+- [x] **12b. `Get-EventLogConfiguration`**
 
   Return contract:
   ```
@@ -935,7 +935,7 @@ All four functions require DnsServer module. Each checks availability first — 
 
   Logs checked: Security, System, Directory Service.
 
-- [ ] **Tests: Audit & Compliance functions**
+- [x] **Tests: Audit & Compliance functions**
   - `Get-AuditPolicyConfiguration`: DCs with identical settings → `Consistent = $true`
   - `Get-AuditPolicyConfiguration`: DCs with different settings → `Consistent = $false`
   - `Get-EventLogConfiguration`: return shape correct per DC per log
