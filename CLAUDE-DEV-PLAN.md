@@ -804,7 +804,7 @@ Most complex output function. Multiple files in multiple formats.
 
 All four functions require DnsServer module. Each checks availability first — if not available, returns result with Warnings.
 
-- [ ] **11a. `Test-SRVRecordCompleteness`**
+- [x] **11a. `Test-SRVRecordCompleteness`**
 
   Return contract:
   ```
@@ -825,7 +825,7 @@ All four functions require DnsServer module. Each checks availability first — 
 
   Logic: For each AD site, verify `_ldap._tcp`, `_kerberos._tcp`, `_kpasswd._tcp`, `_gc._tcp` per-site SRV records.
 
-- [ ] **11b. `Get-DNSScavengingConfiguration`**
+- [x] **11b. `Get-DNSScavengingConfiguration`**
 
   Return contract:
   ```
@@ -843,7 +843,7 @@ All four functions require DnsServer module. Each checks availability first — 
   }
   ```
 
-- [ ] **11c. `Test-ZoneReplicationScope`**
+- [x] **11c. `Test-ZoneReplicationScope`**
 
   Return contract:
   ```
@@ -861,7 +861,7 @@ All four functions require DnsServer module. Each checks availability first — 
   }
   ```
 
-- [ ] **11d. `Get-DNSForwarderConfiguration`**
+- [x] **11d. `Get-DNSForwarderConfiguration`**
 
   Return contract:
   ```
@@ -879,7 +879,7 @@ All four functions require DnsServer module. Each checks availability first — 
   }
   ```
 
-- [ ] **Tests: DNS functions (all four)**
+- [x] **Tests: DNS functions (all four)**
   - DnsServer module unavailable → result returned with Warnings containing module message, no throw
   - DnsServer module available → correct return shapes
   - `Test-SRVRecordCompleteness`: missing record → appears in MissingRecords, `AllComplete = $false`
