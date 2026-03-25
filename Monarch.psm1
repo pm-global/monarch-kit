@@ -1032,6 +1032,95 @@ function Find-ASREPRoastableAccount {
 # GPO export, unlinked GPO detection, permission anomaly detection.
 # All Discovery phase except Backup-GPO (Remediation, Plan 2).
 
+function Find-UnlinkedGPO {
+    [CmdletBinding()]
+    param([string]$Server)
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $splatAD = if ($Server) { @{ Server = $Server } } else { @{} }
+
+    $unlinked = [System.Collections.Generic.List[PSCustomObject]]::new()
+
+    try {
+        $allGPOs = @(Get-GPO -All @splatAD)
+    } catch {
+        $warnings.Add("GPOQuery: $_")
+        $allGPOs = @()
+    }
+
+    foreach ($gpo in $allGPOs) {
+        try {
+            [xml]$report = Get-GPOReport -Guid $gpo.Id -ReportType Xml @splatAD
+            if (-not $report.GPO['LinksTo']) {
+                $unlinked.Add([PSCustomObject]@{
+                    DisplayName  = $gpo.DisplayName
+                    Id           = $gpo.Id
+                    CreatedTime  = $gpo.CreationTime
+                    ModifiedTime = $gpo.ModificationTime
+                    Owner        = $gpo.Owner
+                })
+            }
+        } catch { $warnings.Add("GPOReport($($gpo.DisplayName)): $_") }
+    }
+
+    [PSCustomObject]@{
+        Domain       = 'GroupPolicy'
+        Function     = 'Find-UnlinkedGPO'
+        Timestamp    = $timestamp
+        UnlinkedGPOs = @($unlinked)
+        Count        = $unlinked.Count
+        Warnings     = @($warnings)
+    }
+}
+
+function Find-GPOPermissionAnomaly {
+    [CmdletBinding()]
+    param([string]$Server)
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $splatAD = if ($Server) { @{ Server = $Server } } else { @{} }
+
+    $permittedEditors = Get-MonarchConfigValue 'PermittedGPOEditors'
+    $anomalies = [System.Collections.Generic.List[PSCustomObject]]::new()
+
+    try {
+        $allGPOs = @(Get-GPO -All @splatAD)
+    } catch {
+        $warnings.Add("GPOQuery: $_")
+        $allGPOs = @()
+    }
+
+    foreach ($gpo in $allGPOs) {
+        try {
+            $perms = @(Get-GPPermission -Guid $gpo.Id -All @splatAD)
+            foreach ($p in $perms) {
+                if ($p.Permission -like '*Edit*' -and
+                    $p.Trustee.Name -notin $permittedEditors -and
+                    -not $p.Denied) {
+                    $anomalies.Add([PSCustomObject]@{
+                        GPOName    = $gpo.DisplayName
+                        Trustee    = $p.Trustee.Name
+                        TrusteeSID = $p.Trustee.Sid
+                        Permission = $p.Permission
+                        Inherited  = $p.Inherited
+                    })
+                }
+            }
+        } catch { $warnings.Add("GPOPerms($($gpo.DisplayName)): $_") }
+    }
+
+    [PSCustomObject]@{
+        Domain    = 'GroupPolicy'
+        Function  = 'Find-GPOPermissionAnomaly'
+        Timestamp = $timestamp
+        Anomalies = @($anomalies)
+        Count     = $anomalies.Count
+        Warnings  = @($warnings)
+    }
+}
+
 #endregion Group Policy
 
 #region Security Posture

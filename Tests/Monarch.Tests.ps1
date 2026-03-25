@@ -2529,9 +2529,120 @@ Describe 'Find-DormantAccount' {
 }
 
 # =============================================================================
-# Step 9: Export-GPOAudit
-# Tests added in Step 9 implementation.
+# Step 9: Group Policy
 # =============================================================================
+
+Describe 'Find-UnlinkedGPO' {
+
+    BeforeAll {
+        & (Get-Module Monarch) {
+            function script:Get-GPO { param([switch]$All, [string]$Server) }
+            function script:Get-GPOReport { param([string]$Guid, [string]$ReportType, [string]$Path, [string]$Server) }
+        }
+    }
+
+    Context 'with mixed GPOs' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-GPO {
+                @(
+                    [PSCustomObject]@{
+                        DisplayName      = 'Linked Policy'
+                        Id               = 'aaaa-1111'
+                        CreationTime     = (Get-Date).AddDays(-90)
+                        ModificationTime = (Get-Date).AddDays(-10)
+                        Owner            = 'DOMAIN\Admin'
+                    },
+                    [PSCustomObject]@{
+                        DisplayName      = 'Orphaned Policy'
+                        Id               = 'bbbb-2222'
+                        CreationTime     = (Get-Date).AddDays(-180)
+                        ModificationTime = (Get-Date).AddDays(-60)
+                        Owner            = 'DOMAIN\Admin'
+                    }
+                )
+            }
+
+            Mock -ModuleName Monarch Get-GPOReport -ParameterFilter { $Guid -eq 'aaaa-1111' } {
+                [xml]@'
+<GPO xmlns="http://www.microsoft.com/GroupPolicy/Settings" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <LinksTo><SOMPath>OU=Users,DC=test,DC=local</SOMPath><Enabled>true</Enabled></LinksTo>
+</GPO>
+'@
+            }
+
+            Mock -ModuleName Monarch Get-GPOReport -ParameterFilter { $Guid -eq 'bbbb-2222' } {
+                [xml]'<GPO xmlns="http://www.microsoft.com/GroupPolicy/Settings"></GPO>'
+            }
+
+            $script:result = Find-UnlinkedGPO
+        }
+
+        It 'returns unlinked GPO' {
+            $result.Domain   | Should -Be 'GroupPolicy'
+            $result.Function | Should -Be 'Find-UnlinkedGPO'
+            $result.Count    | Should -Be 1
+            $result.UnlinkedGPOs[0].DisplayName | Should -Be 'Orphaned Policy'
+        }
+
+        It 'excludes linked GPO' {
+            @($result.UnlinkedGPOs | Where-Object DisplayName -eq 'Linked Policy') | Should -HaveCount 0
+        }
+    }
+}
+
+Describe 'Find-GPOPermissionAnomaly' {
+
+    BeforeAll {
+        & (Get-Module Monarch) {
+            function script:Get-GPO { param([switch]$All, [string]$Server) }
+            function script:Get-GPPermission { param([string]$Guid, [switch]$All, [string]$Server) }
+        }
+    }
+
+    Context 'with mixed permissions' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-GPO {
+                @([PSCustomObject]@{
+                    DisplayName = 'Test Policy'
+                    Id          = 'cccc-3333'
+                })
+            }
+
+            Mock -ModuleName Monarch Get-GPPermission {
+                @(
+                    [PSCustomObject]@{
+                        Trustee    = [PSCustomObject]@{ Name = 'Domain Admins'; Sid = 'S-1-5-21-123-512' }
+                        Permission = 'GpoEditDeleteModifySecurity'
+                        Inherited  = $false
+                        Denied     = $false
+                    },
+                    [PSCustomObject]@{
+                        Trustee    = [PSCustomObject]@{ Name = 'HelpDesk-Team'; Sid = 'S-1-5-21-123-9999' }
+                        Permission = 'GpoEdit'
+                        Inherited  = $false
+                        Denied     = $false
+                    }
+                )
+            }
+
+            $script:result = Find-GPOPermissionAnomaly
+        }
+
+        It 'returns non-standard editor as anomaly' {
+            $result.Domain   | Should -Be 'GroupPolicy'
+            $result.Function | Should -Be 'Find-GPOPermissionAnomaly'
+            $result.Count    | Should -Be 1
+            $result.Anomalies[0].Trustee | Should -Be 'HelpDesk-Team'
+            $result.Anomalies[0].GPOName | Should -Be 'Test Policy'
+        }
+
+        It 'excludes standard editor from anomalies' {
+            @($result.Anomalies | Where-Object Trustee -eq 'Domain Admins') | Should -HaveCount 0
+        }
+    }
+}
 
 # =============================================================================
 # Step 10: Backup & Recovery

@@ -716,8 +716,8 @@ Most complex output function. Multiple files in multiple formats.
   - `Get-GPOReport` calls use `-Server $Server` for domain targeting
   - Drop `Write-Log` — use `Write-Verbose`, collect errors in Warnings
 
-- [ ] **`Find-UnlinkedGPO`** — standalone function sharing GPO query logic (not a wrapper around Export-GPOAudit). Returns just the unlinked GPOs without file generation.
-- [ ] **`Find-GPOPermissionAnomaly`** — standalone function. Returns overpermissioned GPOs without file generation. Uses config for permitted editors.
+- [x] **`Find-UnlinkedGPO`** — standalone function sharing GPO query logic (not a wrapper around Export-GPOAudit). Returns just the unlinked GPOs without file generation.
+- [x] **`Find-GPOPermissionAnomaly`** — standalone function. Returns overpermissioned GPOs without file generation. Uses config for permitted editors.
 
 - [ ] **Tests: Export-GPOAudit**
   - Return shape correct
@@ -726,10 +726,10 @@ Most complex output function. Multiple files in multiple formats.
   - OutputPaths populated when OutputPath provided
   - `OverpermissionedCount` is `$null` when `-IncludePermissions` not set
   - Filename sanitization strips invalid characters
-- [ ] **Tests: Find-UnlinkedGPO**
+- [x] **Tests: Find-UnlinkedGPO**
   - GPO with no links → returned
   - GPO with links → not returned
-- [ ] **Tests: Find-GPOPermissionAnomaly**
+- [x] **Tests: Find-GPOPermissionAnomaly**
   - Non-standard editor → returned
   - Standard editor (from config `PermittedGPOEditors`) → not returned
 
