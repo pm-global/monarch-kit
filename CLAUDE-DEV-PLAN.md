@@ -737,7 +737,7 @@ Most complex output function. Multiple files in multiple formats.
 
 ### Step 10: Backup & Recovery
 
-- [ ] **10a. `Get-BackupReadinessStatus`**
+- [x] **10a. `Get-BackupReadinessStatus`**
 
   Return contract (matches spec exactly):
   ```
@@ -767,7 +767,7 @@ Most complex output function. Multiple files in multiple formats.
 
   CriticalGap only evaluated if `LastBackupAge` is not null.
 
-- [ ] **Tests: Get-BackupReadinessStatus**
+- [x] **Tests: Get-BackupReadinessStatus**
   - Tier 1 only (no backup tool detected) → `DetectionTier = 1`, `Status = 'Unknown'`
   - Tier 2 with Veeam service detected → `DetectionTier = 2`, `BackupToolDetected = 'Veeam'`, `BackupToolSource = 'ServiceEnum'`
   - Tier 3 with backup age available and within tombstone → `CriticalGap = $false`, `Status = 'Healthy'`
@@ -775,7 +775,7 @@ Most complex output function. Multiple files in multiple formats.
   - Tombstone lifetime defaults to 180 when attribute is not set
   - Recycle Bin detection: empty EnabledScopes → `$false`
 
-- [ ] **10b. `Test-TombstoneGap`**
+- [x] **10b. `Test-TombstoneGap`**
 
   Return contract:
   ```
@@ -793,7 +793,7 @@ Most complex output function. Multiple files in multiple formats.
 
   Separately callable with `-BackupAgeDays [int]` and `-Server [string]`. If `-BackupAgeDays` omitted, `CriticalGap = $null`.
 
-- [ ] **Tests: Test-TombstoneGap**
+- [x] **Tests: Test-TombstoneGap**
   - BackupAgeDays = 100, tombstone = 180 → `CriticalGap = $false`
   - BackupAgeDays = 200, tombstone = 180 → `CriticalGap = $true`
   - BackupAgeDays omitted → `CriticalGap = $null`, DiagnosticHint explains backup age required
