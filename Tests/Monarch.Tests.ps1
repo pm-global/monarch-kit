@@ -2822,8 +2822,97 @@ Describe 'Export-GPOAudit' {
 
 # =============================================================================
 # Step 10: Backup & Recovery
-# Tests added in Step 10 implementation.
 # =============================================================================
+
+Describe 'Get-BackupReadinessStatus' {
+    BeforeAll {
+        & (Get-Module Monarch) {
+            function script:Get-ADRootDSE { param([string]$Server) }
+            function script:Get-ADOptionalFeature { param([string]$Filter, [string]$Server) }
+            function script:Get-Service { param([string[]]$Name, [string]$ComputerName, [string]$ErrorAction) }
+            function script:Get-ADObject { param([string]$Filter, [string]$Identity, [string[]]$Properties, [string]$Server) }
+        }
+    }
+
+    Context 'Tier 1 only — no backup tool detected' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADRootDSE {
+                [PSCustomObject]@{ configurationNamingContext = 'CN=Configuration,DC=test,DC=local' }
+            }
+            Mock -ModuleName Monarch Get-ADObject {
+                [PSCustomObject]@{ tombstoneLifetime = 180 }
+            }
+            Mock -ModuleName Monarch Get-ADOptionalFeature {
+                [PSCustomObject]@{ EnabledScopes = @() }
+            }
+            Mock -ModuleName Monarch Get-Service {}
+
+            $script:result = Get-BackupReadinessStatus
+        }
+
+        It 'returns Tier 1 with no backup tool detected' {
+            $result.Domain         | Should -Be 'BackupReadiness'
+            $result.Function       | Should -Be 'Get-BackupReadinessStatus'
+            $result.DetectionTier  | Should -Be 1
+            $result.Status         | Should -Be 'Unknown'
+            $result.BackupToolDetected | Should -BeNullOrEmpty
+            $result.CriticalGap    | Should -Be $false
+        }
+
+        It 'returns RecycleBinEnabled false when EnabledScopes empty' {
+            $result.RecycleBinEnabled | Should -Be $false
+        }
+    }
+
+    Context 'Tier 2 — Veeam service detected' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADRootDSE {
+                [PSCustomObject]@{ configurationNamingContext = 'CN=Configuration,DC=test,DC=local' }
+            }
+            Mock -ModuleName Monarch Get-ADObject {
+                [PSCustomObject]@{ tombstoneLifetime = 180 }
+            }
+            Mock -ModuleName Monarch Get-ADOptionalFeature {
+                [PSCustomObject]@{ EnabledScopes = @('CN=Partitions,CN=Configuration,DC=test,DC=local') }
+            }
+            # WSB not found
+            Mock -ModuleName Monarch Get-Service {}
+            # Veeam service running
+            Mock -ModuleName Monarch Get-Service -ParameterFilter { $Name -contains 'VeeamBackupSvc' -or $Name -contains 'VeeamDeploymentService' } {
+                [PSCustomObject]@{ Name = 'VeeamBackupSvc'; Status = 'Running' }
+            }
+
+            $script:result = Get-BackupReadinessStatus
+        }
+
+        It 'detects Veeam via service enumeration' {
+            $result.DetectionTier      | Should -Be 2
+            $result.BackupToolDetected | Should -Be 'Veeam'
+            $result.BackupToolSource   | Should -Be 'ServiceEnum'
+        }
+    }
+
+    Context 'tombstone defaults to 180 when attribute null' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADRootDSE {
+                [PSCustomObject]@{ configurationNamingContext = 'CN=Configuration,DC=test,DC=local' }
+            }
+            Mock -ModuleName Monarch Get-ADObject {
+                [PSCustomObject]@{ tombstoneLifetime = $null }
+            }
+            Mock -ModuleName Monarch Get-ADOptionalFeature {
+                [PSCustomObject]@{ EnabledScopes = @() }
+            }
+            Mock -ModuleName Monarch Get-Service {}
+
+            $script:result = Get-BackupReadinessStatus
+        }
+
+        It 'defaults tombstone to 180 when attribute is null' {
+            $result.TombstoneLifetimeDays | Should -Be 180
+        }
+    }
+}
 
 # =============================================================================
 # Step 11: DNS

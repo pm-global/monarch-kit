@@ -1652,6 +1652,102 @@ function Find-LegacyProtocolExposure {
 # Three-tier graduated confidence model for backup detection.
 # All Discovery phase.
 
+function Get-BackupReadinessStatus {
+    [CmdletBinding()]
+    param([string]$Server)
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $splatAD = if ($Server) { @{ Server = $Server } } else { @{} }
+
+    # Tier 1 — Universal (always runs)
+    $tombstoneLifetime = 180
+    try {
+        $rootDSE = Get-ADRootDSE @splatAD
+        $dsConfigDN = "CN=Directory Service,CN=Windows NT,CN=Services,$($rootDSE.configurationNamingContext)"
+        $dsConfig = Get-ADObject -Identity $dsConfigDN -Properties tombstoneLifetime @splatAD
+        if ($dsConfig.tombstoneLifetime) { $tombstoneLifetime = $dsConfig.tombstoneLifetime }
+    } catch { $warnings.Add("TombstoneLookup: $_") }
+
+    $recycleBinEnabled = $false
+    try {
+        $feature = Get-ADOptionalFeature -Filter "name -like 'Recycle Bin Feature'" @splatAD
+        $recycleBinEnabled = [bool]($feature.EnabledScopes -and @($feature.EnabledScopes).Count -gt 0)
+    } catch { $warnings.Add("RecycleBin: $_") }
+
+    $detectionTier = 1
+    $backupTool = $null
+    $backupToolSource = $null
+    $lastBackupAge = $null
+    $backupAgeSource = $null
+
+    # Tier 2 — Windows Server Backup
+    $splatDC = if ($Server) { @{ ComputerName = $Server } } else { @{} }
+    try {
+        $wsbService = Get-Service -Name 'wbengine' @splatDC -ErrorAction SilentlyContinue
+        if ($wsbService) {
+            $backupTool = 'Windows Server Backup'
+            $backupToolSource = 'WSB'
+            $detectionTier = 2
+        }
+    } catch { $warnings.Add("WSBDetection: $_") }
+
+    # Tier 2 — Third-party vendor detection
+    if (-not $backupTool) {
+        $knownServices = Get-MonarchConfigValue 'KnownBackupServices'
+        foreach ($vendor in $knownServices.Keys) {
+            try {
+                $svcNames = $knownServices[$vendor]
+                $found = Get-Service -Name $svcNames @splatDC -ErrorAction SilentlyContinue |
+                    Where-Object Status -eq 'Running'
+                if ($found) {
+                    $backupTool = $vendor
+                    $backupToolSource = 'ServiceEnum'
+                    $detectionTier = 2
+                    break
+                }
+            } catch { $warnings.Add("VendorDetection($vendor): $_") }
+        }
+    }
+
+    # Status classification
+    $criticalGap = $false
+    $status = 'Unknown'
+    $hint = if ($backupTool) {
+        "$backupTool detected — configure vendor integration in Monarch-Config.psd1 for automatic last-backup detection."
+    } else {
+        'No backup tool detected. Verify backup solution is installed on this domain controller.'
+    }
+
+    if ($lastBackupAge) {
+        if ($lastBackupAge.TotalDays -gt $tombstoneLifetime) {
+            $criticalGap = $true
+            $status = 'Degraded'
+            $hint = "Last backup is older than tombstone lifetime ($([int]$lastBackupAge.TotalDays) days vs $tombstoneLifetime day limit) — recovery from this backup may cause USN rollback. Verify replication state before attempting any restore operation."
+        } else {
+            $status = 'Healthy'
+            $hint = "Backup age ($([int]$lastBackupAge.TotalDays) days) is within tombstone lifetime ($tombstoneLifetime days)."
+        }
+    }
+
+    [PSCustomObject]@{
+        Domain                = 'BackupReadiness'
+        Function              = 'Get-BackupReadinessStatus'
+        Timestamp             = $timestamp
+        TombstoneLifetimeDays = $tombstoneLifetime
+        RecycleBinEnabled     = $recycleBinEnabled
+        BackupToolDetected    = $backupTool
+        BackupToolSource      = $backupToolSource
+        LastBackupAge         = $lastBackupAge
+        BackupAgeSource       = $backupAgeSource
+        DetectionTier         = $detectionTier
+        CriticalGap           = $criticalGap
+        Status                = $status
+        DiagnosticHint        = $hint
+        Warnings              = @($warnings)
+    }
+}
+
 #endregion Backup and Recovery
 
 #region Audit and Compliance
