@@ -3128,6 +3128,117 @@ Describe 'Get-DNSScavengingConfiguration' {
     }
 }
 
+Describe 'Test-ZoneReplicationScope' {
+    BeforeAll {
+        & (Get-Module Monarch) {
+            function script:Get-DnsServerZone { param([string]$ComputerName) }
+        }
+    }
+
+    Context 'DnsServer module unavailable' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-Command { $null } -ParameterFilter { $Name -eq 'Get-DnsServerZone' }
+            $script:result = Test-ZoneReplicationScope
+        }
+
+        It 'returns result with warning and no throw' {
+            $result.Domain | Should -Be 'DNS'
+            $result.Zones | Should -HaveCount 0
+            $result.Warnings | Should -Contain 'DnsServer module not available — zone replication check skipped.'
+        }
+    }
+
+    Context 'DS-integrated zone' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-Command { $true } -ParameterFilter { $Name -eq 'Get-DnsServerZone' }
+            Mock -ModuleName Monarch Get-DnsServerZone { @(
+                [PSCustomObject]@{
+                    ZoneName               = 'test.local'
+                    IsDsIntegrated         = $true
+                    IsAutoCreated          = $false
+                    DirectoryPartitionName = 'DomainDnsZones.test.local'
+                    ZoneType               = 'Primary'
+                }
+            ) }
+            $script:result = Test-ZoneReplicationScope
+        }
+
+        It 'returns correct zone replication properties' {
+            $result.Zones | Should -HaveCount 1
+            $result.Zones[0].ZoneName | Should -Be 'test.local'
+            $result.Zones[0].IsDsIntegrated | Should -Be $true
+            $result.Zones[0].ReplicationScope | Should -Be 'DomainDnsZones.test.local'
+            $result.Zones[0].ZoneType | Should -Be 'Primary'
+        }
+    }
+}
+
+Describe 'Get-DNSForwarderConfiguration' {
+    BeforeAll {
+        & (Get-Module Monarch) {
+            function script:Get-ADDomainController { param([string]$Filter, [string]$Server) }
+            function script:Get-DnsServerForwarder { param([string]$ComputerName) }
+        }
+    }
+
+    Context 'DnsServer module unavailable' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-Command { $null } -ParameterFilter { $Name -eq 'Get-DnsServerZone' }
+            $script:result = Get-DNSForwarderConfiguration
+        }
+
+        It 'returns result with warning and Consistent true' {
+            $result.Domain | Should -Be 'DNS'
+            $result.DCForwarders | Should -HaveCount 0
+            $result.Consistent | Should -Be $true
+            $result.Warnings | Should -Contain 'DnsServer module not available — forwarder check skipped.'
+        }
+    }
+
+    Context 'DCs with same forwarders' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-Command { $true } -ParameterFilter { $Name -eq 'Get-DnsServerZone' }
+            Mock -ModuleName Monarch Get-ADDomainController { @(
+                [PSCustomObject]@{ HostName = 'DC1.test.local' },
+                [PSCustomObject]@{ HostName = 'DC2.test.local' }
+            ) }
+            Mock -ModuleName Monarch Get-DnsServerForwarder {
+                [PSCustomObject]@{ IPAddress = @('8.8.8.8', '8.8.4.4'); UseRootHints = $true }
+            }
+            $script:result = Get-DNSForwarderConfiguration
+        }
+
+        It 'reports Consistent true' {
+            $result.DCForwarders | Should -HaveCount 2
+            $result.Consistent | Should -Be $true
+        }
+    }
+
+    Context 'DCs with different forwarders' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-Command { $true } -ParameterFilter { $Name -eq 'Get-DnsServerZone' }
+            Mock -ModuleName Monarch Get-ADDomainController { @(
+                [PSCustomObject]@{ HostName = 'DC1.test.local' },
+                [PSCustomObject]@{ HostName = 'DC2.test.local' }
+            ) }
+            Mock -ModuleName Monarch Get-DnsServerForwarder {
+                if ($ComputerName -eq 'DC1.test.local') {
+                    [PSCustomObject]@{ IPAddress = @('8.8.8.8'); UseRootHints = $true }
+                } else {
+                    [PSCustomObject]@{ IPAddress = @('1.1.1.1'); UseRootHints = $false }
+                }
+            }
+            $script:result = Get-DNSForwarderConfiguration
+        }
+
+        It 'reports Consistent false' {
+            $result.Consistent | Should -Be $false
+            $result.DCForwarders[0].Forwarders | Should -Contain '8.8.8.8'
+            $result.DCForwarders[1].Forwarders | Should -Contain '1.1.1.1'
+        }
+    }
+}
+
 # =============================================================================
 # Step 12: Audit & Compliance
 # Tests added in Step 12 implementation.

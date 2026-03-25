@@ -2211,6 +2211,91 @@ function Get-DNSScavengingConfiguration {
     }
 }
 
+function Test-ZoneReplicationScope {
+    [CmdletBinding()]
+    param([string]$Server)
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $splatDNS = if ($Server) { @{ ComputerName = $Server } } else { @{} }
+    $zoneResults = @()
+
+    if (-not (Get-Command Get-DnsServerZone -ErrorAction SilentlyContinue)) {
+        $warnings.Add('DnsServer module not available — zone replication check skipped.')
+    } else {
+        try {
+            $zones = @(Get-DnsServerZone @splatDNS | Where-Object { -not $_.IsAutoCreated })
+        } catch {
+            $warnings.Add("ZoneEnumeration: $_")
+            $zones = @()
+        }
+
+        foreach ($zone in $zones) {
+            try {
+                $zoneResults += [PSCustomObject]@{
+                    ZoneName         = $zone.ZoneName
+                    IsDsIntegrated   = [bool]$zone.IsDsIntegrated
+                    ReplicationScope = if ($zone.IsDsIntegrated) { [string]$zone.DirectoryPartitionName } else { $null }
+                    ZoneType         = [string]$zone.ZoneType
+                }
+            } catch { $warnings.Add("ZoneScope($($zone.ZoneName)): $_") }
+        }
+    }
+
+    [PSCustomObject]@{
+        Domain    = 'DNS'
+        Function  = 'Test-ZoneReplicationScope'
+        Timestamp = $timestamp
+        Zones     = @($zoneResults)
+        Warnings  = @($warnings)
+    }
+}
+
+function Get-DNSForwarderConfiguration {
+    [CmdletBinding()]
+    param([string]$Server)
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $splatAD = if ($Server) { @{ Server = $Server } } else { @{} }
+    $dcForwarders = @()
+
+    if (-not (Get-Command Get-DnsServerZone -ErrorAction SilentlyContinue)) {
+        $warnings.Add('DnsServer module not available — forwarder check skipped.')
+    } else {
+        try {
+            $dcs = @(Get-ADDomainController -Filter '*' @splatAD)
+        } catch {
+            $warnings.Add("DCDiscovery: $_")
+            $dcs = @()
+        }
+
+        foreach ($dc in $dcs) {
+            try {
+                $fwd = Get-DnsServerForwarder -ComputerName $dc.HostName
+                $dcForwarders += [PSCustomObject]@{
+                    DCName       = $dc.HostName
+                    Forwarders   = @([string[]]$fwd.IPAddress)
+                    UseRootHints = [bool]$fwd.UseRootHints
+                }
+            } catch { $warnings.Add("Forwarder($($dc.HostName)): $_") }
+        }
+    }
+
+    $consistent = ($dcForwarders.Count -le 1) -or (
+        @($dcForwarders | ForEach-Object { ($_.Forwarders | Sort-Object) -join ',' } | Sort-Object -Unique).Count -eq 1
+    )
+
+    [PSCustomObject]@{
+        Domain       = 'DNS'
+        Function     = 'Get-DNSForwarderConfiguration'
+        Timestamp    = $timestamp
+        DCForwarders = @($dcForwarders)
+        Consistent   = $consistent
+        Warnings     = @($warnings)
+    }
+}
+
 #endregion DNS
 
 #region Reporting
