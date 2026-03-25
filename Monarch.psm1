@@ -2120,6 +2120,97 @@ function New-DomainBaseline
 # AD-integrated DNS zone health and configuration.
 # All Discovery phase. Requires DnsServer module (optional, checked at runtime).
 
+function Test-SRVRecordCompleteness {
+    [CmdletBinding()]
+    param([string]$Server)
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $splatAD = if ($Server) { @{ Server = $Server } } else { @{} }
+    $siteResults = @()
+
+    # DNS module gate — all DNS functions require DnsServer module
+    if (-not (Get-Command Get-DnsServerZone -ErrorAction SilentlyContinue)) {
+        $warnings.Add('DnsServer module not available — SRV record check skipped.')
+    } else {
+        $requiredPrefixes = @('_ldap._tcp', '_kerberos._tcp', '_kpasswd._tcp', '_gc._tcp')
+        try {
+            $domain = (Get-ADDomain @splatAD).DNSRoot
+            $sites = @(Get-ADReplicationSite -Filter '*' @splatAD)
+        } catch {
+            $warnings.Add("SiteDiscovery: $_")
+            $sites = @()
+        }
+
+        foreach ($site in $sites) {
+            try {
+                $missing = @()
+                foreach ($prefix in $requiredPrefixes) {
+                    $fqdn = "$prefix.$($site.Name)._sites.dc._msdcs.$domain"
+                    $resolved = Resolve-DnsName -Name $fqdn -Type SRV -ErrorAction SilentlyContinue
+                    if (-not $resolved) { $missing += $prefix }
+                }
+                $siteResults += [PSCustomObject]@{
+                    SiteName        = $site.Name
+                    ExpectedRecords = $requiredPrefixes.Count
+                    FoundRecords    = $requiredPrefixes.Count - $missing.Count
+                    MissingRecords  = @($missing)
+                }
+            } catch { $warnings.Add("SRVCheck($($site.Name)): $_") }
+        }
+    }
+
+    [PSCustomObject]@{
+        Domain      = 'DNS'
+        Function    = 'Test-SRVRecordCompleteness'
+        Timestamp   = $timestamp
+        Sites       = @($siteResults)
+        AllComplete = ($siteResults.Count -gt 0 -and @($siteResults | Where-Object { $_.MissingRecords.Count -gt 0 }).Count -eq 0)
+        Warnings    = @($warnings)
+    }
+}
+
+function Get-DNSScavengingConfiguration {
+    [CmdletBinding()]
+    param([string]$Server)
+
+    $timestamp = Get-Date
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $splatDNS = if ($Server) { @{ ComputerName = $Server } } else { @{} }
+    $zoneResults = @()
+
+    if (-not (Get-Command Get-DnsServerZone -ErrorAction SilentlyContinue)) {
+        $warnings.Add('DnsServer module not available — scavenging check skipped.')
+    } else {
+        try {
+            $zones = @(Get-DnsServerZone @splatDNS | Where-Object { $_.IsDsIntegrated -and -not $_.IsAutoCreated })
+        } catch {
+            $warnings.Add("ZoneEnumeration: $_")
+            $zones = @()
+        }
+
+        foreach ($zone in $zones) {
+            try {
+                $aging = Get-DnsServerZoneAging -Name $zone.ZoneName @splatDNS
+                $zoneResults += [PSCustomObject]@{
+                    ZoneName          = $zone.ZoneName
+                    ScavengingEnabled = [bool]$aging.AgingEnabled
+                    NoRefreshInterval = $aging.NoRefreshInterval
+                    RefreshInterval   = $aging.RefreshInterval
+                }
+            } catch { $warnings.Add("ZoneAging($($zone.ZoneName)): $_") }
+        }
+    }
+
+    [PSCustomObject]@{
+        Domain    = 'DNS'
+        Function  = 'Get-DNSScavengingConfiguration'
+        Timestamp = $timestamp
+        Zones     = @($zoneResults)
+        Warnings  = @($warnings)
+    }
+}
+
 #endregion DNS
 
 #region Reporting

@@ -3019,6 +3019,115 @@ Describe 'Test-TombstoneGap' {
 # Tests added in Step 11 implementation.
 # =============================================================================
 
+Describe 'Test-SRVRecordCompleteness' {
+    BeforeAll {
+        & (Get-Module Monarch) {
+            function script:Get-ADDomain { param([string]$Server) }
+            function script:Get-ADReplicationSite { param([string]$Filter, [string]$Server) }
+            function script:Resolve-DnsName { param([string]$Name, [string]$Type, [string]$Server, [string]$ErrorAction) }
+        }
+    }
+
+    Context 'DnsServer module unavailable' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-Command { $null } -ParameterFilter { $Name -eq 'Get-DnsServerZone' }
+            $script:result = Test-SRVRecordCompleteness
+        }
+
+        It 'returns result with warning and no throw' {
+            $result.Domain | Should -Be 'DNS'
+            $result.Sites | Should -HaveCount 0
+            $result.AllComplete | Should -Be $false
+            $result.Warnings | Should -Contain 'DnsServer module not available — SRV record check skipped.'
+        }
+    }
+
+    Context 'site with missing SRV record' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-Command { $true } -ParameterFilter { $Name -eq 'Get-DnsServerZone' }
+            Mock -ModuleName Monarch Get-ADDomain { [PSCustomObject]@{ DNSRoot = 'test.local' } }
+            Mock -ModuleName Monarch Get-ADReplicationSite { @(
+                [PSCustomObject]@{ Name = 'Default-First-Site-Name' }
+            ) }
+            Mock -ModuleName Monarch Resolve-DnsName { [PSCustomObject]@{ Name = $Name; Type = 'SRV' } }
+            Mock -ModuleName Monarch Resolve-DnsName { $null } -ParameterFilter { $Name -like '_kpasswd._tcp*' }
+            $script:result = Test-SRVRecordCompleteness
+        }
+
+        It 'reports missing record and AllComplete false' {
+            $result.AllComplete | Should -Be $false
+            $result.Sites[0].MissingRecords | Should -Contain '_kpasswd._tcp'
+            $result.Sites[0].FoundRecords | Should -Be 3
+            $result.Sites[0].ExpectedRecords | Should -Be 4
+        }
+    }
+
+    Context 'all records present' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-Command { $true } -ParameterFilter { $Name -eq 'Get-DnsServerZone' }
+            Mock -ModuleName Monarch Get-ADDomain { [PSCustomObject]@{ DNSRoot = 'test.local' } }
+            Mock -ModuleName Monarch Get-ADReplicationSite { @(
+                [PSCustomObject]@{ Name = 'Site1' }
+            ) }
+            Mock -ModuleName Monarch Resolve-DnsName { [PSCustomObject]@{ Name = $Name; Type = 'SRV' } }
+            $script:result = Test-SRVRecordCompleteness
+        }
+
+        It 'reports AllComplete true with no missing records' {
+            $result.AllComplete | Should -Be $true
+            $result.Sites[0].MissingRecords | Should -HaveCount 0
+            $result.Sites[0].FoundRecords | Should -Be 4
+        }
+    }
+}
+
+Describe 'Get-DNSScavengingConfiguration' {
+    BeforeAll {
+        & (Get-Module Monarch) {
+            function script:Get-DnsServerZone { param([string]$ComputerName) }
+            function script:Get-DnsServerZoneAging { param([string]$Name, [string]$ComputerName) }
+        }
+    }
+
+    Context 'DnsServer module unavailable' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-Command { $null } -ParameterFilter { $Name -eq 'Get-DnsServerZone' }
+            $script:result = Get-DNSScavengingConfiguration
+        }
+
+        It 'returns result with warning and no throw' {
+            $result.Domain | Should -Be 'DNS'
+            $result.Zones | Should -HaveCount 0
+            $result.Warnings | Should -Contain 'DnsServer module not available — scavenging check skipped.'
+        }
+    }
+
+    Context 'zone with scavenging enabled' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-Command { $true } -ParameterFilter { $Name -eq 'Get-DnsServerZone' }
+            Mock -ModuleName Monarch Get-DnsServerZone { @(
+                [PSCustomObject]@{ ZoneName = 'test.local'; IsDsIntegrated = $true; IsAutoCreated = $false }
+            ) }
+            Mock -ModuleName Monarch Get-DnsServerZoneAging {
+                [PSCustomObject]@{
+                    AgingEnabled      = $true
+                    NoRefreshInterval = [timespan]::FromDays(7)
+                    RefreshInterval   = [timespan]::FromDays(7)
+                }
+            }
+            $script:result = Get-DNSScavengingConfiguration
+        }
+
+        It 'returns zone with correct scavenging properties' {
+            $result.Zones | Should -HaveCount 1
+            $result.Zones[0].ZoneName | Should -Be 'test.local'
+            $result.Zones[0].ScavengingEnabled | Should -Be $true
+            $result.Zones[0].NoRefreshInterval | Should -Be ([timespan]::FromDays(7))
+            $result.Zones[0].RefreshInterval | Should -Be ([timespan]::FromDays(7))
+        }
+    }
+}
+
 # =============================================================================
 # Step 12: Audit & Compliance
 # Tests added in Step 12 implementation.
