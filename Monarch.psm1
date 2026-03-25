@@ -652,10 +652,41 @@ function Find-DormantAccount {
     }
     $filtered = @($filtered)
 
+    # --- Section 2b: Cross-DC lastLogon refinement for near-threshold accounts ---
+    $nearCutoff = $timestamp.AddDays(-($thresholdDays - 15))
+    $nearThreshold = @($filtered | Where-Object {
+        $_.lastLogonTimestamp -and $_.lastLogonTimestamp -gt 0 -and
+        ([DateTime]::FromFileTime($_.lastLogonTimestamp)) -ge $cutoffDate -and
+        ([DateTime]::FromFileTime($_.lastLogonTimestamp)) -lt $nearCutoff
+    })
+
+    if ($nearThreshold.Count -gt 0) {
+        $dcs = @()
+        try { $dcs = @(Get-ADDomainController -Filter '*' @splatAD) } catch { $warnings.Add("DCDiscovery: $_") }
+
+        foreach ($u in $nearThreshold) {
+            $maxLogon = $null
+            foreach ($dc in $dcs) {
+                try {
+                    $dcUser = Get-ADUser -Identity $u.SamAccountName -Server $dc.HostName -Properties LastLogon
+                    if ($dcUser.LastLogon -gt 0) {
+                        $thisLogon = [DateTime]::FromFileTime($dcUser.LastLogon)
+                        if ($null -eq $maxLogon -or $thisLogon -gt $maxLogon) { $maxLogon = $thisLogon }
+                    }
+                } catch { $warnings.Add("CrossDC($($dc.HostName)/$($u.SamAccountName)): $_") }
+            }
+            if ($maxLogon) {
+                $u | Add-Member -NotePropertyName '_refinedLastLogon' -NotePropertyValue $maxLogon -Force
+            }
+        }
+    }
+
     # --- Section 3: Dormancy classification ---
     $accounts = [System.Collections.Generic.List[PSCustomObject]]::new()
     foreach ($u in $filtered) {
-        $lastLogon = if ($u.lastLogonTimestamp -and $u.lastLogonTimestamp -gt 0) {
+        $lastLogon = if ($u.PSObject.Properties['_refinedLastLogon']) {
+            $u._refinedLastLogon
+        } elseif ($u.lastLogonTimestamp -and $u.lastLogonTimestamp -gt 0) {
             [DateTime]::FromFileTime($u.lastLogonTimestamp)
         } else { $null }
 
@@ -692,6 +723,11 @@ function Find-DormantAccount {
     # --- Section 4: Return ---
     $neverCount = @($accounts | Where-Object { $_.DaysSinceLogon -eq -1 }).Count
     $csvPath = $null
+    if ($OutputPath -and $accounts.Count -gt 0) {
+        $csvPath = $OutputPath
+        $accounts | Select-Object SamAccountName, DisplayName, LastLogon, DaysSinceLogon, PasswordAgeDays, MemberOfGroups, DormantReason |
+            Export-Csv -Path $csvPath -NoTypeInformation
+    }
 
     [PSCustomObject]@{
         Domain             = 'IdentityLifecycle'

@@ -587,7 +587,7 @@ Four functions, all follow the Step 4 pattern.
 
 Most complex single function. Heaviest v0 reference.
 
-- [ ] **`Find-DormantAccount`**
+- [x] **`Find-DormantAccount`**
 
   Signature:
   ```
@@ -635,7 +635,7 @@ Most complex single function. Heaviest v0 reference.
 
   CSV fields per spec: SamAccountName, DisplayName, LastLogon, DaysSinceLogon, PasswordAgeDays, MemberOfGroups, DormantReason.
 
-- [ ] **Tests: Find-DormantAccount**
+- [x] **Tests: Find-DormantAccount**
   - Account with no logon for 100 days → included with correct DormantReason
   - Account with logon 30 days ago → excluded
   - Built-in account (Administrator) → excluded

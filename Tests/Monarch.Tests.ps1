@@ -2400,6 +2400,132 @@ Describe 'Find-DormantAccount' {
             $result.TotalCount | Should -Be 2
         }
     }
+
+    Context 'CSV export with OutputPath' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADGroup -ParameterFilter { $Filter } {
+                @([PSCustomObject]@{
+                    Name              = 'Domain Admins'
+                    DistinguishedName = $domainAdminsDN
+                    SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                })
+            }
+            Mock -ModuleName Monarch Get-ADGroup -ParameterFilter { $Identity } {
+                [PSCustomObject]@{ Name = 'Some Group' }
+            }
+
+            Mock -ModuleName Monarch Get-ADUser {
+                @([PSCustomObject]@{
+                    SamAccountName       = 'csvUser'
+                    DisplayName          = 'CSV User'
+                    lastLogonTimestamp    = $now.AddDays(-100).ToFileTime()
+                    WhenCreated          = $now.AddDays(-200)
+                    PasswordLastSet      = $now.AddDays(-50)
+                    PasswordNeverExpires = $false
+                    ServicePrincipalName = @()
+                    MemberOf             = @()
+                    objectClass          = 'user'
+                    DistinguishedName    = 'CN=csvUser,OU=Users,DC=test,DC=local'
+                    Enabled              = $true
+                })
+            }
+
+            $script:csvPath = Join-Path $TestDrive 'dormant.csv'
+            $script:csvResult = Find-DormantAccount -OutputPath $csvPath
+        }
+
+        It 'writes CSV with correct columns' {
+            $csvPath | Should -Exist
+            $rows = Import-Csv $csvPath
+            $rows | Should -HaveCount 1
+            $rows[0].PSObject.Properties.Name | Should -Contain 'SamAccountName'
+            $rows[0].PSObject.Properties.Name | Should -Contain 'DormantReason'
+            $rows[0].PSObject.Properties.Name | Should -Contain 'MemberOfGroups'
+            $csvResult.CSVPath | Should -Be $csvPath
+        }
+    }
+
+    Context 'config override changes threshold' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADGroup -ParameterFilter { $Filter } {
+                @([PSCustomObject]@{
+                    Name              = 'Domain Admins'
+                    DistinguishedName = $domainAdminsDN
+                    SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                })
+            }
+
+            Mock -ModuleName Monarch Get-ADUser {
+                @([PSCustomObject]@{
+                    SamAccountName       = 'borderUser'
+                    DisplayName          = 'Border User'
+                    lastLogonTimestamp    = $now.AddDays(-60).ToFileTime()
+                    WhenCreated          = $now.AddDays(-200)
+                    PasswordLastSet      = $now.AddDays(-60)
+                    PasswordNeverExpires = $false
+                    ServicePrincipalName = @()
+                    MemberOf             = @()
+                    objectClass          = 'user'
+                    DistinguishedName    = 'CN=borderUser,OU=Users,DC=test,DC=local'
+                    Enabled              = $true
+                })
+            }
+
+            Mock -ModuleName Monarch Get-MonarchConfigValue { 50 } -ParameterFilter {
+                $Key -eq 'DormancyThresholdDays'
+            }
+
+            $script:thresholdResult = Find-DormantAccount
+        }
+
+        It 'includes account dormant at custom threshold' {
+            $thresholdResult.Accounts | Should -HaveCount 1
+            $thresholdResult.Accounts[0].SamAccountName | Should -Be 'borderUser'
+            $thresholdResult.ThresholdDays | Should -Be 50
+        }
+    }
+
+    Context 'config override changes keyword exclusion' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADGroup -ParameterFilter { $Filter } {
+                @([PSCustomObject]@{
+                    Name              = 'Domain Admins'
+                    DistinguishedName = $domainAdminsDN
+                    SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                })
+            }
+
+            Mock -ModuleName Monarch Get-ADUser {
+                @([PSCustomObject]@{
+                    SamAccountName       = 'CUSTOM-Worker'
+                    DisplayName          = 'Custom Worker'
+                    lastLogonTimestamp    = $now.AddDays(-100).ToFileTime()
+                    WhenCreated          = $now.AddDays(-200)
+                    PasswordLastSet      = $now.AddDays(-100)
+                    PasswordNeverExpires = $false
+                    ServicePrincipalName = @()
+                    MemberOf             = @()
+                    objectClass          = 'user'
+                    DistinguishedName    = 'CN=CUSTOM-Worker,OU=Users,DC=test,DC=local'
+                    Enabled              = $true
+                })
+            }
+
+            Mock -ModuleName Monarch Get-MonarchConfigValue { @('CUSTOM') } -ParameterFilter {
+                $Key -eq 'ServiceAccountKeywords'
+            }
+
+            $script:kwResult = Find-DormantAccount
+        }
+
+        It 'excludes account matching custom keyword' {
+            $kwResult.Accounts | Should -HaveCount 0
+            $kwResult.ExcludedCount | Should -Be 1
+        }
+    }
 }
 
 # =============================================================================
