@@ -10,7 +10,7 @@ Set-StrictMode -Version Latest
 
 #region Config
 # Built-in defaults, config file loading, and config access.
-# All configurable values live here — no hardcoded values in function bodies.
+# All configurable values live here -- no hardcoded values in function bodies.
 
 $script:DefaultConfig = @{
 
@@ -61,7 +61,7 @@ $script:DefaultConfig = @{
     HealthyDCThreshold         = 7
 }
 
-# Module-scoped config — populated by Import-MonarchConfig at load time.
+# Module-scoped config -- populated by Import-MonarchConfig at load time.
 $script:Config = @{}
 
 function Import-MonarchConfig
@@ -85,7 +85,7 @@ function Import-MonarchConfig
             }
         } catch
         {
-            Write-Warning "Monarch: Failed to load config from $configPath — using defaults. Error: $_"
+            Write-Warning "Monarch: Failed to load config from $configPath -- using defaults. Error: $_"
         }
     }
 }
@@ -169,9 +169,9 @@ function Get-ForestDomainLevel
     .SYNOPSIS
         Domain/forest functional levels and schema version.
     .DESCRIPTION
-        Focused check for the orchestrator. Overlaps with New-DomainBaseline intentionally —
+        Focused check for the orchestrator. Overlaps with New-DomainBaseline intentionally  -- 
         baseline is a snapshot document, this is a quick level check.
-        Each query is independent — if one fails, others still populate.
+        Each query is independent -- if one fails, others still populate.
     .PARAMETER Server
         DC name or domain FQDN passed to AD cmdlets. Omit for local domain default.
     #>
@@ -242,7 +242,7 @@ function Get-FSMORolePlacement
     .DESCRIPTION
         Queries domain/forest for the 5 FSMO role holders, tests reachability via
         ICMP, and maps each holder to its AD site. Deduplicates holders before pinging.
-        Domain/Forest failure returns early with contract shape — roles can't be determined.
+        Domain/Forest failure returns early with contract shape -- roles can't be determined.
     .PARAMETER Server
         DC name or domain FQDN passed to AD cmdlets. Omit for local domain default.
     #>
@@ -353,7 +353,7 @@ function Get-SiteTopology
         AD site/subnet topology with anomaly detection.
     .DESCRIPTION
         Enumerates sites, subnets, and DCs. Detects unassigned subnets (no site)
-        and empty sites (no DCs). Each query is independent — if one fails, others still populate.
+        and empty sites (no DCs). Each query is independent -- if one fails, others still populate.
     .PARAMETER Server
         DC name or domain FQDN passed to AD cmdlets. Omit for local domain default.
     #>
@@ -401,7 +401,7 @@ function Get-SiteTopology
         $warnings.Add("DomainControllers: $_")
     }
 
-    # Build site DN → name map for subnet matching
+    # Build site DN -> name map for subnet matching
     $siteDNMap = @{}
     foreach ($s in $siteObjects)
     { $siteDNMap[$s.DistinguishedName] = $s.Name
@@ -480,7 +480,7 @@ function Get-ReplicationHealth
         Queries each DC for replication partner metadata. Classifies each link as
         Healthy/Warning/Failed based on configurable time threshold and consecutive failures.
         Generates DiagnosticHints when one partition fails but another succeeds on the same DC pair.
-        Per-DC query failures are isolated — unreachable DCs add warnings, don't block others.
+        Per-DC query failures are isolated -- unreachable DCs add warnings, don't block others.
     .PARAMETER Server
         DC name or domain FQDN passed to AD cmdlets. Omit for local domain default.
     #>
@@ -517,7 +517,7 @@ function Get-ReplicationHealth
             $metadata = @(Get-ADReplicationPartnerMetadata -Target $dc.HostName @splatAD)
             foreach ($m in $metadata)
             {
-                # Partition name normalization — string matching, not structured DN parsing
+                # Partition name normalization -- string matching, not structured DN parsing
                 $partition = switch -Regex ($m.Partition)
                 {
                     '^CN=Schema'         { 'Schema' }
@@ -1158,7 +1158,7 @@ function Export-GPOAudit {
             [xml]$report = Get-GPOReport -Guid $gpo.Id -ReportType Xml @splatAD
             $xmlContent = $report.OuterXml
 
-            # High-risk string matching (not XML parsing — namespace handling varies, see mechanism-decisions.md)
+            # High-risk string matching (not XML parsing -- namespace handling varies, see mechanism-decisions.md)
             $hasUserRights     = [bool]($xmlContent -match 'UserRightsAssignment')
             $hasSecurityOpts   = [bool]($xmlContent -match 'SecurityOptions')
             $hasScripts        = [bool]($xmlContent -match '<Script>')
@@ -1180,7 +1180,7 @@ function Export-GPOAudit {
                 Owner              = $gpo.Owner
             })
 
-            # Linkage — use indexer for strict-mode-safe namespace XML access
+            # Linkage -- use indexer for strict-mode-safe namespace XML access
             $links = $report.GPO['LinksTo']
             if ($links) {
                 foreach ($link in @($links)) {
@@ -1209,7 +1209,7 @@ function Export-GPOAudit {
         $linkageDetails | Export-Csv -Path (Join-Path $paths.CSV 'gpo-linkage.csv') -NoTypeInformation
     }
 
-    # HTML reports — per-GPO HTML + clickable index
+    # HTML reports -- per-GPO HTML + clickable index
     if ($OutputPath) {
         $htmlIndex = [System.Collections.Generic.List[PSCustomObject]]::new()
         foreach ($gpo in $allGPOs) {
@@ -1230,7 +1230,7 @@ function Export-GPOAudit {
         $indexHtml | Out-File -FilePath (Join-Path $paths.HTML '00-INDEX.html') -Encoding UTF8
     }
 
-    # XML backup — restore-ready via Backup-GPO
+    # XML backup -- restore-ready via Backup-GPO
     if ($OutputPath) {
         try { Backup-GPO -All -Path $paths.XML @splatAD | Out-Null } catch { $warnings.Add("XMLBackup: $_") }
     }
@@ -1555,7 +1555,7 @@ function Test-ProtectedUsersGap {
     if ($spnAccounts.Count -gt 0) {
         $hint = "WARNING: $($spnAccounts.Count) gap account(s) have SPNs (service accounts). " +
                 "Adding service accounts to Protected Users disables Kerberos delegation and blocks NTLM. " +
-                "Review each account before adding — blanket addition will break service authentication."
+                "Review each account before adding -- blanket addition will break service authentication."
     }
 
     [PSCustomObject]@{
@@ -1660,7 +1660,7 @@ function Get-BackupReadinessStatus {
     $warnings = [System.Collections.Generic.List[string]]::new()
     $splatAD = if ($Server) { @{ Server = $Server } } else { @{} }
 
-    # Tier 1 — Universal (always runs)
+    # Tier 1 -- Universal (always runs)
     $tombstoneLifetime = 180
     try {
         $rootDSE = Get-ADRootDSE @splatAD
@@ -1681,7 +1681,7 @@ function Get-BackupReadinessStatus {
     $lastBackupAge = $null
     $backupAgeSource = $null
 
-    # Tier 2 — Windows Server Backup
+    # Tier 2 -- Windows Server Backup
     $splatDC = if ($Server) { @{ ComputerName = $Server } } else { @{} }
     try {
         $wsbService = Get-Service -Name 'wbengine' @splatDC -ErrorAction SilentlyContinue
@@ -1692,7 +1692,7 @@ function Get-BackupReadinessStatus {
         }
     } catch { $warnings.Add("WSBDetection: $_") }
 
-    # Tier 2 — Third-party vendor detection
+    # Tier 2 -- Third-party vendor detection
     if (-not $backupTool) {
         $knownServices = Get-MonarchConfigValue 'KnownBackupServices'
         foreach ($vendor in $knownServices.Keys) {
@@ -1710,7 +1710,7 @@ function Get-BackupReadinessStatus {
         }
     }
 
-    # Tier 3 — Vendor-specific integration (opt-in)
+    # Tier 3 -- Vendor-specific integration (opt-in)
     $integration = Get-MonarchConfigValue 'BackupIntegration'
     if ($integration) {
         $detectionTier = 3
@@ -1742,7 +1742,7 @@ function Get-BackupReadinessStatus {
     $criticalGap = $false
     $status = 'Unknown'
     $hint = if ($backupTool) {
-        "$backupTool detected — configure vendor integration in Monarch-Config.psd1 for automatic last-backup detection."
+        "$backupTool detected -- configure vendor integration in Monarch-Config.psd1 for automatic last-backup detection."
     } else {
         'No backup tool detected. Verify backup solution is installed on this domain controller.'
     }
@@ -1751,7 +1751,7 @@ function Get-BackupReadinessStatus {
         if ($lastBackupAge.TotalDays -gt $tombstoneLifetime) {
             $criticalGap = $true
             $status = 'Degraded'
-            $hint = "Last backup is older than tombstone lifetime ($([int]$lastBackupAge.TotalDays) days vs $tombstoneLifetime day limit) — recovery from this backup may cause USN rollback. Verify replication state before attempting any restore operation."
+            $hint = "Last backup is older than tombstone lifetime ($([int]$lastBackupAge.TotalDays) days vs $tombstoneLifetime day limit) -- recovery from this backup may cause USN rollback. Verify replication state before attempting any restore operation."
         } else {
             $status = 'Healthy'
             $hint = "Backup age ($([int]$lastBackupAge.TotalDays) days) is within tombstone lifetime ($tombstoneLifetime days)."
@@ -1796,11 +1796,11 @@ function Test-TombstoneGap {
     } catch { $warnings.Add("TombstoneLookup: $_") }
 
     $criticalGap = $null
-    $hint = 'Backup age not provided — supply -BackupAgeDays for gap analysis.'
+    $hint = 'Backup age not provided -- supply -BackupAgeDays for gap analysis.'
     if ($PSBoundParameters.ContainsKey('BackupAgeDays')) {
         $criticalGap = $BackupAgeDays -gt $tombstoneLifetime
         $hint = if ($criticalGap) {
-            "Last backup ($BackupAgeDays days) exceeds tombstone lifetime ($tombstoneLifetime days) — recovery may cause USN rollback."
+            "Last backup ($BackupAgeDays days) exceeds tombstone lifetime ($tombstoneLifetime days) -- recovery may cause USN rollback."
         } else {
             "Backup age ($BackupAgeDays days) is within tombstone lifetime ($tombstoneLifetime days)."
         }
@@ -1828,9 +1828,9 @@ function New-DomainBaseline
 {
     <#
     .SYNOPSIS
-        Comprehensive domain snapshot — functional levels, DCs, FSMO, OUs, object counts, password policy.
+        Comprehensive domain snapshot -- functional levels, DCs, FSMO, OUs, object counts, password policy.
     .DESCRIPTION
-        Collects baseline data across seven sections. Each section is independent —
+        Collects baseline data across seven sections. Each section is independent  -- 
         if one fails, the rest still populate and the failure appears in Warnings.
         Pattern-setting function: all subsequent API functions follow this contract.
     .PARAMETER Server
@@ -1905,7 +1905,7 @@ function New-DomainBaseline
         }
     } else
     {
-        $warnings.Add('FSMORoles: skipped — Domain/Forest data unavailable.')
+        $warnings.Add('FSMORoles: skipped -- Domain/Forest data unavailable.')
     }
 
     # --- Section 4: Domain Controllers ---
@@ -2232,9 +2232,9 @@ function Test-SRVRecordCompleteness {
     $splatAD = if ($Server) { @{ Server = $Server } } else { @{} }
     $siteResults = @()
 
-    # DNS module gate — all DNS functions require DnsServer module
+    # DNS module gate -- all DNS functions require DnsServer module
     if (-not (Get-Command Get-DnsServerZone -ErrorAction SilentlyContinue)) {
-        $warnings.Add('DnsServer module not available — SRV record check skipped.')
+        $warnings.Add('DnsServer module not available -- SRV record check skipped.')
     } else {
         $requiredPrefixes = @('_ldap._tcp', '_kerberos._tcp', '_kpasswd._tcp', '_gc._tcp')
         try {
@@ -2283,7 +2283,7 @@ function Get-DNSScavengingConfiguration {
     $zoneResults = @()
 
     if (-not (Get-Command Get-DnsServerZone -ErrorAction SilentlyContinue)) {
-        $warnings.Add('DnsServer module not available — scavenging check skipped.')
+        $warnings.Add('DnsServer module not available -- scavenging check skipped.')
     } else {
         try {
             $zones = @(Get-DnsServerZone @splatDNS | Where-Object { $_.IsDsIntegrated -and -not $_.IsAutoCreated })
@@ -2324,7 +2324,7 @@ function Test-ZoneReplicationScope {
     $zoneResults = @()
 
     if (-not (Get-Command Get-DnsServerZone -ErrorAction SilentlyContinue)) {
-        $warnings.Add('DnsServer module not available — zone replication check skipped.')
+        $warnings.Add('DnsServer module not available -- zone replication check skipped.')
     } else {
         try {
             $zones = @(Get-DnsServerZone @splatDNS | Where-Object { -not $_.IsAutoCreated })
@@ -2364,7 +2364,7 @@ function Get-DNSForwarderConfiguration {
     $dcForwarders = @()
 
     if (-not (Get-Command Get-DnsServerZone -ErrorAction SilentlyContinue)) {
-        $warnings.Add('DnsServer module not available — forwarder check skipped.')
+        $warnings.Add('DnsServer module not available -- forwarder check skipped.')
     } else {
         try {
             $dcs = @(Get-ADDomainController -Filter '*' @splatAD)
@@ -2429,7 +2429,7 @@ function New-MonarchReport
     $accent = Get-MonarchConfigValue -Key 'ReportAccentPrimary'
     if (-not $accent) { $accent = '#2E5090' }
 
-    # Null results — minimal report
+    # Null results -- minimal report
     if (-not $Results) {
         $html = "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><title>Discovery Report</title></head>" +
             "<body><p>No data available.</p></body></html>"
@@ -2474,8 +2474,8 @@ function New-MonarchReport
         $dn = if ($domainNames.ContainsKey($r.Domain)) { $domainNames[$r.Domain] } else { $r.Domain }
         switch ($r.Function) {
             'Get-BackupReadinessStatus' {
-                if ($r.CriticalGap -eq $true) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'Backup age exceeds tombstone lifetime — USN rollback risk' }) }
-                if ($r.DetectionTier -eq 1 -and $null -eq $r.BackupToolDetected) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'No backup tool detected — verify backup coverage manually' }) }
+                if ($r.CriticalGap -eq $true) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'Backup age exceeds tombstone lifetime -- USN rollback risk' }) }
+                if ($r.DetectionTier -eq 1 -and $null -eq $r.BackupToolDetected) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'No backup tool detected -- verify backup coverage manually' }) }
             }
             'Get-ReplicationHealth' {
                 if ($r.FailedLinkCount -gt 0) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.FailedLinkCount) replication links failing" }) }
@@ -2559,7 +2559,7 @@ function New-MonarchReport
         ".file-tree .group{margin-bottom:var(--gap-related)}.file-tree .group:last-child{margin-bottom:0}" +
         ".file-tree .folder{font-weight:600;color:var(--text-1);text-decoration:none;display:block;line-height:1.3;margin-bottom:var(--gap-micro)}" +
         ".file-tree .tree-children{padding-left:var(--gap-related);border-left:1px solid var(--border-1)}" +
-        ".file-tree .tree-item{color:var(--text-2);line-height:1.8;position:relative}.file-tree .tree-item::before{content:'─ ';color:var(--text-3)}" +
+        ".file-tree .tree-item{color:var(--text-2);line-height:1.8;position:relative}.file-tree .tree-item::before{content:'-- ';color:var(--text-3)}" +
         ".report-footer{margin-top:calc(var(--gap-separate) + var(--gap-related));padding-top:var(--gap-related);border-top:1px solid var(--border-1);" +
         "font-size:var(--t5);line-height:1;color:var(--text-3);display:flex;flex-wrap:wrap;justify-content:space-between;column-gap:var(--gap-related);row-gap:var(--gap-micro)}" +
         "@media(max-width:600px){.container{padding:var(--gap-related)}}" +
@@ -2572,10 +2572,10 @@ function New-MonarchReport
 
     # --- Assemble HTML ---
     $html = "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1.0'>" +
-        "<title>Discovery Report — $domain</title><style>$css</style></head><body><div class='container'>"
+        "<title>Discovery Report -- $domain</title><style>$css</style></head><body><div class='container'>"
 
     # Header
-    $html += "<div class='report-title'>Discovery Report — $domain</div>"
+    $html += "<div class='report-title'>Discovery Report -- $domain</div>"
     $html += "<div class='report-meta'><span>$dc</span><span>$dateStr</span><span>Duration: $duration</span></div>"
 
     # Stats
@@ -2598,7 +2598,7 @@ function New-MonarchReport
         $html += "</div>"
     }
 
-    # Domain sections — only domains with findings
+    # Domain sections -- only domains with findings
     $findingDomains = @{}
     foreach ($f in @($criticals) + @($advisories)) {
         if (-not $findingDomains.ContainsKey($f.Domain)) { $findingDomains[$f.Domain] = [System.Collections.Generic.List[PSCustomObject]]::new() }
@@ -2648,7 +2648,7 @@ function New-MonarchReport
         $html += "</div>"
     }
 
-    # Output files tree — collect from result properties
+    # Output files tree -- collect from result properties
     $allPaths = @()
     foreach ($r in $resultsList) {
         if ($r.PSObject.Properties['OutputPaths'] -and $r.OutputPaths) {
@@ -2713,7 +2713,7 @@ function Invoke-DomainAudit
 
     if ($Phase -ne 'Discovery') { throw "Phase '$Phase' is not yet implemented." }
 
-    # Resolve DC — fatal if fails
+    # Resolve DC -- fatal if fails
     $target = Resolve-MonarchDC -Domain $Domain
     $dc = $target.DCName
     $startTime = Get-Date

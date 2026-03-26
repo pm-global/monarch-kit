@@ -1,6 +1,6 @@
 # Deployment and Testing Guide
 
-Run monarch-kit on Windows — from Pester tests through lab validation to production.
+Run monarch-kit on Windows -- from Pester tests through lab validation to production.
 
 ---
 
@@ -20,14 +20,14 @@ Install-WindowsFeature RSAT-AD-PowerShell, RSAT-ADDS-Tools
 # Install RSAT Group Policy tools (for GPO functions)
 Install-WindowsFeature GPMC
 
-# Install RSAT DNS tools (optional — DNS functions degrade gracefully without it)
+# Install RSAT DNS tools (optional -- DNS functions degrade gracefully without it)
 Install-WindowsFeature RSAT-DNS-Server
 ```
 
 On Windows 10/11:
 
 ```powershell
-# Settings → Apps → Optional Features → Add a feature
+# Settings -> Apps -> Optional Features -> Add a feature
 # Or via PowerShell (requires admin):
 Add-WindowsCapability -Online -Name Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0
 Add-WindowsCapability -Online -Name Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0
@@ -40,7 +40,7 @@ Verify:
 Get-Module -ListAvailable ActiveDirectory, GroupPolicy, DnsServer | Format-Table Name, Version
 ```
 
-All three should appear. GroupPolicy and DnsServer are optional — monarch-kit checks for them at runtime and skips gracefully.
+All three should appear. GroupPolicy and DnsServer are optional -- monarch-kit checks for them at runtime and skips gracefully.
 
 ### Pester 5
 
@@ -64,13 +64,13 @@ Import-Module Pester
 
 The module is not on PSGallery. Copy the repo to the Windows host and either:
 
-**Option A — Import directly from the repo:**
+**Option A -- Import directly from the repo:**
 
 ```powershell
 Import-Module C:\path\to\monarch-kit\Monarch.psd1
 ```
 
-**Option B — Install to a module path:**
+**Option B -- Install to a module path:**
 
 ```powershell
 $dest = "$env:USERPROFILE\Documents\WindowsPowerShell\Modules\Monarch"
@@ -88,7 +88,7 @@ Get-Module Monarch | Format-List Name, Version, ExportedFunctions
 
 ---
 
-## 2. Run Pester Tests (Mocked — No Domain Required)
+## 2. Run Pester Tests (Mocked -- No Domain Required)
 
 These are the same 162 tests from development. They mock all AD/GPO/DNS cmdlets and run without a domain. Run these first to confirm the module works on the Windows host.
 
@@ -97,7 +97,7 @@ cd C:\path\to\monarch-kit
 Invoke-Pester -Path .\Tests\Monarch.Tests.ps1 -Output Detailed
 ```
 
-**Expected:** 162 tests, 0 failures. If anything fails here, it's an environment issue (wrong Pester version, missing module, path problem) — not a domain issue.
+**Expected:** 162 tests, 0 failures. If anything fails here, it's an environment issue (wrong Pester version, missing module, path problem) -- not a domain issue.
 
 **Common issues:**
 
@@ -116,12 +116,12 @@ Invoke-Pester -Path .\Tests\Monarch.Tests.ps1 -Output Detailed
 
 You need a Windows domain with populated data. Two proven approaches:
 
-**BadBlood** (recommended) — populates an existing domain with realistic fake users, groups, OUs, GPOs, permissions, and attack paths:
+**BadBlood** (recommended) -- populates an existing domain with realistic fake users, groups, OUs, GPOs, permissions, and attack paths:
 - https://github.com/davidprowe/BadBlood
 - Run on a DC after domain setup: `.\Invoke-BadBlood.ps1`
 - Creates ~2,500 users, nested groups, GPOs, delegation, service accounts with SPNs
 
-**AutomatedLab / yourDomain-in-a-box** — builds the full VM infrastructure:
+**AutomatedLab / yourDomain-in-a-box** -- builds the full VM infrastructure:
 - DC(s), member servers, client machines
 - Then run BadBlood on top
 
@@ -168,7 +168,7 @@ Enable-PSRemoting -Force
 ```powershell
 Import-Module C:\path\to\monarch-kit\Monarch.psd1
 
-# Full Discovery — all 25 API functions
+# Full Discovery -- all 25 API functions
 Invoke-DomainAudit -Phase Discovery -OutputPath C:\MonarchOutput
 ```
 
@@ -176,18 +176,18 @@ This creates:
 
 ```
 C:\MonarchOutput\
-├── 00-Discovery-Report.html
-├── 01-Baseline\
-│   ├── domain-info.csv
-│   ├── domain-controllers.csv
-│   ├── fsmo-roles.csv
-│   ├── object-counts.csv
-│   └── password-policy.csv
-├── 02-GPO-Audit\
-│   └── <GPO-Name>.html (one per GPO)
-├── 03-Privileged-Access\
-└── 04-Dormant-Accounts\
-    └── dormant-accounts.csv
++-- 00-Discovery-Report.html
++-- 01-Baseline\
+|   +-- domain-info.csv
+|   +-- domain-controllers.csv
+|   +-- fsmo-roles.csv
+|   +-- object-counts.csv
+|   \-- password-policy.csv
++-- 02-GPO-Audit\
+|   \-- <GPO-Name>.html (one per GPO)
++-- 03-Privileged-Access\
+\-- 04-Dormant-Accounts\
+    \-- dormant-accounts.csv
 ```
 
 Open `00-Discovery-Report.html` in a browser and walk through every section.
@@ -203,7 +203,7 @@ Check each domain against what BadBlood creates:
 | Privileged Access | Domain Admins/Enterprise Admins members listed, Kerberoastable accounts found (SPNs), AS-REP roastable found, AdminCount orphans detected | Yes (SPNs, nested groups, delegation) |
 | Group Policy | GPOs exported to HTML, unlinked GPOs detected, permission anomalies flagged | Yes (creates GPOs with various links) |
 | Security Posture | Password policies inventoried (default + any FGPPs), weak flags found, Protected Users gaps identified, legacy protocol exposure flagged | Partially (password policies yes, legacy protocols depend on lab config) |
-| Backup & Recovery | Backup services checked (likely none in lab — that's fine, confirms detection logic works), tombstone lifetime reported | No backup agents — expect "no backup detected" |
+| Backup & Recovery | Backup services checked (likely none in lab -- that's fine, confirms detection logic works), tombstone lifetime reported | No backup agents -- expect "no backup detected" |
 | Audit & Compliance | Baseline CSVs generated, audit policy retrieved from DC, event log config retrieved | Yes (DC exists) |
 | DNS | SRV records validated, scavenging config reported, zone replication scope checked, forwarders listed | Yes (AD-integrated DNS) |
 
@@ -234,7 +234,7 @@ Things that will be different in a real domain vs mocked tests:
 
 - **Timing:** Functions that query every DC take longer. `Get-ReplicationHealth` and `Get-AuditPolicyConfiguration` scale with DC count.
 - **Remote execution failures:** `Invoke-Command` to DCs may fail due to WinRM configuration, firewall rules, or permissions. These surface as warnings, not crashes.
-- **Empty results:** Some functions may return zero findings (no dormant accounts, no Kerberoastable users) depending on what BadBlood populated. That's correct behavior — the function ran, found nothing, and reported it.
+- **Empty results:** Some functions may return zero findings (no dormant accounts, no Kerberoastable users) depending on what BadBlood populated. That's correct behavior -- the function ran, found nothing, and reported it.
 - **GPO HTML generation:** `Get-GPOReport -ReportType Html` can fail on corrupted GPOs. Failures are caught per-GPO and logged in the return object.
 
 ---
@@ -249,7 +249,7 @@ Once lab tests pass, work through this checklist before running against producti
 # Check your effective permissions
 whoami /groups | findstr /i "domain admins"
 
-# Or more precisely — do you have the read access monarch-kit needs?
+# Or more precisely -- do you have the read access monarch-kit needs?
 # These are the AD operations used (all read-only):
 Get-ADUser -Filter * -ResultSetSize 1 -Properties lastLogonTimestamp   # User read
 Get-ADGroup -Filter * -ResultSetSize 1                                 # Group read
@@ -260,17 +260,17 @@ Get-GPPermission -Guid (Get-GPO -All | Select-Object -First 1).Id -All  # GPO pe
 ```
 
 Monarch-kit needs:
-- **Read access to all AD objects** — Domain Admin has this, but a custom read-only service account works too
-- **Invoke-Command to DCs** — for audit policy and event log enumeration
-- **Read access to GPOs** — for HTML/XML export and permission auditing
-- **Read access to DNS zones** — for DNS functions (optional)
+- **Read access to all AD objects** -- Domain Admin has this, but a custom read-only service account works too
+- **Invoke-Command to DCs** -- for audit policy and event log enumeration
+- **Read access to GPOs** -- for HTML/XML export and permission auditing
+- **Read access to DNS zones** -- for DNS functions (optional)
 
 ### Read-Only Verification
 
 Discovery is read-only by design. No functions in the Discovery phase call any write cmdlets. To verify this yourself:
 
 ```powershell
-# Search the module source for write operations — these should only appear
+# Search the module source for write operations -- these should only appear
 # in Remediation functions (Plan 2, not yet implemented)
 Select-String -Path C:\path\to\monarch-kit\Monarch.psm1 -Pattern 'Set-AD|Remove-AD|New-AD|Disable-AD|Enable-AD|Move-AD'
 ```
@@ -312,13 +312,13 @@ Discovery functions are read-only AD queries. Impact assessment:
 
 ### Timing
 
-Pick a low-activity window for the first production run. Not because monarch-kit is risky — it's read-only — but because:
+Pick a low-activity window for the first production run. Not because monarch-kit is risky -- it's read-only -- but because:
 
 1. `lastLogon` accuracy improves when all DCs are reachable (dormant account detection)
 2. Replication health is most meaningful when measured during normal operation
 3. First run lets you calibrate expected duration before scheduling recurring runs
 
-### Dry Run — Individual Functions First
+### Dry Run -- Individual Functions First
 
 Don't start with `Invoke-DomainAudit` in production. Run individual functions first to validate behavior:
 
@@ -355,8 +355,8 @@ Invoke-DomainAudit -Phase Discovery -OutputPath C:\MonarchOutput
 
 After the first production run:
 
-1. Open `00-Discovery-Report.html` — check the stats bar (critical/advisory counts, function errors)
-2. Check the Failures section — any functions that errored? Common: WinRM failures to specific DCs, GPO permission denials
+1. Open `00-Discovery-Report.html` -- check the stats bar (critical/advisory counts, function errors)
+2. Check the Failures section -- any functions that errored? Common: WinRM failures to specific DCs, GPO permission denials
 3. Spot-check findings against what you know about the domain:
    - Do the Domain Admin members match what you expect?
    - Are the dormant accounts actually dormant?

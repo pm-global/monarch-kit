@@ -15,7 +15,7 @@ Compliance-aligned dormant account lifecycle policy. Aligns with PCI DSS v4.0.1,
 **1. Discovery (quarterly minimum, monthly for high-risk environments)**
 - Generate dormant account report
 - Automatic exclusions applied (service accounts, MSAs/gMSAs, built-in accounts, privileged accounts, recently created accounts)
-- Output is for human review — no automatic action
+- Output is for human review -- no automatic action
 
 **2. Review (human gate)**
 - Manual review of dormant account list
@@ -30,7 +30,7 @@ Compliance-aligned dormant account lifecycle policy. Aligns with PCI DSS v4.0.1,
 - Move to quarantine OU
 - Write disable date to extensionAttribute15
 
-**4. Hold period (30–90 days)**
+**4. Hold period (30-90 days)**
 - Monitor for reclamation requests
 - Track authentication failures and service interruptions
 - Document any re-enabled accounts with justification
@@ -61,9 +61,9 @@ Compliance-aligned dormant account lifecycle policy. Aligns with PCI DSS v4.0.1,
 
 ## Compliance References
 
-- [PCI DSS v4.0.1 Requirement 8](https://www.pcisecuritystandards.org/) — inactive account management
-- [NIST SP 800-53 Rev 5](https://csrc.nist.gov/publications/detail/sp/800-53/rev-5/final) — account management controls
-- [Microsoft 2026 Guidance](https://docs.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory) — dormant account remediation
+- [PCI DSS v4.0.1 Requirement 8](https://www.pcisecuritystandards.org/) -- inactive account management
+- [NIST SP 800-53 Rev 5](https://csrc.nist.gov/publications/detail/sp/800-53/rev-5/final) -- account management controls
+- [Microsoft 2026 Guidance](https://docs.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/best-practices-for-securing-active-directory) -- dormant account remediation
 
 ## Best Practices
 
@@ -71,4 +71,4 @@ Compliance-aligned dormant account lifecycle policy. Aligns with PCI DSS v4.0.1,
 
 **Communication:** Notify account owners before disabling. Set expectations on hold periods. Document the reclamation process. Report metrics to stakeholders.
 
-**Iteration:** Start conservative (120–180 day threshold if uncertain). Tighten over time (move to 90 days). Adjust exceptions based on incidents. Refine based on environment.
+**Iteration:** Start conservative (120-180 day threshold if uncertain). Tighten over time (move to 90 days). Adjust exceptions based on incidents. Refine based on environment.

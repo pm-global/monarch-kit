@@ -1,6 +1,6 @@
 # Design System
 
-Visual language for all monarch-kit output — HTML reports, console output in the interactive wrapper, and any future tools. Extracted from the Discovery Report reference implementation (report-v5.html).
+Visual language for all monarch-kit output -- HTML reports, console output in the interactive wrapper, and any future tools. Extracted from the Discovery Report reference implementation (report-v5.html).
 
 ---
 
@@ -22,12 +22,12 @@ Four values. Four meanings. Every vertical margin and padding uses one of these.
 
 | Token | Value | Meaning | Use |
 |-------|-------|---------|-----|
-| `--gap-micro` | 4px | Within a single component's text stack | domain-tag→description, label→value, wrapped flex row-gap |
-| `--gap-tight` | 8px | Within a component group | card→card, section-label→cards, heading→metrics |
-| `--gap-related` | 16px | Within a section, between different components | metrics→cards, stats→critical findings, container padding |
-| `--gap-separate` | 32px | Between sections | critical→domains, domain→domain, content→output files |
+| `--gap-micro` | 4px | Within a single component's text stack | domain-tag->description, label->value, wrapped flex row-gap |
+| `--gap-tight` | 8px | Within a component group | card->card, section-label->cards, heading->metrics |
+| `--gap-related` | 16px | Within a section, between different components | metrics->cards, stats->critical findings, container padding |
+| `--gap-separate` | 32px | Between sections | critical->domains, domain->domain, content->output files |
 
-If a gap doesn't fit one of these four, the content hierarchy is wrong — fix the hierarchy, not the spacing.
+If a gap doesn't fit one of these four, the content hierarchy is wrong -- fix the hierarchy, not the spacing.
 
 **Console translation:** Micro = no blank line. Tight = no blank line (indentation distinguishes). Related = one blank line. Separate = two blank lines.
 
@@ -45,7 +45,7 @@ If a gap doesn't fit one of these four, the content hierarchy is wrong — fix t
 | `--t4` | 15px | Body text, card descriptions, summary toggles, domain metrics |
 | `--t5` | 12px | Labels, metadata, table headers, captions, file tree |
 
-**Line height:** Set per component, never inherited from body. Display elements (numbers, labels, headings) use `1`–`1.2`. Body text uses `1.3`–`1.4`. File trees use `1.8`.
+**Line height:** Set per component, never inherited from body. Display elements (numbers, labels, headings) use `1`-`1.2`. Body text uses `1.3`-`1.4`. File trees use `1.8`.
 
 **Console translation:** `--t1` = prominent text. `--t2`/`--t3` = bold/bright. `--t4` = default. `--t5` = `DarkGray` foreground.
 
@@ -62,7 +62,7 @@ Set in `Monarch-Config.psd1`. The report function reads these and injects into C
 | `ReportAccentPrimary` | `#2E5090` | Headers, links, section titles |
 | `ReportAccentSecondary` | `#B85C14` | Reserved for future use |
 
-### Severity (fixed — never configurable)
+### Severity (fixed -- never configurable)
 
 | Token | Value | Use |
 |-------|-------|-----|
@@ -102,7 +102,7 @@ Set in `Monarch-Config.psd1`. The report function reads these and injects into C
 
 ### Card Weights
 
-Square corners on all cards. The left border defines the element — rounded corners are decorative without a filled background to ground them. `--card-radius` is retained for stat containers only.
+Square corners on all cards. The left border defines the element -- rounded corners are decorative without a filled background to ground them. `--card-radius` is retained for stat containers only.
 
 | Weight | Left Border | Background | Use |
 |--------|------------|------------|-----|
@@ -125,7 +125,7 @@ Horizontal pill layout with border-radius. Number + label side by side.
 | Outline | 2px `--border-1` border, no fill | `--text-1` (number), `--text-2` (label) |
 | Outline zero | 2px `--border-1` border, no fill | `--text-3` (both) |
 
-**Console translation:** `Critical: 2 | Advisory: 7 | Functions: 26 | Errors: 0` — single line, count in respective color.
+**Console translation:** `Critical: 2 | Advisory: 7 | Functions: 26 | Errors: 0` -- single line, count in respective color.
 
 ### Section Labels
 
@@ -133,7 +133,7 @@ Uppercase, letter-spaced, `--t5` size. Used for "Critical Findings", "Function E
 
 ### Domain Metrics
 
-Labels and values both use `--text-1`. Only values are bold (`font-weight: 600`). The label earns equal visual presence — the colon and reading order distinguish label from value, not color. Flex wrap with `column-gap: 24px`, `row-gap: 4px` (micro) so wrapped rows stay visually grouped.
+Labels and values both use `--text-1`. Only values are bold (`font-weight: 600`). The label earns equal visual presence -- the colon and reading order distinguish label from value, not color. Flex wrap with `column-gap: 24px`, `row-gap: 4px` (micro) so wrapped rows stay visually grouped.
 
 ### Domain Section Dividers
 
@@ -143,22 +143,22 @@ Labels and values both use `--text-1`. Only values are bold (`font-weight: 600`)
 
 ## Table Guidelines
 
-- Default all cells to `white-space: nowrap` — prevents column data from wrapping
+- Default all cells to `white-space: nowrap` -- prevents column data from wrapping
 - Opt-in to wrapping with `.wrap-ok` class only for cells with legitimately long content (display names, descriptions)
-- Use "Age" format for time-since values, not timestamps with "ago" suffix. "22 hours" not "22 hours ago" — reports exist in the present, the suffix is redundant
+- Use "Age" format for time-since values, not timestamps with "ago" suffix. "22 hours" not "22 hours ago" -- reports exist in the present, the suffix is redundant
 - Column headers: uppercase, letter-spaced, `--t5` size, `--text-2` color
 - Row hover: `--bg-card` background
 - Status values use semantic colors: `.status-healthy` (green), `.status-warning` (amber), `.status-failed` (critical red)
-- If a table would require wrapping at 960px viewport, it has too many columns — split or use a different presentation
+- If a table would require wrapping at 960px viewport, it has too many columns -- split or use a different presentation
 - Expandable tables use `<details>` with a summary line that includes count breakdown: "View 12 replication links (8 healthy, 1 warning, 3 failed)"
 
 ---
 
 ## Metadata Guidelines
 
-**DC source:** The DC name appears without a prefix. The selection method (health-scored vs fallback) only surfaces when the fallback was used. Absence of annotation means healthy selection — consistent with silence-is-success.
+**DC source:** The DC name appears without a prefix. The selection method (health-scored vs fallback) only surfaces when the fallback was used. Absence of annotation means healthy selection -- consistent with silence-is-success.
 
-**Timestamps:** Always include timezone abbreviation. The report is a point-in-time document — timezone is part of the timestamp's meaning.
+**Timestamps:** Always include timezone abbreviation. The report is a point-in-time document -- timezone is part of the timestamp's meaning.
 
 ---
 
@@ -166,7 +166,7 @@ Labels and values both use `--text-1`. Only values are bold (`font-weight: 600`)
 
 - Max-width: 960px, centered with auto margins
 - Container padding: 40px (reduces to 16px below 600px viewport)
-- Single column, top to bottom — no sidebar, no multi-column
+- Single column, top to bottom -- no sidebar, no multi-column
 - Domain sections ordered by severity when findings exist (safety-critical first)
 - Domains with no findings collapsed to a single "No findings: ..." line
 
@@ -174,12 +174,12 @@ Labels and values both use `--text-1`. Only values are bold (`font-weight: 600`)
 
 ## File Tree
 
-- Pure directory listing — no counts, no promoted links, no navigation hints
+- Pure directory listing -- no counts, no promoted links, no navigation hints
 - Folder names are clickable links (open the directory)
 - Files with meaningful targets are clickable links
 - Tree structure uses left border + indentation, not box-drawing characters
-- `::before` pseudo-element for the `─` connector (never wraps separately)
-- Built dynamically from the orchestrator's results — only files that were actually generated appear
+- `::before` pseudo-element for the `-` connector (never wraps separately)
+- Built dynamically from the orchestrator's results -- only files that were actually generated appear
 
 ---
 
@@ -191,7 +191,7 @@ Labels and values both use `--text-1`. Only values are bold (`font-weight: 600`)
 - File tree links print their `href` path in parentheses after the link text
 - Domain sections avoid page-break splits
 - Headings never orphaned at bottom of page
-- `<details>` elements should be set to `open` by the report generator before the print-optimized version is written — CSS cannot reliably force-open them
+- `<details>` elements should be set to `open` by the report generator before the print-optimized version is written -- CSS cannot reliably force-open them
 - Narrow viewport rule (600px breakpoint) also benefits print layout
 
 ---

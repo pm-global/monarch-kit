@@ -1,108 +1,126 @@
 # monarch-kit
 
-Active Directory audit and administration suite. Composes OctoDoc stratagems for sensor data and provides the interpretation layer that produces actionable domain answers.
+Active Directory audit and administration suite for mid-market domains.
+
+dev-guide.md defines how to program. This file defines what this project is.
 
 ## Module Identity
 
 - **Name:** monarch-kit
-- **Depends on:** OctoDoc (sensor layer — `RequiredModules = @('OctoDoc')`)
-- **Target:** mid-market domains (100–10,000 users), experienced IT administrators and LLM agents
+- **Target:** mid-market domains (100-10,000 users), experienced IT administrators and LLM agents
 - **PowerShell:** 5.1+
 - **Structure:** single `.psm1` + `.psd1`
+- **Dependencies:** `RequiredModules = @('ActiveDirectory')` -- GroupPolicy and DnsServer are optional (checked at runtime, functions degrade gracefully)
+- **Config:** `Monarch-Config.psd1` -- optional, all defaults are built in
 
-## Architecture
+## Current State
+
+**Plan 1 (Discovery phase) is complete.** 28 functions, 162 Pester tests, all passing.
+
+| What | Status |
+|------|--------|
+| Discovery API functions (28) | Complete |
+| Orchestrator (`Invoke-DomainAudit -Phase Discovery`) | Complete |
+| Report generator (`New-MonarchReport`) | Complete |
+| Remediation/Monitoring/Cleanup functions | Plan 2 -- not started |
+| Interactive wrapper (`Start-MonarchAudit`) | Plan 3 -- not started |
+| Comparison functions (GPO, baseline, CIS) | Plan 4 -- not started |
+| OctoDoc extraction + stratagem integration | Plan 5 -- blocked on OctoDoc redesign |
+
+**Only Discovery-phase code exists.** All functions query AD directly. There are no stratagems, no probe composition, no `Invoke-DCProbes`. See `CLAUDE-DEV-PLAN.md` for the full roadmap and implementation details per plan.
+
+## Architecture (As Built)
 
 ```
-OctoDoc (sensor layer — separate repo, do not modify)
-    ├─ Probe Registry (queryable menu of capabilities)
-    ├─ Invoke-DCProbes (executes stratagems, returns raw probe results)
-    └─ Get-HealthyDC (health score model)
-         ↓
-monarch-kit (interpretation layer — this repo)
-    ├─ API functions — compose stratagems, interpret results, return structured objects
-    ├─ Invoke-DomainAudit — orchestrator, coordinates phases, enforces WhatIf gates
-    └─ Start-MonarchAudit — interactive wrapper, menus, guidance, human prompts
-         ↓
-Reporting Module (future consumer — not in scope)
+Monarch API functions (28 functions -- direct AD/DNS/GPO queries)
+    |
+    v
+Invoke-DomainAudit (orchestrator -- coordinates Discovery phase)
+    |
+    v
+New-MonarchReport (HTML report from orchestrator results)
 ```
 
-**The boundary is absolute:** OctoDoc observes, monarch-kit interprets. Interpretation logic never lives in the sensor layer.
+**DC resolution:** `Resolve-MonarchDC` tries `Get-HealthyDC` if available (legacy from when OctoDoc was a separate module), then falls back to `Get-ADDomainController -Discover`. In practice, the fallback is what runs in most environments.
 
-**Three execution layers:** API functions return objects. The orchestrator (`Invoke-DomainAudit`) coordinates which functions run per phase. The interactive wrapper (`Start-MonarchAudit`) is the admin-facing entry point with menus, checklists, and guidance. See `@docs/domain-specs.md` for the complete three-layer specification.
+**OctoDoc history:** OctoDoc was originally a separate sensor module. It was rolled into monarch-kit. `Get-HealthyDC` is the only remaining touchpoint -- called opportunistically with a fallback. Plan 5 is a future extraction of the sensor layer back into a separate module with a proper probe registry and stratagem interface. That work is blocked and not reflected in the current code.
 
-## Stratagem Model
+**The boundary principle still holds:** observation logic (what state does AD report?) and interpretation logic (what does that state mean for the audit?) are kept separate in the code even though they live in the same module. When implementing new functions, keep raw AD queries separate from the grading/assessment logic that interprets them.
 
-Monarch functions compose "stratagems" — recipes of which OctoDoc probes to run — and interpret the results.
+## Coding Patterns
+
+These patterns apply to every function in the module.
+
+**Parameter convention:**
+- All API functions accept `-Server [string]` -- maps 1:1 to AD cmdlet `-Server` parameter
+- Can be a DC name, domain FQDN, or omitted for local domain default
+- The orchestrator resolves domain to a healthy DC once, then passes it as `-Server` to every function
+
+**Return contract:**
+Every public function returns one or more `[PSCustomObject]` with these mandatory properties:
 
 ```powershell
-# Compose stratagem
-$stratagem = @{
-    Name   = 'BackupReadiness'
-    Probes = @('WSBackup', 'BackupVendorDetection', 'TombstoneLifetime', 'RecycleBin')
-}
-
-# Execute via OctoDoc
-$probeResults = Invoke-DCProbes -DCName $DCName -Stratagem $stratagem
-
-# Interpret results (monarch-kit's job)
-$tier = Determine-DetectionTier -ProbeResults $probeResults
-$gap = Test-TombstoneGap -ProbeResults $probeResults
-
-# Return graded answer
-return @{
-    Domain        = 'BackupReadiness'
-    DetectionTier = $tier
-    CriticalGap   = $gap
+[PSCustomObject]@{
+    Domain    = 'InfrastructureHealth'   # Functional domain name
+    Function  = 'Get-FSMORolePlacement'  # Function that produced this
+    Timestamp = (Get-Date -Format o)     # ISO 8601
+    Warnings  = @()                      # Always an array, even when empty
+    # ... domain-specific properties
 }
 ```
 
-OctoDoc runs stratagems. Monarch composes them and interprets results. This boundary is absolute.
+Functions that also produce file output (Export-GPOAudit, Find-DormantAccount) return the structured object AND write files -- the object includes paths to generated files.
 
-## Probe Contract (What OctoDoc Returns)
+**Error handling:**
+- Per-cmdlet `-ErrorAction SilentlyContinue` on individual AD calls -- gather as much as possible
+- Non-fatal issues go in the `Warnings` array property
+- Functions that query multiple independent things (baseline, GPO audit) catch per-section and continue
+- Total failure (can't reach AD at all) throws -- the orchestrator catches it and records the failure
+- No Write-Host in API functions
 
-Every probe returns this shape:
+**Config access:**
+All functions read from `$script:Config` (module-scoped, set at import time). Never from `$Global:` or by re-reading the config file. Access via helper:
 
 ```powershell
-@{
-    CheckName     = "NTDS"
-    Status        = "Healthy"  # Enum: Healthy|Degraded|Stopped|Timeout|Unknown
-    Success       = $true      # Target passed the check
-    Value         = "Running"  # Raw observed state (never a derived label)
-    Timestamp     = [datetime]
-    Error         = $null      # Human-readable detail (null when healthy)
-    ErrorCategory = $null      # Machine-readable: AccessDenied|NotFound|Timeout|ProbeError|null
-    ExecutionTime = 87         # Duration in ms
-}
+$threshold = Get-MonarchConfigValue -Key 'DormancyThresholdDays'
 ```
 
-- `Value` is always raw observed state — what the OS/service actually reported
-- `ErrorCategory` distinguishes target failure from probe failure (agents branch on this)
-- `Error` is null when healthy — agents checking `if ($result.Error)` rely on this
+Falls back to built-in defaults if the key is missing from the config file. See `$script:DefaultConfig` at the top of Monarch.psm1 for all keys and defaults.
 
-## Graduated Confidence
-
-When a detection has multiple tiers, return `DetectionTier` indicating how far detection reached. Partial information reduces blast radius even when it doesn't eliminate uncertainty.
-
-Three distinct states: "we checked and it's fine" vs "we found it but can't query it" vs "we found nothing." Each tier is more actionable than null. Backup readiness is the canonical example — see `@docs/mechanism-decisions.md` for the complete three-tier specification.
+**Test strategy:**
+- Pester 5+ in `Tests/Monarch.Tests.ps1`, one `Describe` block per function
+- All AD/DNS/GPO cmdlets are mocked -- tests run without a domain
+- Every function's tests verify: correct properties, correct `Domain` and `Function` values, `Timestamp` populated, `Warnings` is an array
+- Functions with business logic get additional tests: exclusion logic, threshold comparisons, config overrides
 
 ## Domain / Phase Organization
 
-Functions are organized by domain (what they do) and tagged by phase (when they run).
+Functions are organized by domain. Currently only Discovery phase is implemented.
 
-| Domain | Discovery | Review | Remediation | Monitoring | Cleanup |
-|--------|-----------|--------|-------------|------------|---------|
-| Infrastructure Health | ✓ | | | | |
-| Identity Lifecycle | ✓ | | ✓ | ✓ | ✓ |
-| Privileged Access | ✓ | | ✓ | | |
-| Group Policy | ✓ | | ✓ (backup) | | |
-| Security Posture | ✓ | | | | |
-| Backup & Recovery | ✓ | | | | (context) |
-| Audit & Compliance | ✓ | | | | |
-| DNS (AD-Integrated) | ✓ | | | | |
+| Domain | Discovery | Remediation | Monitoring | Cleanup |
+|--------|-----------|-------------|------------|---------|
+| Infrastructure Health | Complete | -- | -- | -- |
+| Identity Lifecycle | Complete | Plan 2 | Plan 2 | Plan 2 |
+| Privileged Access | Complete | Plan 2 | -- | -- |
+| Group Policy | Complete | Plan 2 (backup) | -- | -- |
+| Security Posture | Complete | -- | -- | -- |
+| Backup & Recovery | Complete | -- | -- | -- |
+| Audit & Compliance | Complete | -- | -- | -- |
+| DNS (AD-Integrated) | Complete | -- | -- | -- |
 
-The Review phase is human activity (review findings, validate exclusions, approve plan) — not a function call.
+The Review phase is human activity (review findings, validate exclusions, approve plan) -- not a function call.
 
-The orchestrator (`Invoke-DomainAudit`) calls functions by phase. See `@docs/domain-specs.md` for complete function lists per domain.
+The orchestrator (`Invoke-DomainAudit`) calls functions by phase. See `docs/domain-specs.md` for complete function lists per domain.
+
+## Graduated Confidence
+
+`Get-BackupReadinessStatus` returns a `DetectionTier` indicating how far detection reached:
+
+- **Tier 1** -- tombstone lifetime + Recycle Bin status (always available)
+- **Tier 2** -- backup tool detected via service enumeration or event logs (best-effort)
+- **Tier 3** -- backup age from vendor integration (opt-in config)
+
+Each tier is more actionable than null. "We checked and it's fine" vs "we found it but can't query it" vs "we found nothing." See `docs/mechanism-decisions.md` for the complete backup detection strategy.
 
 ## Conventions
 
@@ -110,32 +128,31 @@ The orchestrator (`Invoke-DomainAudit`) calls functions by phase. See `@docs/dom
 - Silence is success. Console output is thin and optional.
 - `-WhatIf` support required on all destructive operations.
 - Read-only operations never modify state.
-- All configurable values use the config layer — no hardcoded values in function bodies. See `@docs/mechanism-decisions.md` for the config model.
-- Audit workflow language throughout: "audit cycle", "audit phase" — never "handover" or "takeover."
-- All visual output (HTML reports, console formatting) follows @docs/design-system.md — spacing, type scale, color, and component grammar.
+- All configurable values use the config layer -- no hardcoded values in function bodies. See `docs/mechanism-decisions.md` for the config model.
+- Audit workflow language throughout: "audit cycle", "audit phase" -- never "handover" or "takeover."
+- All strings in code and documentation must be ASCII-safe (0x00-0x7F). Non-ASCII characters corrupt silently when transferred between systems.
+- All visual output (HTML reports, console formatting) follows `docs/design-system.md`.
 
-## Three-Tier Output Model
+## Known Constraints
 
-Three levels of interpretation serve different consumers:
-
-1. **Raw probe results** — array of probe contract objects, no interpretation. For custom investigation.
-2. **Orchestrated health score** — `Get-HealthyDC` returns best DC by health score. For DC selection.
-3. **Interpreted domain answers** — monarch-kit functions return graded answers with DetectionTier and DiagnosticHints. For audit workflows.
-
-Not redundant — different questions for different consumers.
+**lastLogonTimestamp replication floor:** The `lastLogonTimestamp` attribute only updates if the previous value is older than `msDS-LogonTimeSyncInterval` (default ~14 days). The code handles this with a 15-day near-threshold window that cross-validates against per-DC `LastLogon` for accounts close to the dormancy cutoff. This means the dormancy threshold config has an effective floor around 30 days -- below that, false positives from replication lag become likely.
 
 ## Reference Documents
 
-- `@docs/domain-specs.md` — eight domains with function lists, return contracts, phase tags, stratagem composition
-- `@docs/mechanism-decisions.md` — config model, disable date tracking, RID patterns, GPO string matching, backup detection tiers, monitoring guidance
-- `@docs/checklists.md` — expert-curated review phase checklists (institutional knowledge, do not regenerate)
+- `docs/domain-specs.md` -- eight domains with function lists, return contracts, phase tags
+- `docs/mechanism-decisions.md` -- config model, disable date tracking, RID patterns, GPO string matching, backup detection tiers, monitoring guidance
+- `docs/checklists.md` -- expert-curated review phase checklists (institutional knowledge, do not regenerate)
+- `docs/design-system.md` -- visual language for HTML reports and console output
+- `docs/dormant-account-policy.md` -- compliance-aligned dormant account lifecycle policy
+- `docs/deployment-guide.md` -- Windows host setup, Pester tests, lab testing, production readiness
+- `docs/gpo-review-guide.md` -- GPO review methods and priority guidance
 
 ## Prototype Reference
 
-The `docs/archive/00-prototype/` directory contains the previous audit toolkit implementation. It is permanent reference material for understanding existing logic and institutional knowledge. When implementing a function, check the prototype scripts for the corresponding logic to understand what was built and why.
+The `docs/archive/00-prototype/` directory contains the previous audit toolkit implementation. It is permanent reference material for understanding existing logic and institutional knowledge. When implementing a function, check the prototype scripts for the corresponding logic.
 
 **The spec wins when prototype code and the domain spec conflict.** The spec is the target state. Prototype code is source material, not authority.
 
 ---
 
-**Last reviewed:** 2026-03-26 | **Review quarterly.** Verify domain specs match implemented code, confirm OctoDoc probe registry still matches stratagem compositions.
+**Last reviewed:** 2026-03-26 | **Review quarterly.** Verify domain specs match implemented code, confirm current state section reflects actual plan progress.

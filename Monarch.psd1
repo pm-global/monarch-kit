@@ -11,7 +11,7 @@
     # checked at runtime by functions that need them.
     RequiredModules   = @('ActiveDirectory')
 
-    # Explicit function exports — no wildcards. Updated as functions are added.
+    # Explicit function exports -- no wildcards. Updated as functions are added.
     FunctionsToExport = @(
 
         # Orchestrator

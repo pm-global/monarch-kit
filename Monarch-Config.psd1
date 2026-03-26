@@ -3,7 +3,7 @@
 #
 # All values below are the built-in defaults. The module works without this file.
 # Uncomment and modify any value to override the default for your environment.
-# Missing keys fall back to built-in defaults — a partial config file is valid.
+# Missing keys fall back to built-in defaults -- a partial config file is valid.
 
 @{
 
@@ -34,7 +34,7 @@
 
     # AD attribute for storing rollback data (JSON: sourceOU + group memberships).
     # Used by Suspend-DormantAccount and Restore-DormantAccount.
-    # Same rationale as DisableDateAttribute — configurable for environments
+    # Same rationale as DisableDateAttribute -- configurable for environments
     # where this attribute is already in use.
     # RollbackDataAttribute = 'extensionAttribute14'
 
@@ -85,7 +85,7 @@
     # =========================================================================
 
     # Years to retain pre-deletion archives. Surfaced in post-deletion output
-    # as a reminder — not enforced by the module.
+    # as a reminder -- not enforced by the module.
     # DeletionArchiveRetentionYears = 7
 
     # =========================================================================

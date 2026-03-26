@@ -1,6 +1,6 @@
 # Monarch-Kit Development Plan
 
-Checklist-driven implementation plan. Each checkbox is a discrete deliverable. Check items off as they're completed. Every step includes its tests — code and tests ship together, never separately.
+Checklist-driven implementation plan. Each checkbox is a discrete deliverable. Check items off as they're completed. Every step includes its tests -- code and tests ship together, never separately.
 
 **Last updated:** 2026-03-26
 
@@ -14,13 +14,13 @@ Checklist-driven implementation plan. Each checkbox is a discrete deliverable. C
 | **Plan 2** | Remediation/Monitoring/Cleanup functions + tests | Not started |
 | **Plan 3** | Start-MonarchAudit interactive wrapper + tests | Not started |
 | **Plan 4** | Comparison functions (GPO, baseline, CIS) + tests | Not started |
-| **Plan 5** | OctoDoc stratagem integration (after sensor redesign) | Blocked — waiting on OctoDoc redesign |
+| **Plan 5** | OctoDoc stratagem integration (after sensor redesign) | Blocked -- waiting on OctoDoc redesign |
 
 Plans are sequential. Each plan depends on the one before it. Plan 5 is triggered externally (OctoDoc redesign), not by Plan 4 completion.
 
 ---
 
-## Plan 1: Discovery Phase — COMPLETE
+## Plan 1: Discovery Phase -- COMPLETE
 
 28 functions, 162 Pester tests, all passing. Implemented in 14 steps.
 
@@ -48,25 +48,25 @@ Plans are sequential. Each plan depends on the one before it. Plan 5 is triggere
 
 **Domain parameter threading:**
 - `Invoke-DomainAudit` accepts `-Domain [string]` (optional, defaults to current domain via `(Get-ADDomain).DNSRoot`)
-- The orchestrator resolves domain → healthy DC once at the top using `Get-HealthyDC`
-- All API functions accept `-Server [string]` — can be a DC name or domain FQDN, maps 1:1 to AD cmdlet `-Server` parameter
+- The orchestrator resolves domain -> healthy DC once at the top using `Get-HealthyDC`
+- All API functions accept `-Server [string]` -- can be a DC name or domain FQDN, maps 1:1 to AD cmdlet `-Server` parameter
 - The orchestrator always passes the resolved DC name as `-Server`
-- Direct callers can pass whatever they want — a DC name, a domain FQDN, or omit it for the local domain default
+- Direct callers can pass whatever they want -- a DC name, a domain FQDN, or omit it for the local domain default
 
 **Return contract pattern (all functions):**
-Every public function returns one or more `[PSCustomObject]` with a `Domain` property naming which functional domain it belongs to (e.g., `'InfrastructureHealth'`, `'IdentityLifecycle'`). No formatted strings as primary output. No Write-Host in API functions. Functions that also produce file output (Export-GPOAudit, Find-DormantAccount) return the structured object AND write files — the object includes paths to generated files.
+Every public function returns one or more `[PSCustomObject]` with a `Domain` property naming which functional domain it belongs to (e.g., `'InfrastructureHealth'`, `'IdentityLifecycle'`). No formatted strings as primary output. No Write-Host in API functions. Functions that also produce file output (Export-GPOAudit, Find-DormantAccount) return the structured object AND write files -- the object includes paths to generated files.
 
 **Error handling pattern:**
-- Read-only functions use `$ErrorActionPreference = 'Continue'` — gather as much as possible, surface errors in a `Warnings` array property on the return object
+- Read-only functions use `$ErrorActionPreference = 'Continue'` -- gather as much as possible, surface errors in a `Warnings` array property on the return object
 - Functions that query multiple independent things (baseline, GPO audit) catch per-section and continue
-- If the entire function fails (can't reach AD at all), throw — let the orchestrator catch it and record the failure
+- If the entire function fails (can't reach AD at all), throw -- let the orchestrator catch it and record the failure
 
 **Config access pattern:**
 All functions read from `$script:Config` (module-scoped variable set at import time). Never from `$Global:` or by re-reading the config file. Config keys are accessed with a helper that falls back to built-in defaults: `Get-MonarchConfigValue -Key 'DormancyThresholdDays'`.
 
 **Test strategy:**
 - Pester 5+ tests in `Tests/Monarch.Tests.ps1`, organized by `Describe` blocks per function
-- All AD/DNS/GPO cmdlets are mocked — tests run without a domain
+- All AD/DNS/GPO cmdlets are mocked -- tests run without a domain
 - Every function's tests verify: return object has correct properties, correct `Domain` and `Function` values, `Timestamp` is populated, `Warnings` is an array
 - Functions with business logic get additional tests: exclusion logic, threshold comparisons, config overrides
 - Tests are written alongside code at each step, not after
@@ -91,7 +91,16 @@ All functions read from `$script:Config` (module-scoped variable set at import t
 | `Backup-GPO` | Remediation | No (read) | Full XML backup for restore capability |
 | `Get-DormantAccountMonitoringMetrics` | Monitoring | No (read) | Queries quarantine OU, counts, hold period status |
 
-**Test focus:** WhatIf produces correct preview output. Rollback data serialization/deserialization round-trips correctly. Hold period calculation correct. Exclusion of accounts without monarch-kit disable dates. Integration tests for suspend → restore cycle and suspend → delete cycle using mocked AD.
+**Test focus:** WhatIf produces correct preview output. Rollback data serialization/deserialization round-trips correctly. Hold period calculation correct. Exclusion of accounts without monarch-kit disable dates. Integration tests for suspend -> restore cycle and suspend -> delete cycle using mocked AD.
+
+**Implementation constraints (discovered 2026-03-26):**
+
+- **Primary Group handling:** Every AD account must have a Primary Group (typically "Domain Users"). `Suspend-DormantAccount` cannot strip it -- must be excluded from group removal or handled specially.
+- **extensionAttribute14 size limit:** AD extensionAttributes 1-15 have a `rangeUpper` of 1024 bytes. Users with many group memberships (20+ groups with long DNs) can exceed this. Need pre-write validation and a fallback strategy (truncate with warning? separate attribute? file-based archive?).
+- **Entra ID Connect sync scope:** Many orgs use OU-based filtering for directory sync. Moving an account to `zQuarantine-Dormant` may move it out of sync scope, causing the cloud identity to soft-delete. Document as a warning in the wrapper's pre-phase guidance.
+- **AdminSDHolder timing:** `adminCount` is set by SDProp on a 60-minute cycle but never cleared automatically. `Remove-AdminCountOrphan` should note that accounts removed from privileged groups <60 minutes ago may still have adminCount=1 legitimately. Consider a DiagnosticHint.
+- **DC targeting for writes:** Discovery uses any healthy DC. Remediation writes (disable, move, strip groups) should target the PDC emulator or a specific writable DC to avoid replication conflicts.
+- **Confirm support:** Add `$ConfirmPreference = 'High'` alongside `-WhatIf` for `Remove-DormantAccount` (permanent deletion). Standard PowerShell safety pattern via `ShouldProcess`.
 
 ---
 
@@ -99,7 +108,7 @@ All functions read from `$script:Config` (module-scoped variable set at import t
 
 **Prerequisite:** Plans 1 and 2 complete.
 
-**Scope:** `Start-MonarchAudit` — the admin-facing entry point.
+**Scope:** `Start-MonarchAudit` -- the admin-facing entry point.
 
 **Key deliverables:**
 - Interactive menu (1-5 phase selection, Q to quit)
@@ -149,7 +158,7 @@ All functions read from `$script:Config` (module-scoped variable set at import t
 - Infrastructure Health: replication, time sync (compose Replication + TimeSync stratagems)
 - Backup & Recovery: backup readiness (compose WSBackup + BackupVendorDetection stratagems)
 
-**What changes:** Internal implementation of affected functions switches from direct AD cmdlets to stratagem composition + `Invoke-DCProbes` + result interpretation. Return contracts stay identical — consumers see no change.
+**What changes:** Internal implementation of affected functions switches from direct AD cmdlets to stratagem composition + `Invoke-DCProbes` + result interpretation. Return contracts stay identical -- consumers see no change.
 
 **What doesn't change:** Function signatures, return contracts, config keys, test assertions (add new tests for stratagem path, keep existing tests for direct-query fallback).
 

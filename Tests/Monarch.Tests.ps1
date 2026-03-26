@@ -2,7 +2,7 @@
 
 # Monarch.Tests.ps1
 # Pester 5+ tests for the Monarch module.
-# All AD/DNS/GPO cmdlets are mocked — tests run without a domain.
+# All AD/DNS/GPO cmdlets are mocked -- tests run without a domain.
 # Organized by Describe blocks per function, added alongside code at each step.
 
 BeforeAll {
@@ -638,7 +638,7 @@ Describe 'New-DomainBaseline' {
 
         It 'cascades to FSMO gracefully with a warning' {
             $result.FSMORoles | Should -BeNullOrEmpty
-            $result.Warnings | Should -Contain 'FSMORoles: skipped — Domain/Forest data unavailable.'
+            $result.Warnings | Should -Contain 'FSMORoles: skipped -- Domain/Forest data unavailable.'
         }
 
         It 'includes the DomainForest error in Warnings' {
@@ -1309,7 +1309,7 @@ Describe 'Get-ReplicationHealth' {
                 )
             }
 
-            # Override threshold to 48h — 30-hour-old link should now be Healthy
+            # Override threshold to 48h -- 30-hour-old link should now be Healthy
             Mock -ModuleName Monarch Get-MonarchConfigValue { 48 } -ParameterFilter {
                 $Key -eq 'ReplicationWarningThresholdHours'
             }
@@ -2835,7 +2835,7 @@ Describe 'Get-BackupReadinessStatus' {
         }
     }
 
-    Context 'Tier 1 only — no backup tool detected' {
+    Context 'Tier 1 only -- no backup tool detected' {
         BeforeAll {
             Mock -ModuleName Monarch Get-ADRootDSE {
                 [PSCustomObject]@{ configurationNamingContext = 'CN=Configuration,DC=test,DC=local' }
@@ -2865,7 +2865,7 @@ Describe 'Get-BackupReadinessStatus' {
         }
     }
 
-    Context 'Tier 2 — Veeam service detected' {
+    Context 'Tier 2 -- Veeam service detected' {
         BeforeAll {
             Mock -ModuleName Monarch Get-ADRootDSE {
                 [PSCustomObject]@{ configurationNamingContext = 'CN=Configuration,DC=test,DC=local' }
@@ -2914,7 +2914,7 @@ Describe 'Get-BackupReadinessStatus' {
         }
     }
 
-    Context 'Tier 3 — backup age within tombstone' {
+    Context 'Tier 3 -- backup age within tombstone' {
         BeforeAll {
             Mock -ModuleName Monarch Get-ADRootDSE {
                 [PSCustomObject]@{ configurationNamingContext = 'CN=Configuration,DC=test,DC=local' }
@@ -2946,7 +2946,7 @@ Describe 'Get-BackupReadinessStatus' {
         }
     }
 
-    Context 'Tier 3 — backup age exceeds tombstone' {
+    Context 'Tier 3 -- backup age exceeds tombstone' {
         BeforeAll {
             Mock -ModuleName Monarch Get-ADRootDSE {
                 [PSCustomObject]@{ configurationNamingContext = 'CN=Configuration,DC=test,DC=local' }
@@ -3038,7 +3038,7 @@ Describe 'Test-SRVRecordCompleteness' {
             $result.Domain | Should -Be 'DNS'
             $result.Sites | Should -HaveCount 0
             $result.AllComplete | Should -Be $false
-            $result.Warnings | Should -Contain 'DnsServer module not available — SRV record check skipped.'
+            $result.Warnings | Should -Contain 'DnsServer module not available -- SRV record check skipped.'
         }
     }
 
@@ -3098,7 +3098,7 @@ Describe 'Get-DNSScavengingConfiguration' {
         It 'returns result with warning and no throw' {
             $result.Domain | Should -Be 'DNS'
             $result.Zones | Should -HaveCount 0
-            $result.Warnings | Should -Contain 'DnsServer module not available — scavenging check skipped.'
+            $result.Warnings | Should -Contain 'DnsServer module not available -- scavenging check skipped.'
         }
     }
 
@@ -3144,7 +3144,7 @@ Describe 'Test-ZoneReplicationScope' {
         It 'returns result with warning and no throw' {
             $result.Domain | Should -Be 'DNS'
             $result.Zones | Should -HaveCount 0
-            $result.Warnings | Should -Contain 'DnsServer module not available — zone replication check skipped.'
+            $result.Warnings | Should -Contain 'DnsServer module not available -- zone replication check skipped.'
         }
     }
 
@@ -3191,7 +3191,7 @@ Describe 'Get-DNSForwarderConfiguration' {
             $result.Domain | Should -Be 'DNS'
             $result.DCForwarders | Should -HaveCount 0
             $result.Consistent | Should -Be $true
-            $result.Warnings | Should -Contain 'DnsServer module not available — forwarder check skipped.'
+            $result.Warnings | Should -Contain 'DnsServer module not available -- forwarder check skipped.'
         }
     }
 
@@ -3406,7 +3406,7 @@ Describe 'New-MonarchReport' {
         It 'advisory appears in domain section not critical section' {
             # Advisory text present in file
             $content | Should -Match '12 dormant accounts identified for review'
-            # Split on critical-section closing tag — advisory should not be before it
+            # Split on critical-section closing tag -- advisory should not be before it
             $critSection = ($content -split 'critical-section')[0]
             $critSection | Should -Not -Match 'dormant accounts'
         }

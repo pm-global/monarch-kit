@@ -49,16 +49,16 @@ How experienced administrators review Group Policy Objects. Three methods from f
 
 **Low priority:**
 - Cosmetic settings (desktop wallpaper, etc.)
-- User preferences (mapped drives — but check for credentials)
+- User preferences (mapped drives -- but check for credentials)
 
 ---
 
 ## Related Tools
 
-- **Microsoft Policy Analyzer** — compares GPOs against baselines
-- **Ping Castle** — free AD security assessment (point-in-time scanner, complements monarch-kit's repeatable audit workflow)
-- **BloodHound** — attack path mapping (use carefully in production)
-- **Semperis Directory Services Protector** — commercial AD security monitoring
+- **Microsoft Policy Analyzer** -- compares GPOs against baselines
+- **Ping Castle** -- free AD security assessment (point-in-time scanner, complements monarch-kit's repeatable audit workflow)
+- **BloodHound** -- attack path mapping (use carefully in production)
+- **Semperis Directory Services Protector** -- commercial AD security monitoring
 
 monarch-kit differs from point-in-time scanners like Ping Castle and BloodHound: it provides a repeatable audit workflow with phased remediation, hold periods, and compliance tracking. Use the scanners for initial assessment, use monarch-kit for the ongoing operational cycle.
 
