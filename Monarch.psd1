@@ -1,10 +1,10 @@
 @{
 
     RootModule        = 'Monarch.psm1'
-    ModuleVersion     = '0.1.0'
+    ModuleVersion     = '0.2.0'
     GUID              = 'a3e7b2c1-4d8f-4e6a-9c3b-1f5d7e8a2b4c'
     Author            = 'monarch-kit contributors'
-    Description       = 'Active Directory audit and administration suite. Composes OctoDoc stratagems for sensor data and provides the interpretation layer that produces actionable domain answers.'
+    Description       = 'Active Directory auditing module. Structured discovery across eight domains, graded findings, HTML reporting.'
     PowerShellVersion = '5.1'
 
     # ActiveDirectory is required. GroupPolicy and DnsServer are optional,

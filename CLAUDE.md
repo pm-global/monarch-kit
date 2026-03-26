@@ -130,14 +130,12 @@ Not redundant — different questions for different consumers.
 - `@docs/mechanism-decisions.md` — config model, disable date tracking, RID patterns, GPO string matching, backup detection tiers, monitoring guidance
 - `@docs/checklists.md` — expert-curated review phase checklists (institutional knowledge, do not regenerate)
 
-## Migration Context (temporary — remove when .v0/ is empty)
+## Prototype Reference
 
-The `.v0/` directory contains the previous audit toolkit implementation. It is reference material for understanding existing logic and institutional knowledge. When implementing a function, check `.v0/` for the corresponding script to understand what was built and why.
+The `docs/archive/00-prototype/` directory contains the previous audit toolkit implementation. It is permanent reference material for understanding existing logic and institutional knowledge. When implementing a function, check the prototype scripts for the corresponding logic to understand what was built and why.
 
-**The spec wins when .v0/ and the domain spec conflict.** The spec is the target state. `.v0/` is source material, not authority.
-
-Delete individual `.v0/` files when their replacement is implemented and tested. When `.v0/` is empty, delete the directory and remove this section from CLAUDE.md.
+**The spec wins when prototype code and the domain spec conflict.** The spec is the target state. Prototype code is source material, not authority.
 
 ---
 
-**Last reviewed:** 2026-03-21 | **Review quarterly.** Verify domain specs match implemented code, prune .v0/ references for completed domains, confirm OctoDoc probe registry still matches stratagem compositions.
+**Last reviewed:** 2026-03-26 | **Review quarterly.** Verify domain specs match implemented code, confirm OctoDoc probe registry still matches stratagem compositions.
