@@ -80,10 +80,12 @@ Import-Module Monarch
 ```
 
 Verify:
-
 ```powershell
-Get-Module Monarch | Format-List Name, Version, ExportedFunctions
-# Should show 28 functions (27 exported + 1 private config helper)
+# Check module loaded and exported functions (27 public)
+(Get-Module Monarch).ExportedFunctions.Keys
+
+# Check all functions including private helpers (30 total: 27 public + 3 private)
+& (Get-Module Monarch) { Get-Command -Module Monarch -CommandType Function }
 ```
 
 ---
