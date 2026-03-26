@@ -3471,5 +3471,82 @@ Describe 'New-MonarchReport' {
 
 # =============================================================================
 # Step 14: Orchestrator
-# Tests added in Step 14 implementation.
 # =============================================================================
+
+Describe 'Invoke-DomainAudit' {
+    BeforeAll {
+        Mock -ModuleName Monarch Resolve-MonarchDC {
+            [PSCustomObject]@{ DCName = 'DC01.test.local'; Domain = 'test.local'; Source = 'HealthyDC' }
+        }
+        $script:discoveryFunctions = @(
+            'New-DomainBaseline', 'Get-FSMORolePlacement', 'Get-ReplicationHealth',
+            'Get-SiteTopology', 'Get-ForestDomainLevel', 'Export-GPOAudit',
+            'Find-UnlinkedGPO', 'Find-GPOPermissionAnomaly',
+            'Get-PrivilegedGroupMembership', 'Find-AdminCountOrphan',
+            'Find-KerberoastableAccount', 'Find-ASREPRoastableAccount',
+            'Find-DormantAccount', 'Get-PasswordPolicyInventory',
+            'Find-WeakAccountFlag', 'Test-ProtectedUsersGap',
+            'Find-LegacyProtocolExposure', 'Get-BackupReadinessStatus',
+            'Test-TombstoneGap', 'Get-AuditPolicyConfiguration',
+            'Get-EventLogConfiguration', 'Test-SRVRecordCompleteness',
+            'Get-DNSScavengingConfiguration', 'Test-ZoneReplicationScope',
+            'Get-DNSForwarderConfiguration'
+        )
+        foreach ($fn in $script:discoveryFunctions) {
+            Mock -ModuleName Monarch $fn {
+                [PSCustomObject]@{ Domain = 'Test'; Function = 'MockFunction'; Timestamp = Get-Date; Warnings = @() }
+            }
+        }
+        Mock -ModuleName Monarch New-MonarchReport { Join-Path $OutputPath '00-Discovery-Report.html' }
+    }
+
+    Context 'Discovery phase with all functions succeeding' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'audit-success'
+            $script:result = Invoke-DomainAudit -Phase Discovery -OutputPath $script:outDir
+        }
+
+        It 'returns correct structure with all results' {
+            $result.Phase | Should -Be 'Discovery'
+            $result.Domain | Should -Be 'test.local'
+            $result.DCUsed | Should -Be 'DC01.test.local'
+            $result.DCSource | Should -Be 'HealthyDC'
+            $result.Results | Should -HaveCount 25
+            $result.Failures | Should -HaveCount 0
+            $result.ReportPath | Should -Not -BeNullOrEmpty
+        }
+
+        It 'creates output directory structure' {
+            Test-Path $script:outDir | Should -BeTrue
+            Test-Path (Join-Path $script:outDir '01-Baseline') | Should -BeTrue
+            Test-Path (Join-Path $script:outDir '02-GPO-Audit') | Should -BeTrue
+            Test-Path (Join-Path $script:outDir '03-Privileged-Access') | Should -BeTrue
+            Test-Path (Join-Path $script:outDir '04-Dormant-Accounts') | Should -BeTrue
+        }
+
+        It 'generates report and returns path' {
+            $result.ReportPath | Should -Match '00-Discovery-Report\.html'
+        }
+    }
+
+    Context 'Function failure isolation' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ReplicationHealth { throw 'Replication query failed' }
+            $script:outDir = Join-Path $TestDrive 'audit-failure'
+            $script:result = Invoke-DomainAudit -Phase Discovery -OutputPath $script:outDir
+        }
+
+        It 'records failure and continues with remaining functions' {
+            $result.Results | Should -HaveCount 24
+            $result.Failures | Should -HaveCount 1
+            $result.Failures[0].Function | Should -Be 'Get-ReplicationHealth'
+            $result.Failures[0].Error | Should -Match 'Replication query failed'
+        }
+    }
+
+    Context 'Non-Discovery phase' {
+        It 'throws not-implemented error' {
+            { Invoke-DomainAudit -Phase Remediation -OutputPath $TestDrive } | Should -Throw '*not yet implemented*'
+        }
+    }
+}

@@ -2690,6 +2690,103 @@ function New-MonarchReport
 # Invoke-DomainAudit coordinates which functions run per phase.
 # Start-MonarchAudit (interactive wrapper) is Plan 3.
 
+function Invoke-DomainAudit
+{
+    <#
+    .SYNOPSIS
+        Orchestrates an audit phase by calling the appropriate API functions in sequence.
+    .PARAMETER Phase
+        Which audit phase to run.
+    .PARAMETER Domain
+        Domain FQDN. If omitted, uses the current domain.
+    .PARAMETER OutputPath
+        Root output directory. Defaults to Monarch-Audit-yyyyMMdd.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateSet('Discovery','Review','Remediation','Monitoring','Cleanup')]
+        [string]$Phase,
+        [string]$Domain,
+        [string]$OutputPath
+    )
+
+    if ($Phase -ne 'Discovery') { throw "Phase '$Phase' is not yet implemented." }
+
+    # Resolve DC — fatal if fails
+    $target = Resolve-MonarchDC -Domain $Domain
+    $dc = $target.DCName
+    $startTime = Get-Date
+
+    # Output directory structure
+    if (-not $OutputPath) { $OutputPath = "Monarch-Audit-$(Get-Date -Format yyyyMMdd)" }
+    if (-not (Test-Path $OutputPath)) { New-Item -ItemType Directory -Path $OutputPath -Force | Out-Null }
+    $dirs = @{
+        Baseline = Join-Path $OutputPath '01-Baseline'
+        GPO      = Join-Path $OutputPath '02-GPO-Audit'
+        Priv     = Join-Path $OutputPath '03-Privileged-Access'
+        Dormant  = Join-Path $OutputPath '04-Dormant-Accounts'
+    }
+    foreach ($d in $dirs.Values) { if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null } }
+
+    # Discovery function sequence
+    $calls = @(
+        @{ Name = 'New-DomainBaseline';           Params = @{ Server = $dc; OutputPath = $dirs.Baseline } }
+        @{ Name = 'Get-FSMORolePlacement';         Params = @{ Server = $dc } }
+        @{ Name = 'Get-ReplicationHealth';         Params = @{ Server = $dc } }
+        @{ Name = 'Get-SiteTopology';              Params = @{ Server = $dc } }
+        @{ Name = 'Get-ForestDomainLevel';         Params = @{ Server = $dc } }
+        @{ Name = 'Export-GPOAudit';               Params = @{ Server = $dc; OutputPath = $dirs.GPO } }
+        @{ Name = 'Find-UnlinkedGPO';              Params = @{ Server = $dc } }
+        @{ Name = 'Find-GPOPermissionAnomaly';     Params = @{ Server = $dc } }
+        @{ Name = 'Get-PrivilegedGroupMembership'; Params = @{ Server = $dc } }
+        @{ Name = 'Find-AdminCountOrphan';         Params = @{ Server = $dc } }
+        @{ Name = 'Find-KerberoastableAccount';    Params = @{ Server = $dc } }
+        @{ Name = 'Find-ASREPRoastableAccount';    Params = @{ Server = $dc } }
+        @{ Name = 'Find-DormantAccount';           Params = @{ Server = $dc; OutputPath = $dirs.Dormant } }
+        @{ Name = 'Get-PasswordPolicyInventory';   Params = @{ Server = $dc } }
+        @{ Name = 'Find-WeakAccountFlag';          Params = @{ Server = $dc } }
+        @{ Name = 'Test-ProtectedUsersGap';        Params = @{ Server = $dc } }
+        @{ Name = 'Find-LegacyProtocolExposure';   Params = @{ Server = $dc } }
+        @{ Name = 'Get-BackupReadinessStatus';     Params = @{ Server = $dc } }
+        @{ Name = 'Test-TombstoneGap';             Params = @{ Server = $dc } }
+        @{ Name = 'Get-AuditPolicyConfiguration';  Params = @{ Server = $dc } }
+        @{ Name = 'Get-EventLogConfiguration';     Params = @{ Server = $dc } }
+        @{ Name = 'Test-SRVRecordCompleteness';    Params = @{ Server = $dc } }
+        @{ Name = 'Get-DNSScavengingConfiguration'; Params = @{ Server = $dc } }
+        @{ Name = 'Test-ZoneReplicationScope';     Params = @{ Server = $dc } }
+        @{ Name = 'Get-DNSForwarderConfiguration'; Params = @{ Server = $dc } }
+    )
+
+    # Execute with per-function error isolation
+    $results = [System.Collections.Generic.List[PSCustomObject]]::new()
+    $failures = [System.Collections.Generic.List[PSCustomObject]]::new()
+    foreach ($call in $calls) {
+        try {
+            $params = $call.Params
+            $results.Add((& $call.Name @params))
+        } catch {
+            $failures.Add([PSCustomObject]@{ Function = $call.Name; Error = $_.Exception.Message })
+        }
+    }
+
+    # Generate report and return
+    $orchestratorResult = [PSCustomObject]@{
+        Phase      = 'Discovery'
+        Domain     = $target.Domain
+        DCUsed     = $dc
+        DCSource   = $target.Source
+        StartTime  = $startTime
+        EndTime    = Get-Date
+        OutputPath = $OutputPath
+        ReportPath = $null
+        Results    = @($results)
+        Failures   = @($failures)
+    }
+    $orchestratorResult.ReportPath = New-MonarchReport -Results $orchestratorResult -OutputPath $OutputPath
+    return $orchestratorResult
+}
+
 #endregion Orchestrator
 
 # ============================================================================

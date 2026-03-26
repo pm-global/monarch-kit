@@ -977,7 +977,7 @@ Discovery results need a human-readable report. The structured objects from all 
 
 ### Step 14: Orchestrator — `Invoke-DomainAudit`
 
-- [ ] **`Invoke-DomainAudit`**
+- [x] **`Invoke-DomainAudit`** (in `#region Orchestrator`, line 2693)
 
   Signature:
   ```
