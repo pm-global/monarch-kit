@@ -3361,8 +3361,113 @@ Describe 'Get-EventLogConfiguration' {
 
 # =============================================================================
 # Step 13: Reporting
-# Tests added in Step 13 implementation.
 # =============================================================================
+
+Describe 'New-MonarchReport' {
+    BeforeAll {
+        Mock -ModuleName Monarch Get-MonarchConfigValue { '#2E5090' }
+    }
+
+    Context 'Well-formed results with mixed findings' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-mixed'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase     = 'Discovery'
+                Domain    = 'contoso.com'
+                DCUsed    = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'
+                EndTime   = [datetime]'2026-03-25 14:30'
+                Results   = @(
+                    [PSCustomObject]@{ Domain = 'BackupReadiness'; Function = 'Get-BackupReadinessStatus'; CriticalGap = $true; DetectionTier = 2; BackupToolDetected = 'Veeam'; TombstoneLifetimeDays = 180; RecycleBinEnabled = $true; Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'IdentityLifecycle'; Function = 'Find-DormantAccount'; TotalCount = 12; NeverLoggedOnCount = 3; Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'DNS'; Function = 'Test-SRVRecordCompleteness'; AllComplete = $true; Sites = @(); Warnings = @() }
+                )
+                Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'produces HTML file and returns path' {
+            $result | Should -Be (Join-Path $outDir '00-Discovery-Report.html')
+            Test-Path $result | Should -BeTrue
+        }
+
+        It 'has correct executive summary counts' {
+            $content | Should -Match "stat-number'>1</div><div class='stat-label'>Critical"
+            $content | Should -Match "stat-number'>1</div><div class='stat-label'>Advisory"
+        }
+
+        It 'critical finding appears in critical section' {
+            $content | Should -Match 'Backup age exceeds tombstone lifetime'
+        }
+
+        It 'advisory appears in domain section not critical section' {
+            # Advisory text present in file
+            $content | Should -Match '12 dormant accounts identified for review'
+            # Split on critical-section closing tag — advisory should not be before it
+            $critSection = ($content -split 'critical-section')[0]
+            $critSection | Should -Not -Match 'dormant accounts'
+        }
+
+        It 'clean domain appears in clean-domains line not as own section' {
+            $content | Should -Match 'No findings:.*DNS'
+            $content | Should -Not -Match "<h2>DNS</h2>"
+        }
+    }
+
+    Context 'Empty results and no failures' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-empty'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:01'
+                Results = @(); Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'produces report with zero counts and no domain sections' {
+            Test-Path $result | Should -BeTrue
+            $content | Should -Match "stat-number'>0</div><div class='stat-label'>Critical"
+            $content | Should -Not -Match "<div class='domain-section'>"
+        }
+    }
+
+    Context 'All functions failed' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-allfail'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:02'
+                Results = @()
+                Failures = @(
+                    [PSCustomObject]@{ Function = 'Get-ReplicationHealth'; Error = 'Access denied to DC02' }
+                    [PSCustomObject]@{ Function = 'Find-DormantAccount'; Error = 'LDAP timeout' }
+                )
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'shows zero completed and failures section' {
+            $content | Should -Match "stat-number'>0</div><div class='stat-label'>Functions"
+            $content | Should -Match "stat-number'>2</div><div class='stat-label'>Errors"
+            $content | Should -Match 'failures-section'
+        }
+
+        It 'failure entry shows function name and error message' {
+            $content | Should -Match 'Get-ReplicationHealth'
+            $content | Should -Match 'Access denied to DC02'
+            $content | Should -Match 'Find-DormantAccount'
+            $content | Should -Match 'LDAP timeout'
+        }
+    }
+}
 
 # =============================================================================
 # Step 14: Orchestrator

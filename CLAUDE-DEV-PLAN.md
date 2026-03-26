@@ -947,7 +947,7 @@ All four functions require DnsServer module. Each checks availability first — 
 
 Discovery results need a human-readable report. The structured objects from all functions are the data source. Reporting is a presentation concern — it reads the orchestrator's return object and generates output.
 
-- [ ] **`New-MonarchReport`** (private or public — decide during implementation)
+- [x] **`New-MonarchReport`** (public, in `#region Reporting`, line 2407)
 
   | Parameter | Type | Description |
   |-----------|------|-------------|

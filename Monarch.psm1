@@ -2404,6 +2404,286 @@ function Get-DNSForwarderConfiguration {
 #region Reporting
 # Generates human-readable reports from structured Discovery results.
 
+function New-MonarchReport
+{
+    <#
+    .SYNOPSIS
+        Generates a single-page HTML Discovery report from orchestrator results.
+    .PARAMETER Results
+        Orchestrator return object (Phase, Domain, DCUsed, StartTime, EndTime, Results, Failures).
+    .PARAMETER OutputPath
+        Directory to write the report file.
+    .PARAMETER Format
+        Output format. Currently only 'HTML' is supported.
+    #>
+    [CmdletBinding()]
+    param(
+        [PSCustomObject]$Results,
+        [string]$OutputPath,
+        [string]$Format = 'HTML'
+    )
+
+    $reportFile = Join-Path $OutputPath '00-Discovery-Report.html'
+
+    # Config-driven accent color
+    $accent = Get-MonarchConfigValue -Key 'ReportAccentPrimary'
+    if (-not $accent) { $accent = '#2E5090' }
+
+    # Null results — minimal report
+    if (-not $Results) {
+        $html = "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><title>Discovery Report</title></head>" +
+            "<body><p>No data available.</p></body></html>"
+        $html | Out-File -FilePath $reportFile -Encoding UTF8
+        return $reportFile
+    }
+
+    # Extract header data
+    $domain = $Results.Domain
+    $dc = $Results.DCUsed
+    $startTime = $Results.StartTime
+    $duration = if ($Results.StartTime -and $Results.EndTime) {
+        $span = $Results.EndTime - $Results.StartTime
+        if ($span.TotalMinutes -ge 1) { "$([math]::Round($span.TotalMinutes)) minutes" } else { "$([math]::Round($span.TotalSeconds)) seconds" }
+    } else { 'N/A' }
+    $dateStr = if ($startTime) { $startTime.ToString('MMMM d, yyyy HH:mm') } else { (Get-Date).ToString('MMMM d, yyyy HH:mm') }
+    $resultsList = @($Results.Results)
+    $failures = @($Results.Failures)
+    $functionCount = $resultsList.Count
+    $errorCount = $failures.Count
+
+    # Domain display name mapping
+    $domainNames = @{
+        'BackupReadiness'      = 'Backup &amp; Recovery'
+        'InfrastructureHealth' = 'Infrastructure Health'
+        'PrivilegedAccess'     = 'Privileged Access'
+        'IdentityLifecycle'    = 'Identity Lifecycle'
+        'GroupPolicy'          = 'Group Policy'
+        'SecurityPosture'      = 'Security Posture'
+        'AuditCompliance'      = 'Audit &amp; Compliance'
+        'DNS'                  = 'DNS'
+    }
+
+    # Domain priority ordering for sections with findings
+    $domainOrder = @('BackupReadiness','InfrastructureHealth','PrivilegedAccess','IdentityLifecycle','GroupPolicy','SecurityPosture','AuditCompliance','DNS')
+
+    # --- Critical findings extraction ---
+    $criticals = [System.Collections.Generic.List[PSCustomObject]]::new()
+    $advisories = [System.Collections.Generic.List[PSCustomObject]]::new()
+
+    foreach ($r in $resultsList) {
+        $dn = if ($domainNames.ContainsKey($r.Domain)) { $domainNames[$r.Domain] } else { $r.Domain }
+        switch ($r.Function) {
+            'Get-BackupReadinessStatus' {
+                if ($r.CriticalGap -eq $true) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'Backup age exceeds tombstone lifetime — USN rollback risk' }) }
+                if ($r.DetectionTier -eq 1 -and $null -eq $r.BackupToolDetected) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'No backup tool detected — verify backup coverage manually' }) }
+            }
+            'Get-ReplicationHealth' {
+                if ($r.FailedLinkCount -gt 0) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.FailedLinkCount) replication links failing" }) }
+                if ($r.WarningLinkCount -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.WarningLinkCount) replication links approaching threshold" }) }
+            }
+            'Get-PrivilegedGroupMembership' {
+                if ($r.DomainAdminStatus -eq 'Critical') { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "Domain Admin count exceeds critical threshold ($($r.DomainAdminCount) members)" }) }
+                if ($r.DomainAdminStatus -eq 'Warning') { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "Domain Admin count exceeds warning threshold ($($r.DomainAdminCount) members)" }) }
+            }
+            'Find-DormantAccount' {
+                if ($r.TotalCount -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.TotalCount) dormant accounts identified for review" }) }
+            }
+            'Get-SiteTopology' {
+                if ($r.UnassignedSubnets.Count -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.UnassignedSubnets.Count) subnets not assigned to any site" }) }
+                if ($r.EmptySites.Count -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.EmptySites.Count) sites with no domain controllers" }) }
+            }
+            'Test-SRVRecordCompleteness' {
+                if ($r.AllComplete -eq $false) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "Missing SRV records in $(@($r.Sites | Where-Object { $_.MissingRecords.Count -gt 0 }).Count) sites" }) }
+            }
+            'Get-AuditPolicyConfiguration' {
+                if ($r.Consistent -eq $false) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'Audit policy inconsistent across domain controllers' }) }
+            }
+            'Get-DNSForwarderConfiguration' {
+                if ($r.Consistent -eq $false) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'DNS forwarder configuration inconsistent across DCs' }) }
+            }
+            'Find-KerberoastableAccount' {
+                if ($r.PrivilegedCount -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.PrivilegedCount) privileged accounts with SPNs (Kerberoasting risk)" }) }
+            }
+            'Test-ProtectedUsersGap' {
+                if ($r.GapAccounts.Count -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.GapAccounts.Count) privileged accounts not in Protected Users" }) }
+            }
+            'Find-AdminCountOrphan' {
+                if ($r.Count -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.Count) AdminCount orphans (stale privilege markers)" }) }
+            }
+            'Export-GPOAudit' {
+                if ($r.UnlinkedCount -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.UnlinkedCount) unlinked (orphaned) GPOs" }) }
+            }
+        }
+    }
+
+    $criticalCount = $criticals.Count
+    $advisoryCount = $advisories.Count
+
+    # --- CSS from design system ---
+    $css = ":root{--accent-primary:${accent};--severity-critical:#C62828;--severity-critical-light:#FFF5F5;--severity-advisory:#F9A825;--severity-advisory-text:#1A1A1A;" +
+        "--bg-page:#FFFFFF;--bg-card:#F8F9FA;--text-1:#1A1A1A;--text-2:#555555;--text-3:#888888;--border-1:#E0E0E0;--border-2:#CCCCCC;" +
+        "--gap-micro:4px;--gap-tight:8px;--gap-related:16px;--gap-separate:32px;--t1:30px;--t2:24px;--t3:19px;--t4:15px;--t5:12px;--card-radius:4px}" +
+        "*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;line-height:normal}" +
+        "html{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;color:var(--text-1);background:var(--bg-page)}" +
+        ".container{max-width:960px;margin:0 auto;padding:40px}" +
+        ".report-title{font-size:var(--t1);font-weight:600;color:var(--accent-primary);line-height:1.15;margin-bottom:var(--gap-tight)}" +
+        ".report-meta{font-size:var(--t5);line-height:1.3;color:var(--text-2);display:flex;flex-wrap:wrap;column-gap:24px;row-gap:var(--gap-micro);margin-bottom:var(--gap-related)}" +
+        ".stats{display:flex;flex-wrap:wrap;column-gap:12px;row-gap:var(--gap-tight);padding-bottom:var(--gap-related);margin-bottom:var(--gap-related);border-bottom:2px solid var(--border-2)}" +
+        ".stat{display:flex;align-items:center;gap:var(--gap-tight);padding:var(--gap-tight) 20px;border-radius:var(--card-radius)}" +
+        ".stat-number{font-size:var(--t2);font-weight:700;line-height:1}" +
+        ".stat-label{font-size:var(--t5);line-height:1;text-transform:uppercase;letter-spacing:0.05em;font-weight:600}" +
+        ".stat.w-critical{background:var(--severity-critical)}.stat.w-critical .stat-number,.stat.w-critical .stat-label{color:#FFF}" +
+        ".stat.w-advisory{background:var(--severity-advisory)}.stat.w-advisory .stat-number,.stat.w-advisory .stat-label{color:var(--severity-advisory-text)}" +
+        ".stat.w-outline{border:2px solid var(--border-1)}.stat.w-outline .stat-number{color:var(--text-1)}.stat.w-outline .stat-label{color:var(--text-2)}" +
+        ".stat.w-outline.zero .stat-number,.stat.w-outline.zero .stat-label{color:var(--text-3)}" +
+        ".section-label{font-size:var(--t5);line-height:1;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:var(--gap-tight)}" +
+        ".section-label.critical{color:var(--severity-critical)}.section-label.neutral{color:var(--text-2)}" +
+        ".card{padding:var(--gap-tight) var(--gap-related);margin-bottom:var(--gap-tight)}" +
+        ".card.w-critical{border-left:4px solid var(--severity-critical);background:var(--severity-critical-light)}" +
+        ".card.w-advisory{border-left:3px solid var(--severity-advisory)}.card.w-neutral{border-left:3px solid var(--border-2)}" +
+        ".card .domain-tag{font-size:var(--t5);line-height:1;color:var(--text-2);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:var(--gap-micro)}" +
+        ".card .description{font-size:var(--t4);line-height:1.35;font-weight:500}" +
+        ".card .action-hint{font-size:var(--t5);line-height:1.4;color:var(--text-2);margin-top:var(--gap-micro)}" +
+        ".card .adv-label{font-size:var(--t5);line-height:1;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-2);margin-bottom:var(--gap-micro)}" +
+        ".critical-section{margin-bottom:var(--gap-separate)}" +
+        ".domain-section{border-top:1px solid var(--border-1);padding-top:var(--gap-tight);margin-top:calc(var(--gap-separate) - var(--gap-tight))}" +
+        ".domain-section h2{font-size:var(--t3);line-height:1.2;font-weight:600;color:var(--accent-primary);margin-bottom:var(--gap-tight)}" +
+        ".domain-metrics{display:flex;flex-wrap:wrap;column-gap:24px;row-gap:var(--gap-micro);font-size:var(--t4);line-height:1.3;margin-bottom:var(--gap-related)}" +
+        ".domain-metric{color:var(--text-1)}.domain-metric strong{font-weight:600}" +
+        ".clean-domains{color:var(--text-3);font-size:var(--t4);line-height:1.3;padding:var(--gap-related) 0;border-top:1px solid var(--border-1);margin-top:var(--gap-related)}" +
+        ".failures-section{margin-top:var(--gap-separate);border-top:2px solid var(--border-1);padding-top:var(--gap-related)}" +
+        ".failure-item{font-family:'Cascadia Code','Consolas',monospace;font-size:var(--t5);line-height:1.4}" +
+        ".failure-item .fn-name{font-weight:600;color:var(--text-1)}.failure-item .fn-error{color:var(--text-2);margin-top:var(--gap-micro)}" +
+        ".output-section{margin-top:var(--gap-separate);border-top:2px solid var(--border-1);padding-top:var(--gap-related)}" +
+        ".file-tree{font-family:'Cascadia Code','Consolas',monospace;font-size:var(--t5);margin-top:var(--gap-tight)}" +
+        ".file-tree .group{margin-bottom:var(--gap-related)}.file-tree .group:last-child{margin-bottom:0}" +
+        ".file-tree .folder{font-weight:600;color:var(--text-1);text-decoration:none;display:block;line-height:1.3;margin-bottom:var(--gap-micro)}" +
+        ".file-tree .tree-children{padding-left:var(--gap-related);border-left:1px solid var(--border-1)}" +
+        ".file-tree .tree-item{color:var(--text-2);line-height:1.8;position:relative}.file-tree .tree-item::before{content:'─ ';color:var(--text-3)}" +
+        ".report-footer{margin-top:calc(var(--gap-separate) + var(--gap-related));padding-top:var(--gap-related);border-top:1px solid var(--border-1);" +
+        "font-size:var(--t5);line-height:1;color:var(--text-3);display:flex;flex-wrap:wrap;justify-content:space-between;column-gap:var(--gap-related);row-gap:var(--gap-micro)}" +
+        "@media(max-width:600px){.container{padding:var(--gap-related)}}" +
+        "@media print{body{max-width:100%}.container{padding:var(--gap-related);max-width:100%}" +
+        ".stat{border:1px solid #999;background:none!important}.stat .stat-number,.stat .stat-label{color:#000!important}" +
+        ".stat.w-critical{border-left:4px solid #000}.stat.w-advisory{border-left:4px solid #666}" +
+        ".card.w-critical{border-left:4px solid #000;background:none}.card.w-advisory{border-left:3px solid #666;background:none}" +
+        ".card.w-neutral{border-left:3px solid #999;background:none}a{color:#000;text-decoration:none}" +
+        "h2{page-break-after:avoid}.domain-section{page-break-inside:avoid}summary{list-style:none}summary::-webkit-details-marker{display:none}}"
+
+    # --- Assemble HTML ---
+    $html = "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1.0'>" +
+        "<title>Discovery Report — $domain</title><style>$css</style></head><body><div class='container'>"
+
+    # Header
+    $html += "<div class='report-title'>Discovery Report — $domain</div>"
+    $html += "<div class='report-meta'><span>$dc</span><span>$dateStr</span><span>Duration: $duration</span></div>"
+
+    # Stats
+    $critClass = if ($criticalCount -gt 0) { 'stat w-critical' } else { 'stat w-outline zero' }
+    $advClass = if ($advisoryCount -gt 0) { 'stat w-advisory' } else { 'stat w-outline zero' }
+    $errClass = if ($errorCount -gt 0) { 'stat w-outline' } else { 'stat w-outline zero' }
+    $html += "<div class='stats'>" +
+        "<div class='$critClass'><div class='stat-number'>$criticalCount</div><div class='stat-label'>Critical</div></div>" +
+        "<div class='$advClass'><div class='stat-number'>$advisoryCount</div><div class='stat-label'>Advisory</div></div>" +
+        "<div class='stat w-outline'><div class='stat-number'>$functionCount</div><div class='stat-label'>Functions</div></div>" +
+        "<div class='$errClass'><div class='stat-number'>$errorCount</div><div class='stat-label'>Errors</div></div>" +
+        "</div>"
+
+    # Critical findings section
+    if ($criticalCount -gt 0) {
+        $html += "<div class='critical-section'><div class='section-label critical'>Critical Findings</div>"
+        foreach ($c in $criticals) {
+            $html += "<div class='card w-critical'><div class='domain-tag'>$($c.DisplayDomain)</div><div class='description'>$($c.Description)</div></div>"
+        }
+        $html += "</div>"
+    }
+
+    # Domain sections — only domains with findings
+    $findingDomains = @{}
+    foreach ($f in @($criticals) + @($advisories)) {
+        if (-not $findingDomains.ContainsKey($f.Domain)) { $findingDomains[$f.Domain] = [System.Collections.Generic.List[PSCustomObject]]::new() }
+        $findingDomains[$f.Domain].Add($f)
+    }
+
+    foreach ($d in $domainOrder) {
+        if (-not $findingDomains.ContainsKey($d)) { continue }
+        $dn = if ($domainNames.ContainsKey($d)) { $domainNames[$d] } else { $d }
+        $html += "<div class='domain-section'><h2>$dn</h2><div class='domain-metrics'>"
+
+        # Domain-specific metrics from result data
+        $domainResult = $resultsList | Where-Object { $_.Domain -eq $d } | Select-Object -First 1
+        if ($domainResult) {
+            switch ($d) {
+                'BackupReadiness' {
+                    if ($null -ne $domainResult.TombstoneLifetimeDays) { $html += "<div class='domain-metric'>Tombstone Lifetime: <strong>$($domainResult.TombstoneLifetimeDays) days</strong></div>" }
+                    if ($null -ne $domainResult.RecycleBinEnabled) { $html += "<div class='domain-metric'>Recycle Bin: <strong>$(if ($domainResult.RecycleBinEnabled) {'Enabled'} else {'Disabled'})</strong></div>" }
+                    if ($null -ne $domainResult.DetectionTier) { $html += "<div class='domain-metric'>Detection Tier: <strong>$($domainResult.DetectionTier) of 3</strong></div>" }
+                }
+            }
+        }
+        $html += "</div>"
+
+        # Advisory cards for this domain
+        $domainAdvisories = @($advisories | Where-Object { $_.Domain -eq $d })
+        foreach ($a in $domainAdvisories) {
+            $html += "<div class='card w-advisory'><div class='adv-label'>Advisory</div><div class='description'>$($a.Description)</div></div>"
+        }
+        $html += "</div>"
+    }
+
+    # Clean domains line
+    $allDomains = @($resultsList | ForEach-Object { $_.Domain } | Sort-Object -Unique)
+    $cleanDomains = @($allDomains | Where-Object { -not $findingDomains.ContainsKey($_) })
+    if ($cleanDomains.Count -gt 0) {
+        $cleanNames = ($cleanDomains | ForEach-Object { if ($domainNames.ContainsKey($_)) { $domainNames[$_] } else { $_ } }) -join ', '
+        $html += "<div class='clean-domains'>No findings: $cleanNames</div>"
+    }
+
+    # Failures section
+    if ($errorCount -gt 0) {
+        $html += "<div class='failures-section'><div class='section-label neutral'>Function Errors</div>"
+        foreach ($f in $failures) {
+            $html += "<div class='card w-neutral failure-item'><div class='fn-name'>$($f.Function)</div><div class='fn-error'>$($f.Error)</div></div>"
+        }
+        $html += "</div>"
+    }
+
+    # Output files tree — collect from result properties
+    $allPaths = @()
+    foreach ($r in $resultsList) {
+        if ($r.PSObject.Properties['OutputPaths'] -and $r.OutputPaths) {
+            $r.OutputPaths.PSObject.Properties | Where-Object { $_.Value } | ForEach-Object { $allPaths += $_.Value }
+        }
+        if ($r.PSObject.Properties['CSVPath'] -and $r.CSVPath) { $allPaths += $r.CSVPath }
+        if ($r.PSObject.Properties['OutputFiles'] -and $r.OutputFiles) { $allPaths += @($r.OutputFiles) }
+    }
+    if ($allPaths.Count -gt 0) {
+        $groups = @{}
+        foreach ($p in $allPaths) {
+            $rel = if ($OutputPath -and $p.StartsWith($OutputPath)) { $p.Substring($OutputPath.Length).TrimStart('\','/') } else { $p }
+            $parts = $rel -split '[/\\]'
+            $folder = if ($parts.Count -gt 1) { $parts[0] } else { '.' }
+            if (-not $groups.ContainsKey($folder)) { $groups[$folder] = [System.Collections.Generic.List[string]]::new() }
+            $child = if ($parts.Count -gt 1) { ($parts[1..($parts.Count-1)] -join '/') } else { $parts[0] }
+            $groups[$folder].Add($child)
+        }
+        $html += "<div class='output-section'><div class='section-label neutral'>Output Files</div><div class='file-tree'>"
+        foreach ($folder in ($groups.Keys | Sort-Object)) {
+            $html += "<div class='group'><span class='folder'>$folder/</span><div class='tree-children'>"
+            foreach ($item in $groups[$folder]) { $html += "<div class='tree-item'>$item</div>" }
+            $html += "</div></div>"
+        }
+        $html += "</div></div>"
+    }
+
+    # Footer
+    $html += "<div class='report-footer'><span>monarch-kit</span><span>Generated $((Get-Date).ToString('MMMM d, yyyy HH:mm'))</span></div>"
+    $html += "</div></body></html>"
+
+    $html | Out-File -FilePath $reportFile -Encoding UTF8
+    return $reportFile
+}
+
 #endregion Reporting
 
 #region Orchestrator
