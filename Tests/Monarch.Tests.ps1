@@ -7,8 +7,8 @@
 
 BeforeAll {
     # Import the module from the project root, not from any installed location.
-    $modulePath = Join-Path $PSScriptRoot '..' 'Monarch.psm1'
-
+    $modulePath = "$PSScriptRoot\..\Monarch.psm1"
+    
     # Remove the module if already loaded so we get a fresh import.
     if (Get-Module -Name 'Monarch')
     {
@@ -42,7 +42,7 @@ Describe 'Module: Load and Export' {
         # Read the .psd1 manifest directly to verify it declares the full export list.
         # This tests manifest correctness, not runtime exports (which depend on
         # whether functions are implemented yet).
-        $manifestPath = Join-Path $PSScriptRoot '..' 'Monarch.psd1'
+        $manifestPath = "$PSScriptRoot\..\Monarch.psd1"
         $manifest = Import-PowerShellDataFile -Path $manifestPath
 
         $expectedFunctions = @(
@@ -82,7 +82,8 @@ Describe 'Module: Load and Export' {
     }
 
     It 'manifest does not list private functions' {
-        $manifestPath = Join-Path $PSScriptRoot '..' 'Monarch.psd1'
+    	
+        $manifestPath = "$PSScriptRoot\..\Monarch.psd1"
         $manifest = Import-PowerShellDataFile -Path $manifestPath
 
         $privateFunctions = @(
@@ -98,7 +99,7 @@ Describe 'Module: Load and Export' {
     }
 
     It 'manifest does not export variables' {
-        $manifestPath = Join-Path $PSScriptRoot '..' 'Monarch.psd1'
+        $manifestPath = "$PSScriptRoot\..\Monarch.psd1"
         $manifest = Import-PowerShellDataFile -Path $manifestPath
         $manifest.VariablesToExport | Should -Be @()
     }
@@ -198,7 +199,7 @@ Describe 'Config: File Override' {
         '@{ DormancyThresholdDays = 120 }' | Set-Content -Path $tempConfig
 
         # Copy the module to the temp dir so it finds the config file next to it.
-        Copy-Item (Join-Path $PSScriptRoot '..' 'Monarch.psm1') $tempDir
+        Copy-Item ("$PSScriptRoot\..\Monarch.psm1") $tempDir
 
         # Re-import from the temp dir.
         if (Get-Module -Name 'Monarch')
@@ -214,7 +215,7 @@ Describe 'Config: File Override' {
         if (Get-Module -Name 'Monarch')
         { Remove-Module -Name 'Monarch' -Force
         }
-        Import-Module (Join-Path $PSScriptRoot '..' 'Monarch.psm1') -Force
+        Import-Module ("$PSScriptRoot\..\Monarch.psm1") -Force
 
         # Clean up temp dir.
         if (Test-Path $tempDir)
@@ -2812,7 +2813,7 @@ Describe 'Export-GPOAudit' {
         }
 
         It 'sanitizes filenames by stripping invalid characters' {
-            $indexPath = Join-Path $tmpDir '01-HTML-Reports' '00-INDEX.html'
+            $indexPath = "$tmpDir\01-HTML-Reports\00-INDEX.html"
             $indexContent = Get-Content $indexPath -Raw
             # Filename in href is sanitized, display name preserved
             $indexContent | Should -Match "href='Bad_Name_Test_Policy\.html'"
