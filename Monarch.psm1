@@ -59,6 +59,14 @@ $script:DefaultConfig = @{
 
     # DC Selection
     HealthyDCThreshold         = 7
+
+    # Advisory Thresholds
+    MinPasswordLength          = 14
+    RequireLockoutThreshold    = $true
+    MinSecurityLogSizeKB       = 1048576
+    AcceptableOverflowActions  = @('ArchiveTheLogWhenFull')
+    RequireDNSScavenging       = $true
+    RequireDSIntegration       = $true
 }
 
 # Module-scoped config -- populated by Import-MonarchConfig at load time.
