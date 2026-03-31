@@ -522,7 +522,7 @@ function Get-ReplicationHealth
     {
         try
         {
-            $metadata = @(Get-ADReplicationPartnerMetadata -Target $dc.HostName @splatAD)
+            $metadata = @(Get-ADReplicationPartnerMetadata -Target $dc.HostName)
             foreach ($m in $metadata)
             {
                 # Partition name normalization -- string matching, not structured DN parsing
