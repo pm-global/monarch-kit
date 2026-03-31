@@ -2,9 +2,45 @@
 
 Checklist-driven implementation plan. Each checkbox is a discrete deliverable. Check items off as they're completed. Every step includes its tests -- code and tests ship together, never separately.
 
-**Last updated:** 2026-03-26
+**Last updated:** 2026-03-31
 
 ---
+
+## Emergent TODOs
+
+Items are ordered by priority. Blocking relationships noted where they exist.
+
+**TODO-1: Orchestrator + report seam audit against updated dev-guide.**
+Run the improved dev-guide (with the TDD orchestrator fix) against `Invoke-DomainAudit` and `New-MonarchReport`. Check for other pure-logic paths that lack invariants or integration tests beyond the advisory extraction gap. This is the "are there more bugs like the one we found?" pass.
+Blocked by: completion of claude-plan-report-fix Steps 1–6.
+
+**TODO-2: Advisory metrics and counting model.**
+Each advisory card should show contextual numbers (total Kerberoastable count, member counts, password policy summary). The domain-specific metrics section (lines 2616–2622) only renders metrics for Backup & Recovery. Additionally, per-item severity should roll up correctly — each Kerberoastable account should increment the critical tally by 1. Current advisory logic may not count this way. Needs its own design pass before implementation.
+Blocked by: completion of claude-plan-report-fix (the switch cases must exist before metrics can reference them).
+
+**TODO-3: Test coverage audit — estimate current coverage against 80% target.**
+SRE + testing specialist review. Step 5 of the fix plan adds integration tests for the advisory extraction path specifically. This TODO covers the broader question: what other end-to-end paths lack integration tests? Reviewers should estimate current coverage, identify gaps, and scope the work to reach 80%.
+Blocked by: completion of claude-plan-report-fix Step 5 (so the new tests are included in the estimate).
+
+**TODO-4: Preflight validation function (`Test-MonarchEnvironment` or `Invoke-MonarchPreflight`).**
+Validate PowerShell version, AD module availability, optional module presence, domain reachability, and execution context before discovery runs. Returns pass/fail object with blocking issues, warnings for degraded-but-runnable conditions, and the resolved domain + candidate DC. Reduces "mystery failure" at runtime. Natural first command for new users. Needs its own kickoff pass — new function with a new return contract.
+Blocked by: nothing. Independent work.
+
+**TODO-5: Degraded-state reporting in HTML output.**
+When DNS or GPO modules are missing, the report should explicitly say those sections were not fully assessed rather than silently appearing complete. Related to TODO-2 (metrics rendering) but scoped to the missing-module case specifically.
+Blocked by: nothing, but benefits from TODO-2 design pass since both touch report rendering.
+
+**TODO-6: Relative file links in report output.**
+Functions that produce file output (`Export-GPOAudit`, `Find-DormantAccount`) include absolute paths in return objects. The report should render these as relative links so the output folder is portable when moved or shared.
+Blocked by: nothing. Small independent fix.
+
+**TODO-7: Progress output with silent mode.**
+`Write-Progress` for long-running orchestrated runs, suppressible with `-Silent`. Default shows concise status; `-Verbose` shows per-step detail. Addresses "nothing is happening" feel during audit runs.
+Blocked by: nothing, but TODO-4 (preflight) should land first since it establishes the pre-run output pattern.
+
+**TODO-8: Retroactive research brief for monarch-kit.**
+The initial Perplexity research exists as `initial-research.md` but predates the research.md process. Formalize it into a proper `research-brief-monarch-kit.md` per the research doc template. Fills in thin sections (prior art report-layer detail, building blocks beyond core modules, tool-own failure modes). Lives in the repo as reference for future design passes.
+Blocked by: nothing. Reference work, not implementation.
 
 ## Roadmap Overview
 
