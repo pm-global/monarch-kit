@@ -2540,6 +2540,9 @@ function New-MonarchReport
                 $medRisk = @($r.DCFindings | Where-Object { $_.Risk -eq 'Medium' })
                 if ($medRisk.Count -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($medRisk.Count) legacy protocol findings on DCs" }) }
             }
+            'Find-GPOPermissionAnomaly' {
+                if ($r.Count -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.Count) GPOs with non-standard editors" }) }
+            }
         }
     }
 
