@@ -57,8 +57,8 @@ Ran `bb-check.ps1` on BadBlood domain (LIGHT.local, single DC). All 25 functions
 
 | Bug | Function | Line | Issue | Impact |
 |-----|----------|------|-------|--------|
-| 1 | `Get-ReplicationHealth` | 525 | `@splatAD` passes `-Server` to `Get-ADReplicationPartnerMetadata` (doesn't accept it) | FIXED |
-| 2 | `Get-EventLogConfiguration` | 2208 | `.LogRetention` doesn't exist on `EventLogConfiguration` class | Total failure |
+| 1 | `Get-ReplicationHealth` | 525 | `@splatAD` passes `-Server` to `Get-ADReplicationPartnerMetadata` (doesn't accept it) | FIXED 2026-03-31 |
+| 2 | `Get-EventLogConfiguration` | 2208 | `.LogRetention` doesn't exist on `EventLogConfiguration` class | FIXED 2026-03-31 |
 | 3 | `Export-GPOAudit` + orchestrator | 2813 | Orchestrator doesn't pass `-IncludePermissions`/`-IncludeWMIFilters` | Missing data |
 | 4 | `Get-DNSForwarderConfiguration` | 2390 | `.UseRootHints` version-dependent, throws on some hosts | Failure on some versions |
 | 5 | `Export-GPOAudit` | 1200 | `.Order` doesn't exist on GPO XML `LinksTo` node | Warning per GPO, linkage data lost |
@@ -72,13 +72,13 @@ Ran `bb-check.ps1` on BadBlood domain (LIGHT.local, single DC). All 25 functions
 
 ---
 
-## Step 2 — Fix Individual Detection Bugs
+## Step 2 — Fix Individual Detection Bugs - COMPLETE
 
 **Purpose:** Fix each function identified in Step 1.
 
 **Plan files:** Each bug has a self-contained plan file in the repo root (`bb-fix-bug1.md` through `bb-fix-bug5.md`). Each plan has 2 passes: code fix + test update. Execute in fresh chats, archive when validated.
 
-**Progress:** Bug 1 FIXED (2026-03-31). Bugs 2-5 remaining.
+**Progress:** Bug 1 FIXED (2026-03-31). Bug 2 FIXED (2026-03-31). Bugs 3-5 remaining.
 
 ---
 
@@ -125,7 +125,7 @@ Ran `bb-check.ps1` on BadBlood domain (LIGHT.local, single DC). All 25 functions
 ## Relationship to CLAUDE-DEV-PLAN TODOs
 
 - TODO-1 (diagnostic pass): COMPLETE
-- TODO-2 (fix bugs): Plan files created, ready for execution
+- TODO-2 (fix bugs): COMPLETE
 - TODO-3 (function disposition): Step 3 of this plan
 - TODO-4 (honest manifest): Step 4 of this plan
 - TODO-5 (integration validation): Step 5 of this plan

@@ -2205,7 +2205,6 @@ function Get-EventLogConfiguration {
                 $logs += [PSCustomObject]@{
                     LogName        = $log.LogName
                     MaxSizeKB      = [int]($log.MaximumSizeInBytes / 1024)
-                    RetentionDays  = [int]$log.LogRetention
                     OverflowAction = [string]$log.LogMode
                 }
             }

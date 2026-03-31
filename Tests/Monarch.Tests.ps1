@@ -3318,9 +3318,9 @@ Describe 'Get-EventLogConfiguration' {
                 [PSCustomObject]@{ HostName = 'DC1.test.local' }
             ) }
             Mock -ModuleName Monarch Invoke-Command { @(
-                [PSCustomObject]@{ LogName = 'Security'; MaximumSizeInBytes = 20971520; LogRetention = 0; LogMode = 'Circular' },
-                [PSCustomObject]@{ LogName = 'System'; MaximumSizeInBytes = 20971520; LogRetention = 0; LogMode = 'Circular' },
-                [PSCustomObject]@{ LogName = 'Directory Service'; MaximumSizeInBytes = 16777216; LogRetention = 7; LogMode = 'AutoBackup' }
+                [PSCustomObject]@{ LogName = 'Security'; MaximumSizeInBytes = 20971520; LogMode = 'Circular' },
+                [PSCustomObject]@{ LogName = 'System'; MaximumSizeInBytes = 20971520; LogMode = 'Circular' },
+                [PSCustomObject]@{ LogName = 'Directory Service'; MaximumSizeInBytes = 16777216; LogMode = 'AutoBackup' }
             ) }
             $script:result = Get-EventLogConfiguration
         }
@@ -3331,7 +3331,6 @@ Describe 'Get-EventLogConfiguration' {
             $result.DCs[0].Logs | Should -HaveCount 3
             $result.DCs[0].Logs[0].LogName | Should -Be 'Security'
             $result.DCs[0].Logs[0].MaxSizeKB | Should -Be 20480
-            $result.DCs[0].Logs[2].RetentionDays | Should -Be 7
             $result.DCs[0].Logs[2].OverflowAction | Should -Be 'AutoBackup'
         }
     }
@@ -3343,9 +3342,9 @@ Describe 'Get-EventLogConfiguration' {
                 [PSCustomObject]@{ HostName = 'DC2.test.local' }
             ) }
             Mock -ModuleName Monarch Invoke-Command { @(
-                [PSCustomObject]@{ LogName = 'Security'; MaximumSizeInBytes = 20971520; LogRetention = 0; LogMode = 'Circular' },
-                [PSCustomObject]@{ LogName = 'System'; MaximumSizeInBytes = 20971520; LogRetention = 0; LogMode = 'Circular' },
-                [PSCustomObject]@{ LogName = 'Directory Service'; MaximumSizeInBytes = 16777216; LogRetention = 0; LogMode = 'Circular' }
+                [PSCustomObject]@{ LogName = 'Security'; MaximumSizeInBytes = 20971520; LogMode = 'Circular' },
+                [PSCustomObject]@{ LogName = 'System'; MaximumSizeInBytes = 20971520; LogMode = 'Circular' },
+                [PSCustomObject]@{ LogName = 'Directory Service'; MaximumSizeInBytes = 16777216; LogMode = 'Circular' }
             ) }
             Mock -ModuleName Monarch Invoke-Command { throw 'The RPC server is unavailable' } -ParameterFilter { $ComputerName -eq 'DC2.test.local' }
             $script:result = Get-EventLogConfiguration
