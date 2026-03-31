@@ -2522,6 +2522,24 @@ function New-MonarchReport
             'Export-GPOAudit' {
                 if ($r.UnlinkedCount -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.UnlinkedCount) unlinked (orphaned) GPOs" }) }
             }
+            'Find-ASREPRoastableAccount' {
+                if ($r.Count -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.Count) accounts with Kerberos pre-auth disabled (AS-REP roasting risk)" }) }
+            }
+            'Find-WeakAccountFlag' {
+                if ($r.CountByFlag.ContainsKey('ReversibleEncryption') -or $r.CountByFlag.ContainsKey('DESOnly')) {
+                    $desc = @()
+                    if ($r.CountByFlag.ContainsKey('ReversibleEncryption')) { $desc += "$($r.CountByFlag['ReversibleEncryption']) with reversible encryption" }
+                    if ($r.CountByFlag.ContainsKey('DESOnly')) { $desc += "$($r.CountByFlag['DESOnly']) with DES-only Kerberos" }
+                    $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = ($desc -join ', ') })
+                }
+                if ($r.Findings.Count -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.Findings.Count) accounts with weak security flags" }) }
+            }
+            'Find-LegacyProtocolExposure' {
+                $highRisk = @($r.DCFindings | Where-Object { $_.Risk -eq 'High' })
+                if ($highRisk.Count -gt 0) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($highRisk.Count) high-risk legacy protocol findings (NTLMv1/LM hash)" }) }
+                $medRisk = @($r.DCFindings | Where-Object { $_.Risk -eq 'Medium' })
+                if ($medRisk.Count -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($medRisk.Count) legacy protocol findings on DCs" }) }
+            }
         }
     }
 
