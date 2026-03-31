@@ -2800,59 +2800,64 @@ function Invoke-DomainAudit
     }
     foreach ($d in $dirs.Values) { if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null } }
 
-    # Discovery function sequence
+    # Discovery function sequence -- Domain key maps each function to its functional domain
     $calls = @(
-        @{ Name = 'New-DomainBaseline';           Params = @{ Server = $dc; OutputPath = $dirs.Baseline } }
-        @{ Name = 'Get-FSMORolePlacement';         Params = @{ Server = $dc } }
-        @{ Name = 'Get-ReplicationHealth';         Params = @{ Server = $dc } }
-        @{ Name = 'Get-SiteTopology';              Params = @{ Server = $dc } }
-        @{ Name = 'Get-ForestDomainLevel';         Params = @{ Server = $dc } }
-        @{ Name = 'Export-GPOAudit';               Params = @{ Server = $dc; OutputPath = $dirs.GPO; IncludePermissions = $true; IncludeWMIFilters = $true } }
-        @{ Name = 'Find-UnlinkedGPO';              Params = @{ Server = $dc } }
-        @{ Name = 'Find-GPOPermissionAnomaly';     Params = @{ Server = $dc } }
-        @{ Name = 'Get-PrivilegedGroupMembership'; Params = @{ Server = $dc } }
-        @{ Name = 'Find-AdminCountOrphan';         Params = @{ Server = $dc } }
-        @{ Name = 'Find-KerberoastableAccount';    Params = @{ Server = $dc } }
-        @{ Name = 'Find-ASREPRoastableAccount';    Params = @{ Server = $dc } }
-        @{ Name = 'Find-DormantAccount';           Params = @{ Server = $dc; OutputPath = $dirs.Dormant } }
-        @{ Name = 'Get-PasswordPolicyInventory';   Params = @{ Server = $dc } }
-        @{ Name = 'Find-WeakAccountFlag';          Params = @{ Server = $dc } }
-        @{ Name = 'Test-ProtectedUsersGap';        Params = @{ Server = $dc } }
-        @{ Name = 'Find-LegacyProtocolExposure';   Params = @{ Server = $dc } }
-        @{ Name = 'Get-BackupReadinessStatus';     Params = @{ Server = $dc } }
-        @{ Name = 'Test-TombstoneGap';             Params = @{ Server = $dc } }
-        @{ Name = 'Get-AuditPolicyConfiguration';  Params = @{ Server = $dc } }
-        @{ Name = 'Get-EventLogConfiguration';     Params = @{ Server = $dc } }
-        @{ Name = 'Test-SRVRecordCompleteness';    Params = @{ Server = $dc } }
-        @{ Name = 'Get-DNSScavengingConfiguration'; Params = @{ Server = $dc } }
-        @{ Name = 'Test-ZoneReplicationScope';     Params = @{ Server = $dc } }
-        @{ Name = 'Get-DNSForwarderConfiguration'; Params = @{ Server = $dc } }
+        @{ Name = 'New-DomainBaseline';           Domain = 'AuditCompliance';       Params = @{ Server = $dc; OutputPath = $dirs.Baseline } }
+        @{ Name = 'Get-FSMORolePlacement';         Domain = 'InfrastructureHealth'; Params = @{ Server = $dc } }
+        @{ Name = 'Get-ReplicationHealth';         Domain = 'InfrastructureHealth'; Params = @{ Server = $dc } }
+        @{ Name = 'Get-SiteTopology';              Domain = 'InfrastructureHealth'; Params = @{ Server = $dc } }
+        @{ Name = 'Get-ForestDomainLevel';         Domain = 'InfrastructureHealth'; Params = @{ Server = $dc } }
+        @{ Name = 'Export-GPOAudit';               Domain = 'GroupPolicy';          Params = @{ Server = $dc; OutputPath = $dirs.GPO; IncludePermissions = $true; IncludeWMIFilters = $true } }
+        @{ Name = 'Find-UnlinkedGPO';              Domain = 'GroupPolicy';          Params = @{ Server = $dc } }
+        @{ Name = 'Find-GPOPermissionAnomaly';     Domain = 'GroupPolicy';          Params = @{ Server = $dc } }
+        @{ Name = 'Get-PrivilegedGroupMembership'; Domain = 'PrivilegedAccess';     Params = @{ Server = $dc } }
+        @{ Name = 'Find-AdminCountOrphan';         Domain = 'PrivilegedAccess';     Params = @{ Server = $dc } }
+        @{ Name = 'Find-KerberoastableAccount';    Domain = 'PrivilegedAccess';     Params = @{ Server = $dc } }
+        @{ Name = 'Find-ASREPRoastableAccount';    Domain = 'PrivilegedAccess';     Params = @{ Server = $dc } }
+        @{ Name = 'Find-DormantAccount';           Domain = 'IdentityLifecycle';    Params = @{ Server = $dc; OutputPath = $dirs.Dormant } }
+        @{ Name = 'Get-PasswordPolicyInventory';   Domain = 'SecurityPosture';      Params = @{ Server = $dc } }
+        @{ Name = 'Find-WeakAccountFlag';          Domain = 'SecurityPosture';      Params = @{ Server = $dc } }
+        @{ Name = 'Test-ProtectedUsersGap';        Domain = 'SecurityPosture';      Params = @{ Server = $dc } }
+        @{ Name = 'Find-LegacyProtocolExposure';   Domain = 'SecurityPosture';      Params = @{ Server = $dc } }
+        @{ Name = 'Get-BackupReadinessStatus';     Domain = 'BackupReadiness';      Params = @{ Server = $dc } }
+        @{ Name = 'Test-TombstoneGap';             Domain = 'BackupReadiness';      Params = @{ Server = $dc } }
+        @{ Name = 'Get-AuditPolicyConfiguration';  Domain = 'AuditCompliance';      Params = @{ Server = $dc } }
+        @{ Name = 'Get-EventLogConfiguration';     Domain = 'AuditCompliance';      Params = @{ Server = $dc } }
+        @{ Name = 'Test-SRVRecordCompleteness';    Domain = 'DNS';                  Params = @{ Server = $dc } }
+        @{ Name = 'Get-DNSScavengingConfiguration'; Domain = 'DNS';                 Params = @{ Server = $dc } }
+        @{ Name = 'Test-ZoneReplicationScope';     Domain = 'DNS';                  Params = @{ Server = $dc } }
+        @{ Name = 'Get-DNSForwarderConfiguration'; Domain = 'DNS';                  Params = @{ Server = $dc } }
     )
 
-    # Execute with per-function error isolation
+    # Execute with per-function error isolation and disposition tracking
     $results = [System.Collections.Generic.List[PSCustomObject]]::new()
     $failures = [System.Collections.Generic.List[PSCustomObject]]::new()
+    $dispositions = [System.Collections.Generic.List[PSCustomObject]]::new()
     foreach ($call in $calls) {
         try {
             $params = $call.Params
             $results.Add((& $call.Name @params))
+            $dispositions.Add([PSCustomObject]@{ Function = $call.Name; Domain = $call.Domain; Disposition = 'Assessed'; Error = $null })
         } catch {
             $failures.Add([PSCustomObject]@{ Function = $call.Name; Error = $_.Exception.Message })
+            $dispositions.Add([PSCustomObject]@{ Function = $call.Name; Domain = $call.Domain; Disposition = 'NotAssessed'; Error = $_.Exception.Message })
         }
     }
 
     # Generate report and return
     $orchestratorResult = [PSCustomObject]@{
-        Phase      = 'Discovery'
-        Domain     = $target.Domain
-        DCUsed     = $dc
-        DCSource   = $target.Source
-        StartTime  = $startTime
-        EndTime    = Get-Date
-        OutputPath = $OutputPath
-        ReportPath = $null
-        Results    = @($results)
-        Failures   = @($failures)
+        Phase        = 'Discovery'
+        Domain       = $target.Domain
+        DCUsed       = $dc
+        DCSource     = $target.Source
+        StartTime    = $startTime
+        EndTime      = Get-Date
+        OutputPath   = $OutputPath
+        ReportPath   = $null
+        Results      = @($results)
+        Failures     = @($failures)
+        Dispositions = @($dispositions)
+        TotalChecks  = $calls.Count
     }
     $orchestratorResult.ReportPath = New-MonarchReport -Results $orchestratorResult -OutputPath $OutputPath
     return $orchestratorResult

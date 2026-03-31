@@ -3749,6 +3749,61 @@ Describe 'Invoke-DomainAudit' {
         }
     }
 
+    Context 'Disposition tracking -- all functions succeed' {
+        BeforeAll {
+            # Re-mock all functions to return domain-accurate objects
+            Mock -ModuleName Monarch Get-ReplicationHealth {
+                [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-ReplicationHealth'; Timestamp = Get-Date; Warnings = @() }
+            }
+            $script:outDir = Join-Path $TestDrive 'audit-dispositions'
+            $script:result = Invoke-DomainAudit -Phase Discovery -OutputPath $script:outDir
+        }
+
+        It 'Dispositions has 25 entries all Assessed' {
+            $result.Dispositions | Should -HaveCount 25
+            @($result.Dispositions | Where-Object { $_.Disposition -eq 'Assessed' }) | Should -HaveCount 25
+            @($result.Dispositions | Where-Object { $_.Error -ne $null }) | Should -HaveCount 0
+        }
+
+        It 'TotalChecks equals call count' {
+            $result.TotalChecks | Should -Be 25
+        }
+
+        It 'Dispositions have correct Domain values for known functions' {
+            ($result.Dispositions | Where-Object { $_.Function -eq 'New-DomainBaseline' }).Domain | Should -Be 'AuditCompliance'
+            ($result.Dispositions | Where-Object { $_.Function -eq 'Get-FSMORolePlacement' }).Domain | Should -Be 'InfrastructureHealth'
+            ($result.Dispositions | Where-Object { $_.Function -eq 'Export-GPOAudit' }).Domain | Should -Be 'GroupPolicy'
+            ($result.Dispositions | Where-Object { $_.Function -eq 'Find-DormantAccount' }).Domain | Should -Be 'IdentityLifecycle'
+            ($result.Dispositions | Where-Object { $_.Function -eq 'Get-BackupReadinessStatus' }).Domain | Should -Be 'BackupReadiness'
+            ($result.Dispositions | Where-Object { $_.Function -eq 'Test-SRVRecordCompleteness' }).Domain | Should -Be 'DNS'
+            ($result.Dispositions | Where-Object { $_.Function -eq 'Get-PasswordPolicyInventory' }).Domain | Should -Be 'SecurityPosture'
+            ($result.Dispositions | Where-Object { $_.Function -eq 'Get-PrivilegedGroupMembership' }).Domain | Should -Be 'PrivilegedAccess'
+        }
+    }
+
+    Context 'Disposition tracking -- one function throws' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ReplicationHealth { throw 'Replication query failed' }
+            $script:outDir = Join-Path $TestDrive 'audit-disp-failure'
+            $script:result = Invoke-DomainAudit -Phase Discovery -OutputPath $script:outDir
+        }
+
+        It 'Dispositions has 25 entries with 1 NotAssessed' {
+            $result.Dispositions | Should -HaveCount 25
+            @($result.Dispositions | Where-Object { $_.Disposition -eq 'Assessed' }) | Should -HaveCount 24
+            $notAssessed = @($result.Dispositions | Where-Object { $_.Disposition -eq 'NotAssessed' })
+            $notAssessed | Should -HaveCount 1
+            $notAssessed[0].Function | Should -Be 'Get-ReplicationHealth'
+            $notAssessed[0].Domain | Should -Be 'InfrastructureHealth'
+            $notAssessed[0].Error | Should -Match 'Replication query failed'
+        }
+
+        It 'NotAssessed function also appears in Failures for backward compat' {
+            $result.Failures | Should -HaveCount 1
+            $result.Failures[0].Function | Should -Be 'Get-ReplicationHealth'
+        }
+    }
+
     Context 'Non-Discovery phase' {
         It 'throws not-implemented error' {
             { Invoke-DomainAudit -Phase Remediation -OutputPath $TestDrive } | Should -Throw '*not yet implemented*'
