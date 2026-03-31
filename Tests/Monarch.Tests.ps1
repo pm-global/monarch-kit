@@ -2689,7 +2689,7 @@ Describe 'Export-GPOAudit' {
                 [xml]@'
 <GPO xmlns="http://www.microsoft.com/GroupPolicy/Settings">
   <Computer><ExtensionData><Extension><UserRightsAssignment/><SecurityOptions/></Extension></ExtensionData></Computer>
-  <LinksTo><SOMPath>OU=Workstations,DC=test,DC=local</SOMPath><Enabled>true</Enabled><NoOverride>false</NoOverride><Order>1</Order></LinksTo>
+  <LinksTo><SOMPath>OU=Workstations,DC=test,DC=local</SOMPath><Enabled>true</Enabled><NoOverride>false</NoOverride></LinksTo>
 </GPO>
 '@
             }
@@ -2769,7 +2769,7 @@ Describe 'Export-GPOAudit' {
                 [xml]@'
 <GPO xmlns="http://www.microsoft.com/GroupPolicy/Settings">
   <Computer><ExtensionData><Extension><UserRightsAssignment/></Extension></ExtensionData></Computer>
-  <LinksTo><SOMPath>OU=Workstations,DC=test,DC=local</SOMPath><Enabled>true</Enabled><NoOverride>false</NoOverride><Order>1</Order></LinksTo>
+  <LinksTo><SOMPath>OU=Workstations,DC=test,DC=local</SOMPath><Enabled>true</Enabled><NoOverride>false</NoOverride></LinksTo>
 </GPO>
 '@
             }
@@ -2779,7 +2779,7 @@ Describe 'Export-GPOAudit' {
             Mock -ModuleName Monarch Get-GPOReport -ParameterFilter { $Guid -eq 'bad-3333' -and $ReportType -eq 'Xml' } {
                 [xml]@'
 <GPO xmlns="http://www.microsoft.com/GroupPolicy/Settings">
-  <LinksTo><SOMPath>OU=Servers,DC=test,DC=local</SOMPath><Enabled>true</Enabled><NoOverride>false</NoOverride><Order>1</Order></LinksTo>
+  <LinksTo><SOMPath>OU=Servers,DC=test,DC=local</SOMPath><Enabled>true</Enabled><NoOverride>false</NoOverride></LinksTo>
 </GPO>
 '@
             }

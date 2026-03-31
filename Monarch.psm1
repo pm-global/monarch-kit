@@ -1197,7 +1197,6 @@ function Export-GPOAudit {
                         LinkedTo   = $link.SOMPath
                         Enabled    = $link.Enabled
                         NoOverride = $link.NoOverride
-                        Order      = $link.Order
                     })
                 }
             } else {
@@ -1206,7 +1205,6 @@ function Export-GPOAudit {
                     LinkedTo   = '**UNLINKED**'
                     Enabled    = 'N/A'
                     NoOverride = 'N/A'
-                    Order      = 'N/A'
                 })
             }
         } catch { $warnings.Add("GPOAnalysis($($gpo.DisplayName)): $_") }
