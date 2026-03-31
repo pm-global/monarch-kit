@@ -3580,7 +3580,7 @@ Describe 'New-MonarchReport' {
             }
             $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
             $script:content = Get-Content $script:result -Raw
-            $script:critSection = ($content -split 'critical-section')[0]
+            $script:critSection = ($content -split 'critical-section')[2]
         }
 
         It 'Kerberoastable with PrivilegedCount escalates to critical' {
