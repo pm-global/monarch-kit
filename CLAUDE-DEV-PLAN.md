@@ -10,13 +10,12 @@ Checklist-driven implementation plan. Each checkbox is a discrete deliverable. C
 
 Items are ordered by priority. Blocking relationships noted where they exist.
 
-**TODO-1: Detection pipeline repair -- diagnostic pass.**
-Run each Discovery function individually against BadBlood domain. Identify which return wrong/empty results and why. GPOs are the headline (0 on a populated domain). Detailed plan: `docs/bb-fix-plan.md`.
-Blocked by: nothing. Active work item.
+**TODO-1: Detection pipeline repair -- diagnostic pass. COMPLETE.**
+Ran each Discovery function against BadBlood domain. 5 bugs confirmed, all caused by accessing properties that don't exist on real cmdlet output (mocks hid the problem). Results: `docs/bb-fix-plan.md`.
 
 **TODO-2: Fix individual detection bugs.**
-Fix each function identified in TODO-1. One pass per bug: root cause, fix, Pester test, note for revalidation.
-Blocked by: TODO-1 (need the bug list first).
+5 confirmed bugs. Individual plan files in repo root: `bb-fix-bug1.md` through `bb-fix-bug5.md`. Execute in fresh chats, archive when validated.
+Blocked by: TODO-1 (complete -- bug list confirmed via BB diagnostic).
 
 **TODO-3: Function disposition in report.**
 Every function gets a final status: findings, clear, or not assessed. Report must distinguish "checked and clean" from "never checked." Covers degraded-state reporting (missing DNS/GPO modules) and replaces silent omission.

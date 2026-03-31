@@ -47,32 +47,36 @@ The design doc says silence is success. But a report that says nothing about GPO
 
 ---
 
-## Step 1 — Diagnostic Pass (no code changes)
+## Step 1 — Diagnostic Pass (no code changes) — COMPLETE
 
-**Purpose:** Run every Discovery function individually against the BadBlood domain. Record what each returns. Identify which functions return wrong/empty data and why.
+Ran `bb-check.ps1` on BadBlood domain (LIGHT.local, single DC). All 25 functions called individually. Results:
 
-**Method:** PowerShell script that calls each function, captures the result object, and dumps key properties to a structured log. Run on the BB domain, paste results back.
+**Root cause:** All 5 bugs are the same class — code accesses properties that don't exist on real cmdlet output. Pester mocks provided fictional properties, so tests passed. Only running against a real domain exposed the failures.
 
-**Output:** A map of function -> actual result -> expected behavior -> gap identified.
+**Confirmed bugs (severity order):**
 
-**This step produces the bug list. Everything else depends on it.**
+| Bug | Function | Line | Issue | Impact |
+|-----|----------|------|-------|--------|
+| 1 | `Get-ReplicationHealth` | 525 | `@splatAD` passes `-Server` to `Get-ADReplicationPartnerMetadata` (doesn't accept it) | Total failure |
+| 2 | `Get-EventLogConfiguration` | 2208 | `.LogRetention` doesn't exist on `EventLogConfiguration` class | Total failure |
+| 3 | `Export-GPOAudit` + orchestrator | 2813 | Orchestrator doesn't pass `-IncludePermissions`/`-IncludeWMIFilters` | Missing data |
+| 4 | `Get-DNSForwarderConfiguration` | 2390 | `.UseRootHints` version-dependent, throws on some hosts | Failure on some versions |
+| 5 | `Export-GPOAudit` | 1200 | `.Order` doesn't exist on GPO XML `LinksTo` node | Warning per GPO, linkage data lost |
+
+**Not bugs (confirmed working):**
+- GPO count of 3 is correct — BadBlood creates users/groups/ACLs, not GPOs
+- Find-DormantAccount TotalCount=0 is correct — BB accounts are 1 day old, under both dormancy threshold and never-logged-on grace period
+- All other functions return correct data (property names in initial diagnostic were wrong)
+
+**Individual fix plans:** `bb-fix-bug1.md` through `bb-fix-bug5.md` in repo root.
 
 ---
 
 ## Step 2 — Fix Individual Detection Bugs
 
-**Purpose:** Fix each function that returns wrong results, based on Step 1 findings.
+**Purpose:** Fix each function identified in Step 1.
 
-**Pass structure:** One pass per bug. Each pass:
-1. Identify the root cause from Step 1 data
-2. Fix the function
-3. Verify the fix against mock data (Pester)
-4. Note for re-validation in Step 6
-
-**Known suspects (pre-diagnostic):**
-- Export-GPOAudit: GPO count = 0 on a populated domain
-- Functions using optional modules (GroupPolicy, DnsServer): may fail silently
-- Switch cases in New-MonarchReport: some may have wrong property checks
+**Plan files:** Each bug has a self-contained plan file in the repo root (`bb-fix-bug1.md` through `bb-fix-bug5.md`). Each plan has 2 passes: code fix + test update. Execute in fresh chats, archive when validated.
 
 ---
 
@@ -116,9 +120,11 @@ The design doc says silence is success. But a report that says nothing about GPO
 
 ---
 
-## Relationship to Existing TODOs
+## Relationship to CLAUDE-DEV-PLAN TODOs
 
-- TODO-1 (orchestrator+report seam audit): Step 1 of this plan IS that audit, scoped to detection correctness
-- TODO-2 (advisory metrics): deferred, but Step 3 disposition work is prerequisite
-- TODO-5 (degraded-state reporting): Step 3 directly addresses this
-- TODO-6 (relative file links): Step 4 directly addresses this
+- TODO-1 (diagnostic pass): COMPLETE
+- TODO-2 (fix bugs): Plan files created, ready for execution
+- TODO-3 (function disposition): Step 3 of this plan
+- TODO-4 (honest manifest): Step 4 of this plan
+- TODO-5 (integration validation): Step 5 of this plan
+- TODO-6 (advisory metrics): deferred, but TODO-3 disposition work is prerequisite
