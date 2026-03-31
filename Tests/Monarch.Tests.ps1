@@ -3457,7 +3457,7 @@ Describe 'New-MonarchReport' {
         }
     }
 
-    Context 'All functions failed' {
+    Context 'All functions failed -- backward compat (no Dispositions)' {
         BeforeAll {
             $script:outDir = Join-Path $TestDrive 'report-allfail'
             New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
@@ -3474,13 +3474,13 @@ Describe 'New-MonarchReport' {
             $script:content = Get-Content $script:result -Raw
         }
 
-        It 'shows zero completed and failures section' {
-            $content | Should -Match "stat-number'>0</div><div class='stat-label'>Functions"
-            $content | Should -Match "stat-number'>2</div><div class='stat-label'>Errors"
+        It 'shows Checks stat with 0/2 and domain-less Not Assessed section' {
+            $content | Should -Match "stat-number'>0/2</div><div class='stat-label'>Checks"
             $content | Should -Match 'failures-section'
+            $content | Should -Match 'Not Assessed'
         }
 
-        It 'failure entry shows function name and error message' {
+        It 'Not Assessed entries show function name and error message' {
             $content | Should -Match 'Get-ReplicationHealth'
             $content | Should -Match 'Access denied to DC02'
             $content | Should -Match 'Find-DormantAccount'
@@ -3670,6 +3670,176 @@ Describe 'New-MonarchReport' {
 
         It 'no domain sections rendered' {
             $content | Should -Not -Match "<div class='domain-section'>"
+        }
+    }
+
+    Context 'Disposition rendering -- all assessed with some findings' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-MonarchConfigValue { '#2E5090' }
+            $script:outDir = Join-Path $TestDrive 'report-disp-assessed'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:30'
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'IdentityLifecycle'; Function = 'Find-DormantAccount'; TotalCount = 12; NeverLoggedOnCount = 3; Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'DNS'; Function = 'Test-SRVRecordCompleteness'; AllComplete = $true; Sites = @(); Warnings = @() }
+                )
+                Failures = @()
+                Dispositions = @(
+                    [PSCustomObject]@{ Function = 'Find-DormantAccount'; Domain = 'IdentityLifecycle'; Disposition = 'Assessed'; Error = $null }
+                    [PSCustomObject]@{ Function = 'Test-SRVRecordCompleteness'; Domain = 'DNS'; Disposition = 'Assessed'; Error = $null }
+                )
+                TotalChecks = 2
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'Checks stat shows 2/2' {
+            $content | Should -Match "stat-number'>2/2</div><div class='stat-label'>Checks"
+        }
+
+        It 'no Not Assessed cards rendered' {
+            $content | Should -Not -Match 'Not Assessed'
+        }
+
+        It 'clean domain in No findings line' {
+            $content | Should -Match 'No findings:.*DNS'
+        }
+    }
+
+    Context 'Disposition rendering -- some functions not assessed' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-MonarchConfigValue { '#2E5090' }
+            $script:outDir = Join-Path $TestDrive 'report-disp-partial'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:30'
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'GroupPolicy'; Function = 'Find-UnlinkedGPO'; Count = 0; Warnings = @() }
+                )
+                Failures = @(
+                    [PSCustomObject]@{ Function = 'Export-GPOAudit'; Error = 'GroupPolicy module not loaded' }
+                    [PSCustomObject]@{ Function = 'Find-GPOPermissionAnomaly'; Error = 'GroupPolicy module not loaded' }
+                )
+                Dispositions = @(
+                    [PSCustomObject]@{ Function = 'Export-GPOAudit'; Domain = 'GroupPolicy'; Disposition = 'NotAssessed'; Error = 'GroupPolicy module not loaded' }
+                    [PSCustomObject]@{ Function = 'Find-UnlinkedGPO'; Domain = 'GroupPolicy'; Disposition = 'Assessed'; Error = $null }
+                    [PSCustomObject]@{ Function = 'Find-GPOPermissionAnomaly'; Domain = 'GroupPolicy'; Disposition = 'NotAssessed'; Error = 'GroupPolicy module not loaded' }
+                    [PSCustomObject]@{ Function = 'Find-DormantAccount'; Domain = 'IdentityLifecycle'; Disposition = 'Assessed'; Error = $null }
+                )
+                TotalChecks = 4
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'Checks stat shows correct fraction' {
+            $content | Should -Match "stat-number'>2/4</div><div class='stat-label'>Checks"
+        }
+
+        It 'Not Assessed cards appear in Group Policy domain section' {
+            $content | Should -Match 'Not Assessed'
+            $content | Should -Match 'Export-GPOAudit'
+            $content | Should -Match 'GroupPolicy module not loaded'
+        }
+
+        It 'Group Policy section has check count in header' {
+            $content | Should -Match "Group Policy.*1/3 checks"
+        }
+
+        It 'domain with not-assessed functions does NOT appear in No findings line' {
+            if ($content -match 'No findings:') {
+                $content | Should -Not -Match 'No findings:.*Group Policy'
+            }
+        }
+    }
+
+    Context 'Disposition rendering -- entire domain not assessed' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-MonarchConfigValue { '#2E5090' }
+            $script:outDir = Join-Path $TestDrive 'report-disp-allfail-domain'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:30'
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'DNS'; Function = 'Test-SRVRecordCompleteness'; AllComplete = $true; Sites = @(); Warnings = @() }
+                )
+                Failures = @(
+                    [PSCustomObject]@{ Function = 'Export-GPOAudit'; Error = 'GroupPolicy module not loaded' }
+                    [PSCustomObject]@{ Function = 'Find-UnlinkedGPO'; Error = 'GroupPolicy module not loaded' }
+                    [PSCustomObject]@{ Function = 'Find-GPOPermissionAnomaly'; Error = 'GroupPolicy module not loaded' }
+                )
+                Dispositions = @(
+                    [PSCustomObject]@{ Function = 'Export-GPOAudit'; Domain = 'GroupPolicy'; Disposition = 'NotAssessed'; Error = 'GroupPolicy module not loaded' }
+                    [PSCustomObject]@{ Function = 'Find-UnlinkedGPO'; Domain = 'GroupPolicy'; Disposition = 'NotAssessed'; Error = 'GroupPolicy module not loaded' }
+                    [PSCustomObject]@{ Function = 'Find-GPOPermissionAnomaly'; Domain = 'GroupPolicy'; Disposition = 'NotAssessed'; Error = 'GroupPolicy module not loaded' }
+                    [PSCustomObject]@{ Function = 'Test-SRVRecordCompleteness'; Domain = 'DNS'; Disposition = 'Assessed'; Error = $null }
+                )
+                TotalChecks = 4
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'Group Policy section renders with 0/3 checks' {
+            $content | Should -Match "Group Policy.*0/3 checks"
+        }
+
+        It 'Group Policy section has only Not Assessed cards' {
+            $content | Should -Match 'Export-GPOAudit'
+            $content | Should -Match 'Find-UnlinkedGPO'
+            $content | Should -Match 'Find-GPOPermissionAnomaly'
+        }
+
+        It 'Group Policy does not appear in No findings line' {
+            if ($content -match 'No findings:') {
+                $content | Should -Not -Match 'No findings:.*Group Policy'
+            }
+        }
+
+        It 'DNS appears in No findings line' {
+            $content | Should -Match 'No findings:.*DNS'
+        }
+
+        It 'no standalone failures section' {
+            $content | Should -Not -Match 'Function Errors'
+        }
+    }
+
+    Context 'Disposition rendering -- backward compat with no Dispositions' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-MonarchConfigValue { '#2E5090' }
+            $script:outDir = Join-Path $TestDrive 'report-disp-compat'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:30'
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'DNS'; Function = 'Test-SRVRecordCompleteness'; AllComplete = $true; Sites = @(); Warnings = @() }
+                )
+                Failures = @(
+                    [PSCustomObject]@{ Function = 'Get-ReplicationHealth'; Error = 'Access denied' }
+                )
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'renders without errors' {
+            Test-Path $result | Should -BeTrue
+        }
+
+        It 'Checks stat shows 1/2' {
+            $content | Should -Match "stat-number'>1/2</div><div class='stat-label'>Checks"
+        }
+
+        It 'domain-less failure falls through to Not Assessed section' {
+            $content | Should -Match 'Get-ReplicationHealth'
+            $content | Should -Match 'Access denied'
         }
     }
 }

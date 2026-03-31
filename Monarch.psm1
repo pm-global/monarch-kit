@@ -2456,6 +2456,46 @@ function New-MonarchReport
     $functionCount = $resultsList.Count
     $errorCount = $failures.Count
 
+    # Disposition data -- from orchestrator or synthesized for backward compat
+    $dispositions = [System.Collections.Generic.List[PSCustomObject]]::new()
+    $dispProp = $Results.PSObject.Properties['Dispositions']
+    if ($dispProp -and $dispProp.Value) {
+        foreach ($dd in @($dispProp.Value)) { $dispositions.Add($dd) }
+    }
+    if ($dispositions.Count -eq 0) {
+        foreach ($r in $resultsList) {
+            $dispositions.Add([PSCustomObject]@{ Function = $r.Function; Domain = $r.Domain; Disposition = 'Assessed'; Error = $null })
+        }
+        foreach ($f in $failures) {
+            $dispositions.Add([PSCustomObject]@{ Function = $f.Function; Domain = $null; Disposition = 'NotAssessed'; Error = $f.Error })
+        }
+    }
+    $totalChecks = $functionCount + $errorCount
+    $tcProp = $Results.PSObject.Properties['TotalChecks']
+    if ($tcProp -and $tcProp.Value) { $totalChecks = $tcProp.Value }
+    $assessedCount = @($dispositions | Where-Object { $_.Disposition -eq 'Assessed' }).Count
+
+    # Per-domain check counts for section headers
+    $domainCheckCounts = @{}
+    foreach ($d in $dispositions) {
+        if (-not $d.Domain) { continue }
+        if (-not $domainCheckCounts.ContainsKey($d.Domain)) { $domainCheckCounts[$d.Domain] = @{ Assessed = 0; Total = 0 } }
+        $domainCheckCounts[$d.Domain].Total++
+        if ($d.Disposition -eq 'Assessed') { $domainCheckCounts[$d.Domain].Assessed++ }
+    }
+
+    # Not-assessed functions grouped by domain
+    $notAssessedDomains = @{}
+    foreach ($d in $dispositions | Where-Object { $_.Disposition -eq 'NotAssessed' }) {
+        if (-not $d.Domain) { continue }
+        if (-not $notAssessedDomains.ContainsKey($d.Domain)) {
+            $notAssessedDomains[$d.Domain] = [System.Collections.Generic.List[PSCustomObject]]::new()
+        }
+        $notAssessedDomains[$d.Domain].Add($d)
+    }
+    # Domain-less not-assessed (backward compat only)
+    $domainlessNotAssessed = @($dispositions | Where-Object { $_.Disposition -eq 'NotAssessed' -and -not $_.Domain })
+
     # Domain display name mapping
     $domainNames = @{
         'BackupReadiness'      = 'Backup &amp; Recovery'
@@ -2625,6 +2665,9 @@ function New-MonarchReport
         ".failures-section{margin-top:var(--gap-separate);border-top:2px solid var(--border-1);padding-top:var(--gap-related)}" +
         ".failure-item{font-family:'Cascadia Code','Consolas',monospace;font-size:var(--t5);line-height:1.4}" +
         ".failure-item .fn-name{font-weight:600;color:var(--text-1)}.failure-item .fn-error{color:var(--text-2);margin-top:var(--gap-micro)}" +
+        ".card .fn-name{font-weight:600;font-size:var(--t5);color:var(--text-1);margin-bottom:var(--gap-micro)}" +
+        ".card .fn-error{font-size:var(--t5);color:var(--text-2)}" +
+        ".check-count{font-size:var(--t5);font-weight:400;color:var(--text-3);margin-left:8px}" +
         ".output-section{margin-top:var(--gap-separate);border-top:2px solid var(--border-1);padding-top:var(--gap-related)}" +
         ".file-tree{font-family:'Cascadia Code','Consolas',monospace;font-size:var(--t5);margin-top:var(--gap-tight)}" +
         ".file-tree .group{margin-bottom:var(--gap-related)}.file-tree .group:last-child{margin-bottom:0}" +
@@ -2652,12 +2695,10 @@ function New-MonarchReport
     # Stats
     $critClass = if ($criticalCount -gt 0) { 'stat w-critical' } else { 'stat w-outline zero' }
     $advClass = if ($advisoryCount -gt 0) { 'stat w-advisory' } else { 'stat w-outline zero' }
-    $errClass = if ($errorCount -gt 0) { 'stat w-outline' } else { 'stat w-outline zero' }
     $html += "<div class='stats'>" +
         "<div class='$critClass'><div class='stat-number'>$criticalCount</div><div class='stat-label'>Critical</div></div>" +
         "<div class='$advClass'><div class='stat-number'>$advisoryCount</div><div class='stat-label'>Advisory</div></div>" +
-        "<div class='stat w-outline'><div class='stat-number'>$functionCount</div><div class='stat-label'>Functions</div></div>" +
-        "<div class='$errClass'><div class='stat-number'>$errorCount</div><div class='stat-label'>Errors</div></div>" +
+        "<div class='stat w-outline'><div class='stat-number'>$assessedCount/$totalChecks</div><div class='stat-label'>Checks</div></div>" +
         "</div>"
 
     # Critical findings section
@@ -2669,17 +2710,30 @@ function New-MonarchReport
         $html += "</div>"
     }
 
-    # Domain sections -- only domains with findings
+    # Domain sections -- domains with findings or not-assessed functions
     $findingDomains = @{}
     foreach ($f in @($criticals) + @($advisories)) {
         if (-not $findingDomains.ContainsKey($f.Domain)) { $findingDomains[$f.Domain] = [System.Collections.Generic.List[PSCustomObject]]::new() }
         $findingDomains[$f.Domain].Add($f)
     }
 
+    # Domains that need a section: have findings OR have not-assessed functions
+    $assessedDomains = @($dispositions | Where-Object { $_.Disposition -eq 'Assessed' -and $_.Domain } | ForEach-Object { $_.Domain } | Sort-Object -Unique)
+
     foreach ($d in $domainOrder) {
-        if (-not $findingDomains.ContainsKey($d)) { continue }
+        $hasFindings = $findingDomains.ContainsKey($d)
+        $hasNotAssessed = $notAssessedDomains.ContainsKey($d)
+        if (-not $hasFindings -and -not $hasNotAssessed) { continue }
+
         $dn = if ($domainNames.ContainsKey($d)) { $domainNames[$d] } else { $d }
-        $html += "<div class='domain-section'><h2>$dn</h2><div class='domain-metrics'>"
+
+        # Check count for section header
+        $checkStr = ''
+        if ($domainCheckCounts.ContainsKey($d)) {
+            $cc = $domainCheckCounts[$d]
+            $checkStr = " <span class='check-count'>$($cc.Assessed)/$($cc.Total) checks</span>"
+        }
+        $html += "<div class='domain-section'><h2>$dn$checkStr</h2><div class='domain-metrics'>"
 
         # Domain-specific metrics from result data
         $domainResult = $resultsList | Where-Object { $_.Domain -eq $d } | Select-Object -First 1
@@ -2699,22 +2753,30 @@ function New-MonarchReport
         foreach ($a in $domainAdvisories) {
             $html += "<div class='card w-advisory'><div class='adv-label'>Advisory</div><div class='description'>$($a.Description)</div></div>"
         }
+
+        # Not-assessed cards for this domain
+        if ($hasNotAssessed) {
+            foreach ($na in $notAssessedDomains[$d]) {
+                $html += "<div class='card w-neutral not-assessed'><div class='adv-label'>Not Assessed</div><div class='fn-name'>$($na.Function)</div><div class='fn-error'>$($na.Error)</div></div>"
+            }
+        }
         $html += "</div>"
     }
 
-    # Clean domains line
-    $allDomains = @($resultsList | ForEach-Object { $_.Domain } | Sort-Object -Unique)
-    $cleanDomains = @($allDomains | Where-Object { -not $findingDomains.ContainsKey($_) })
+    # Clean domains: assessed, no findings, no not-assessed functions
+    $cleanDomains = @($assessedDomains | Where-Object {
+        -not $findingDomains.ContainsKey($_) -and -not $notAssessedDomains.ContainsKey($_)
+    })
     if ($cleanDomains.Count -gt 0) {
         $cleanNames = ($cleanDomains | ForEach-Object { if ($domainNames.ContainsKey($_)) { $domainNames[$_] } else { $_ } }) -join ', '
         $html += "<div class='clean-domains'>No findings: $cleanNames</div>"
     }
 
-    # Failures section
-    if ($errorCount -gt 0) {
-        $html += "<div class='failures-section'><div class='section-label neutral'>Function Errors</div>"
-        foreach ($f in $failures) {
-            $html += "<div class='card w-neutral failure-item'><div class='fn-name'>$($f.Function)</div><div class='fn-error'>$($f.Error)</div></div>"
+    # Domain-less not-assessed fallback (backward compat -- failures without domain info)
+    if ($domainlessNotAssessed.Count -gt 0) {
+        $html += "<div class='failures-section'><div class='section-label neutral'>Not Assessed</div>"
+        foreach ($na in $domainlessNotAssessed) {
+            $html += "<div class='card w-neutral not-assessed'><div class='fn-name'>$($na.Function)</div><div class='fn-error'>$($na.Error)</div></div>"
         }
         $html += "</div>"
     }
