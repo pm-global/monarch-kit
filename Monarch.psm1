@@ -2543,6 +2543,50 @@ function New-MonarchReport
             'Find-GPOPermissionAnomaly' {
                 if ($r.Count -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.Count) GPOs with non-standard editors" }) }
             }
+            'Get-PasswordPolicyInventory' {
+                $minLen = Get-MonarchConfigValue -Key 'MinPasswordLength'
+                $reqLockout = Get-MonarchConfigValue -Key 'RequireLockoutThreshold'
+                $dp = $r.DefaultPolicy
+                if ($null -ne $dp) {
+                    if ($dp.ReversibleEncryption -eq $true) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'Default domain policy stores passwords with reversible encryption' }) }
+                    $issues = @()
+                    if ($dp.MinLength -lt $minLen) { $issues += "minimum length $($dp.MinLength) (recommended $minLen)" }
+                    if ($dp.ComplexityEnabled -eq $false) { $issues += 'complexity requirements disabled' }
+                    if ($reqLockout -and $dp.LockoutThreshold -eq 0) { $issues += 'no account lockout threshold' }
+                    if ($issues.Count -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "Default password policy: $($issues -join '; ')" }) }
+                }
+            }
+            'Get-DNSScavengingConfiguration' {
+                $reqScav = Get-MonarchConfigValue -Key 'RequireDNSScavenging'
+                if ($reqScav) {
+                    $stale = @($r.Zones | Where-Object { $_.ScavengingEnabled -eq $false })
+                    if ($stale.Count -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($stale.Count) DNS zones with scavenging disabled" }) }
+                }
+            }
+            'Get-EventLogConfiguration' {
+                $minSize = Get-MonarchConfigValue -Key 'MinSecurityLogSizeKB'
+                $okActions = Get-MonarchConfigValue -Key 'AcceptableOverflowActions'
+                $issues = @()
+                foreach ($dc in $r.DCs) {
+                    $secLog = $dc.Logs | Where-Object { $_.LogName -eq 'Security' }
+                    if ($null -ne $secLog) {
+                        if ($secLog.MaxSizeKB -lt $minSize) { $issues += "$($dc.DCName): Security log $($secLog.MaxSizeKB)KB (minimum $minSize)" }
+                        if ($secLog.OverflowAction -notin $okActions) { $issues += "$($dc.DCName): Security log overflow action '$($secLog.OverflowAction)'" }
+                    }
+                }
+                if ($issues.Count -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($issues.Count) event log configuration issues across DCs" }) }
+            }
+            'Test-ZoneReplicationScope' {
+                $reqDS = Get-MonarchConfigValue -Key 'RequireDSIntegration'
+                if ($reqDS) {
+                    $nonDS = @($r.Zones | Where-Object { $_.IsDsIntegrated -eq $false })
+                    if ($nonDS.Count -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($nonDS.Count) DNS zones not AD-integrated" }) }
+                }
+            }
+            'Get-FSMORolePlacement' {
+                if ($r.UnreachableCount -gt 0) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.UnreachableCount) FSMO role holders unreachable" }) }
+                if ($r.AllOnOneDC -eq $true) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'All FSMO roles held by a single DC' }) }
+            }
         }
     }
 
