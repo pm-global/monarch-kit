@@ -3468,6 +3468,98 @@ Describe 'New-MonarchReport' {
             $content | Should -Match 'LDAP timeout'
         }
     }
+
+    Context 'Advisory extraction covers all analysis functions' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-MonarchConfigValue {
+                switch ($Key) {
+                    'MinPasswordLength'         { 14 }
+                    'RequireLockoutThreshold'   { $true }
+                    'MinSecurityLogSizeKB'      { 1048576 }
+                    'AcceptableOverflowActions' { @('ArchiveTheLogWhenFull') }
+                    'RequireDNSScavenging'      { $true }
+                    'RequireDSIntegration'      { $true }
+                    default                     { '#2E5090' }
+                }
+            }
+            $script:outDir = Join-Path $TestDrive 'report-advisories'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:30'
+                Failures = @()
+                Results = @(
+                    # --- Existing cases (sanity) ---
+                    [PSCustomObject]@{ Domain = 'IdentityLifecycle'; Function = 'Find-DormantAccount'; TotalCount = 12; NeverLoggedOnCount = 3; Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-AdminCountOrphan'; Count = 4; Orphans = @(); Warnings = @() }
+
+                    # --- Fixed case ---
+                    [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-KerberoastableAccount'; TotalCount = 50; PrivilegedCount = 0; Accounts = @(); Warnings = @() }
+
+                    # --- New cases: security-critical ---
+                    [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-ASREPRoastableAccount'; Count = 3; Accounts = @(); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Find-WeakAccountFlag'; Findings = @(1,2,3); CountByFlag = @{ 'PasswordNeverExpires' = 3 }; Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Find-LegacyProtocolExposure'; DCFindings = @([PSCustomObject]@{ Risk = 'Medium'; Finding = 'LDAPSigningDisabled' }); Warnings = @() }
+
+                    # --- New case: GPO ---
+                    [PSCustomObject]@{ Domain = 'GroupPolicy'; Function = 'Find-GPOPermissionAnomaly'; Count = 2; Anomalies = @(1,2); Warnings = @() }
+
+                    # --- New cases: threshold-based ---
+                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Get-PasswordPolicyInventory'; DefaultPolicy = [PSCustomObject]@{ MinLength = 8; ComplexityEnabled = $false; LockoutThreshold = 0; ReversibleEncryption = $false }; FineGrainedPolicies = @(); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'DNS'; Function = 'Get-DNSScavengingConfiguration'; Zones = @([PSCustomObject]@{ ZoneName = 'contoso.com'; ScavengingEnabled = $false }); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'AuditCompliance'; Function = 'Get-EventLogConfiguration'; DCs = @([PSCustomObject]@{ DCName = 'DC01'; Logs = @([PSCustomObject]@{ LogName = 'Security'; MaxSizeKB = 512000; OverflowAction = 'OverwriteAsNeeded' }) }); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'DNS'; Function = 'Test-ZoneReplicationScope'; Zones = @([PSCustomObject]@{ ZoneName = 'contoso.com'; IsDsIntegrated = $false; ReplicationScope = $null; ZoneType = 'Primary' }); Warnings = @() }
+
+                    # --- Judgment-call ---
+                    [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-FSMORolePlacement'; Roles = @(); AllOnOneDC = $true; UnreachableCount = 0; Warnings = @() }
+                )
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        # Fixed case
+        It 'Find-KerberoastableAccount with TotalCount produces advisory' {
+            $content | Should -Match '50 accounts with SPNs'
+        }
+
+        # New cases
+        It 'Find-ASREPRoastableAccount produces advisory' {
+            $content | Should -Match '3 accounts with Kerberos pre-auth disabled'
+        }
+
+        It 'Find-WeakAccountFlag produces advisory' {
+            $content | Should -Match 'accounts with weak security flags'
+        }
+
+        It 'Find-LegacyProtocolExposure medium risk produces advisory' {
+            $content | Should -Match 'legacy protocol findings on DCs'
+        }
+
+        It 'Find-GPOPermissionAnomaly produces advisory' {
+            $content | Should -Match '2 GPOs with non-standard editors'
+        }
+
+        It 'Get-PasswordPolicyInventory weak policy produces advisory' {
+            $content | Should -Match 'minimum length 8'
+        }
+
+        It 'Get-DNSScavengingConfiguration disabled zones produce advisory' {
+            $content | Should -Match 'DNS zones with scavenging disabled'
+        }
+
+        It 'Get-EventLogConfiguration undersized log produces advisory' {
+            $content | Should -Match 'event log configuration issues'
+        }
+
+        It 'Test-ZoneReplicationScope non-integrated produces advisory' {
+            $content | Should -Match 'DNS zones not AD-integrated'
+        }
+
+        It 'Get-FSMORolePlacement AllOnOneDC produces advisory' {
+            $content | Should -Match 'All FSMO roles held by a single DC'
+        }
+    }
 }
 
 # =============================================================================
