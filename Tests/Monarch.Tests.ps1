@@ -3607,6 +3607,52 @@ Describe 'New-MonarchReport' {
             $content | Should -Match 'reversible encryption'
         }
     }
+
+    Context 'Clean results produce no advisories for threshold functions' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-MonarchConfigValue {
+                switch ($Key) {
+                    'MinPasswordLength'         { 14 }
+                    'RequireLockoutThreshold'   { $true }
+                    'MinSecurityLogSizeKB'      { 1048576 }
+                    'AcceptableOverflowActions' { @('ArchiveTheLogWhenFull') }
+                    'RequireDNSScavenging'      { $true }
+                    'RequireDSIntegration'      { $true }
+                    default                     { '#2E5090' }
+                }
+            }
+            $script:outDir = Join-Path $TestDrive 'report-clean'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:30'
+                Failures = @()
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-KerberoastableAccount'; TotalCount = 0; PrivilegedCount = 0; Accounts = @(); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-ASREPRoastableAccount'; Count = 0; Accounts = @(); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Find-WeakAccountFlag'; Findings = @(); CountByFlag = @{}; Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Find-LegacyProtocolExposure'; DCFindings = @(); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'GroupPolicy'; Function = 'Find-GPOPermissionAnomaly'; Count = 0; Anomalies = @(); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Get-PasswordPolicyInventory'; DefaultPolicy = [PSCustomObject]@{ MinLength = 14; ComplexityEnabled = $true; LockoutThreshold = 5; ReversibleEncryption = $false }; FineGrainedPolicies = @(); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'DNS'; Function = 'Get-DNSScavengingConfiguration'; Zones = @([PSCustomObject]@{ ZoneName = 'contoso.com'; ScavengingEnabled = $true }); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'AuditCompliance'; Function = 'Get-EventLogConfiguration'; DCs = @([PSCustomObject]@{ DCName = 'DC01'; Logs = @([PSCustomObject]@{ LogName = 'Security'; MaxSizeKB = 1048576; OverflowAction = 'ArchiveTheLogWhenFull' }) }); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'DNS'; Function = 'Test-ZoneReplicationScope'; Zones = @([PSCustomObject]@{ ZoneName = 'contoso.com'; IsDsIntegrated = $true; ReplicationScope = 'DomainDnsZones'; ZoneType = 'Primary' }); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-FSMORolePlacement'; Roles = @(); AllOnOneDC = $false; UnreachableCount = 0; Warnings = @() }
+                )
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'produces zero criticals and zero advisories' {
+            $content | Should -Match "stat-number'>0</div><div class='stat-label'>Critical"
+            $content | Should -Match "stat-number'>0</div><div class='stat-label'>Advisory"
+        }
+
+        It 'no domain sections rendered' {
+            $content | Should -Not -Match "<div class='domain-section'>"
+        }
+    }
 }
 
 # =============================================================================
