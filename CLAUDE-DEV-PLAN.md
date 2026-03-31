@@ -17,9 +17,9 @@ Ran each Discovery function against BadBlood domain. 5 bugs confirmed, all cause
 5 confirmed bugs. Individual plan files in repo root: `bb-fix-bug1.md` through `bb-fix-bug5.md`. Execute in fresh chats, archive when validated.
 Blocked by: TODO-1 (complete -- bug list confirmed via BB diagnostic).
 
-**TODO-3: Function disposition in report.**
-Every function gets a final status: findings, clear, or not assessed. Report must distinguish "checked and clean" from "never checked." Covers degraded-state reporting (missing DNS/GPO modules) and replaces silent omission.
-Blocked by: TODO-2 (fix bugs before adding disposition tracking).
+**TODO-3: Function disposition in report. COMPLETE.**
+Every function gets a final status: findings, clear, or not assessed. Report must distinguish "checked and clean" from "never checked." Covers degraded-state reporting (missing DNS/GPO modules) and replaces silent omission. Plan: `report-fix-plan.md`.
+Blocked by: TODO-2 (complete).
 
 **TODO-4: Honest file manifest with relative links.**
 Build report file tree from verified disk paths, not function claims. Relative links that actually open files. Only list what exists.

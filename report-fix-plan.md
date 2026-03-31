@@ -10,7 +10,7 @@ The fix: every function gets a disposition (findings, clean, or not assessed). T
 
 ---
 
-## Pass 1: Disposition Tracking in Orchestrator
+## Pass 1: Disposition Tracking in Orchestrator - COMPLETE
 
 **File:** `Monarch.psm1` -- `Invoke-DomainAudit` (lines 2764-2859)
 
@@ -112,7 +112,7 @@ Add to `Tests/Monarch.Tests.ps1` under the `Invoke-DomainAudit` Describe block:
 
 ---
 
-## Pass 2: Report Consumes Dispositions
+## Pass 2: Report Consumes Dispositions - COMPLETE
 
 **File:** `Monarch.psm1` -- `New-MonarchReport` (lines 2412-2756)
 

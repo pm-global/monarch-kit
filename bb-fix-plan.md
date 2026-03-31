@@ -82,7 +82,7 @@ Ran `bb-check.ps1` on BadBlood domain (LIGHT.local, single DC). All 25 functions
 
 ---
 
-## Step 3 — Add Function Disposition to Report
+## Step 3 — Add Function Disposition to Report - COMPLETE
 
 **Purpose:** Every function that ran gets a status. Report distinguishes "clean" from "not assessed."
 
@@ -91,6 +91,8 @@ Ran `bb-check.ps1` on BadBlood domain (LIGHT.local, single DC). All 25 functions
 **Pass 2:** Update New-MonarchReport to consume dispositions. Domains where all functions succeeded but had no findings: "No findings." Domains where a function failed: "Not assessed — [reason]" card.
 
 **Pass 3:** Pester tests for disposition rendering.
+
+**Implementation details:** `report-fix-plan.md`. 200 Pester tests, all passing.
 
 ---
 
@@ -126,7 +128,7 @@ Ran `bb-check.ps1` on BadBlood domain (LIGHT.local, single DC). All 25 functions
 
 - TODO-1 (diagnostic pass): COMPLETE
 - TODO-2 (fix bugs): COMPLETE
-- TODO-3 (function disposition): Step 3 of this plan
-- TODO-4 (honest manifest): Step 4 of this plan
-- TODO-5 (integration validation): Step 5 of this plan
+- TODO-3 (function disposition): COMPLETE
+- TODO-4 (honest manifest): Step 4
+- TODO-5 (integration validation): Step 5
 - TODO-6 (advisory metrics): deferred, but TODO-3 disposition work is prerequisite
