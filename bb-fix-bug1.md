@@ -1,4 +1,4 @@
-# BB Fix Bug 1: Get-ReplicationHealth — `-Server` splatted to wrong cmdlet
+# BB Fix Bug 1: Get-ReplicationHealth — `-Server` splatted to wrong cmdlet — COMPLETE
 
 Context: `CLAUDE.md`, `/var/mnt/storage/CODE/dev-guide.md`
 
@@ -14,7 +14,7 @@ The DC list itself (line 513: `Get-ADDomainController -Filter '*' @splatAD`) cor
 
 Remove `@splatAD` from line 525. The `-Target $dc.HostName` already directs the query to the correct DC. Since `$dcObjects` was fetched from the correct domain via `@splatAD` at line 513, each `$dc.HostName` is already scoped to the right domain. No other targeting is needed.
 
-## Pass 1 — Code fix
+## Pass 1 — Code fix — COMPLETE
 
 **File:** `Monarch.psm1`, line 525
 
@@ -30,7 +30,7 @@ $metadata = @(Get-ADReplicationPartnerMetadata -Target $dc.HostName)
 
 No other lines change. The rest of the function (partition classification, status grading, diagnostic hints) is correct — it just never received data.
 
-## Pass 2 — Test update
+## Pass 2 — Test update — COMPLETE
 
 **File:** `Tests/Monarch.Tests.ps1`, `Get-ReplicationHealth` Describe block
 

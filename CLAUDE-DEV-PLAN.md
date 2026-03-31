@@ -11,7 +11,7 @@ Checklist-driven implementation plan. Each checkbox is a discrete deliverable. C
 Items are ordered by priority. Blocking relationships noted where they exist.
 
 **TODO-1: Detection pipeline repair -- diagnostic pass. COMPLETE.**
-Ran each Discovery function against BadBlood domain. 5 bugs confirmed, all caused by accessing properties that don't exist on real cmdlet output (mocks hid the problem). Results: `docs/bb-fix-plan.md`.
+Ran each Discovery function against BadBlood domain. 5 bugs confirmed, all caused by accessing properties that don't exist on real cmdlet output (mocks hid the problem). Results: `bb-fix-plan.md`.
 
 **TODO-2: Fix individual detection bugs.**
 5 confirmed bugs. Individual plan files in repo root: `bb-fix-bug1.md` through `bb-fix-bug5.md`. Execute in fresh chats, archive when validated.

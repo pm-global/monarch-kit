@@ -57,7 +57,7 @@ Ran `bb-check.ps1` on BadBlood domain (LIGHT.local, single DC). All 25 functions
 
 | Bug | Function | Line | Issue | Impact |
 |-----|----------|------|-------|--------|
-| 1 | `Get-ReplicationHealth` | 525 | `@splatAD` passes `-Server` to `Get-ADReplicationPartnerMetadata` (doesn't accept it) | Total failure |
+| 1 | `Get-ReplicationHealth` | 525 | `@splatAD` passes `-Server` to `Get-ADReplicationPartnerMetadata` (doesn't accept it) | FIXED |
 | 2 | `Get-EventLogConfiguration` | 2208 | `.LogRetention` doesn't exist on `EventLogConfiguration` class | Total failure |
 | 3 | `Export-GPOAudit` + orchestrator | 2813 | Orchestrator doesn't pass `-IncludePermissions`/`-IncludeWMIFilters` | Missing data |
 | 4 | `Get-DNSForwarderConfiguration` | 2390 | `.UseRootHints` version-dependent, throws on some hosts | Failure on some versions |
@@ -77,6 +77,8 @@ Ran `bb-check.ps1` on BadBlood domain (LIGHT.local, single DC). All 25 functions
 **Purpose:** Fix each function identified in Step 1.
 
 **Plan files:** Each bug has a self-contained plan file in the repo root (`bb-fix-bug1.md` through `bb-fix-bug5.md`). Each plan has 2 passes: code fix + test update. Execute in fresh chats, archive when validated.
+
+**Progress:** Bug 1 FIXED (2026-03-31). Bugs 2-5 remaining.
 
 ---
 
