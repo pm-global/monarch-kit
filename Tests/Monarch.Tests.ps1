@@ -3560,6 +3560,53 @@ Describe 'New-MonarchReport' {
             $content | Should -Match 'All FSMO roles held by a single DC'
         }
     }
+
+    Context 'Severity escalation to critical' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-MonarchConfigValue { '#2E5090' }
+            $script:outDir = Join-Path $TestDrive 'report-escalation'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:30'
+                Failures = @()
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-KerberoastableAccount'; TotalCount = 50; PrivilegedCount = 3; Accounts = @(); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Find-WeakAccountFlag'; Findings = @(1,2); CountByFlag = @{ 'ReversibleEncryption' = 2 }; Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Find-LegacyProtocolExposure'; DCFindings = @([PSCustomObject]@{ Risk = 'High'; Finding = 'NTLMv1Enabled' }); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-FSMORolePlacement'; Roles = @(); AllOnOneDC = $false; UnreachableCount = 1; Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Get-PasswordPolicyInventory'; DefaultPolicy = [PSCustomObject]@{ MinLength = 14; ComplexityEnabled = $true; LockoutThreshold = 5; ReversibleEncryption = $true }; FineGrainedPolicies = @(); Warnings = @() }
+                )
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+            $script:critSection = ($content -split 'critical-section')[0]
+        }
+
+        It 'Kerberoastable with PrivilegedCount escalates to critical' {
+            $content | Should -Match 'privileged accounts with SPNs.*privileged'
+            $critSection | Should -Match 'privileged accounts with SPNs'
+        }
+
+        It 'WeakAccountFlag ReversibleEncryption escalates to critical' {
+            $content | Should -Match 'reversible encryption'
+            $critSection | Should -Match 'reversible encryption'
+        }
+
+        It 'LegacyProtocolExposure High risk escalates to critical' {
+            $content | Should -Match 'high-risk legacy protocol'
+            $critSection | Should -Match 'high-risk legacy protocol'
+        }
+
+        It 'FSMORolePlacement UnreachableCount escalates to critical' {
+            $content | Should -Match 'FSMO role holders unreachable'
+            $critSection | Should -Match 'FSMO role holders unreachable'
+        }
+
+        It 'PasswordPolicy ReversibleEncryption escalates to critical' {
+            $content | Should -Match 'reversible encryption'
+        }
+    }
 }
 
 # =============================================================================
