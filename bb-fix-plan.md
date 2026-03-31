@@ -59,8 +59,8 @@ Ran `bb-check.ps1` on BadBlood domain (LIGHT.local, single DC). All 25 functions
 |-----|----------|------|-------|--------|
 | 1 | `Get-ReplicationHealth` | 525 | `@splatAD` passes `-Server` to `Get-ADReplicationPartnerMetadata` (doesn't accept it) | FIXED 2026-03-31 |
 | 2 | `Get-EventLogConfiguration` | 2208 | `.LogRetention` doesn't exist on `EventLogConfiguration` class | FIXED 2026-03-31 |
-| 3 | `Export-GPOAudit` + orchestrator | 2813 | Orchestrator doesn't pass `-IncludePermissions`/`-IncludeWMIFilters` | Missing data |
-| 4 | `Get-DNSForwarderConfiguration` | 2390 | `.UseRootHints` version-dependent, throws on some hosts | Failure on some versions |
+| 3 | `Export-GPOAudit` + orchestrator | 2813 | Orchestrator doesn't pass `-IncludePermissions`/`-IncludeWMIFilters` | FIXED |
+| 4 | `Get-DNSForwarderConfiguration` | 2390 | `.UseRootHints` version-dependent, throws on some hosts | FIXED |
 | 5 | `Export-GPOAudit` | 1200 | `.Order` doesn't exist on GPO XML `LinksTo` node | Warning per GPO, linkage data lost |
 
 **Not bugs (confirmed working):**
@@ -78,7 +78,7 @@ Ran `bb-check.ps1` on BadBlood domain (LIGHT.local, single DC). All 25 functions
 
 **Plan files:** Each bug has a self-contained plan file in the repo root (`bb-fix-bug1.md` through `bb-fix-bug5.md`). Each plan has 2 passes: code fix + test update. Execute in fresh chats, archive when validated.
 
-**Progress:** Bug 1 FIXED (2026-03-31). Bug 2 FIXED (2026-03-31). Bugs 3-5 remaining.
+**Progress:** Bug 1 FIXED (2026-03-31). Bug 2 FIXED (2026-03-31). Bug 3 FIXED (2026-03-31). Bug 4 FIXED (2026-03-31). Bug 5 remaining.
 
 ---
 

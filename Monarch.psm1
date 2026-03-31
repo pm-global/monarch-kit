@@ -2386,7 +2386,7 @@ function Get-DNSForwarderConfiguration {
                 $dcForwarders += [PSCustomObject]@{
                     DCName       = $dc.HostName
                     Forwarders   = @([string[]]$fwd.IPAddress)
-                    UseRootHints = [bool]$fwd.UseRootHints
+                    UseRootHints = if ($fwd.PSObject.Properties['UseRootHints']) { [bool]$fwd.UseRootHints } else { $null }
                 }
             } catch { $warnings.Add("Forwarder($($dc.HostName)): $_") }
         }
@@ -2809,7 +2809,7 @@ function Invoke-DomainAudit
         @{ Name = 'Get-ReplicationHealth';         Params = @{ Server = $dc } }
         @{ Name = 'Get-SiteTopology';              Params = @{ Server = $dc } }
         @{ Name = 'Get-ForestDomainLevel';         Params = @{ Server = $dc } }
-        @{ Name = 'Export-GPOAudit';               Params = @{ Server = $dc; OutputPath = $dirs.GPO } }
+        @{ Name = 'Export-GPOAudit';               Params = @{ Server = $dc; OutputPath = $dirs.GPO; IncludePermissions = $true; IncludeWMIFilters = $true } }
         @{ Name = 'Find-UnlinkedGPO';              Params = @{ Server = $dc } }
         @{ Name = 'Find-GPOPermissionAnomaly';     Params = @{ Server = $dc } }
         @{ Name = 'Get-PrivilegedGroupMembership'; Params = @{ Server = $dc } }

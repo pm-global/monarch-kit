@@ -3238,6 +3238,26 @@ Describe 'Get-DNSForwarderConfiguration' {
             $result.DCForwarders[1].Forwarders | Should -Contain '1.1.1.1'
         }
     }
+
+    Context 'DC where UseRootHints property is absent' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-Command { $true } -ParameterFilter { $Name -eq 'Get-DnsServerZone' }
+            Mock -ModuleName Monarch Get-ADDomainController { @(
+                [PSCustomObject]@{ HostName = 'DC1.test.local' }
+            ) }
+            Mock -ModuleName Monarch Get-DnsServerForwarder {
+                [PSCustomObject]@{ IPAddress = @('8.8.8.8', '8.8.4.4') }
+            }
+            $script:result = Get-DNSForwarderConfiguration
+        }
+
+        It 'returns null UseRootHints and populated Forwarders without warning' {
+            $result.DCForwarders | Should -HaveCount 1
+            $result.DCForwarders[0].UseRootHints | Should -BeNullOrEmpty
+            $result.DCForwarders[0].Forwarders | Should -Contain '8.8.8.8'
+            $result.Warnings | Should -HaveCount 0
+        }
+    }
 }
 
 # =============================================================================
