@@ -2510,7 +2510,8 @@ function New-MonarchReport
                 if ($r.Consistent -eq $false) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'DNS forwarder configuration inconsistent across DCs' }) }
             }
             'Find-KerberoastableAccount' {
-                if ($r.PrivilegedCount -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.PrivilegedCount) privileged accounts with SPNs (Kerberoasting risk)" }) }
+                if ($r.PrivilegedCount -gt 0) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.PrivilegedCount) privileged accounts with SPNs (Kerberoasting risk -- privileged)" }) }
+                if ($r.TotalCount -gt 0 -and $r.PrivilegedCount -eq 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.TotalCount) accounts with SPNs (Kerberoasting risk)" }) }
             }
             'Test-ProtectedUsersGap' {
                 if ($r.GapAccounts.Count -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.GapAccounts.Count) privileged accounts not in Protected Users" }) }
