@@ -1211,7 +1211,7 @@ Describe 'Get-ReplicationHealth' {
             { param([string]$Filter, [string]$Server)
             }
             function script:Get-ADReplicationPartnerMetadata
-            { param($Target, [string]$Server)
+            { param($Target)
             }
         }
     }
