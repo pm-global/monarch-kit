@@ -2784,7 +2784,6 @@ function New-MonarchReport
     }
 
     # --- File tree: scan disk, not claims ---
-    $OutputPath = (Resolve-Path -LiteralPath $OutputPath).Path
     # 1. Clean up empties under $OutputPath
     Get-ChildItem -LiteralPath $OutputPath -File -Recurse |
         Where-Object { $_.Length -eq 0 } |
@@ -2796,15 +2795,11 @@ function New-MonarchReport
         $emptyDirs | Remove-Item -Force
     } while ($emptyDirs.Count -gt 0)
 
-    # 2. Scan remaining files, exclude the report itself
+    # 2. Scan remaining files as relative paths, exclude the report itself
     $reportName = '00-Discovery-Report.html'
-    $diskFiles = @(Get-ChildItem -LiteralPath $OutputPath -File -Recurse |
-        Where-Object { $_.Name -ne $reportName })
-
-    # 3. Build relative paths (forward slashes for HTML)
-    $verifiedPaths = @($diskFiles | ForEach-Object {
-        $_.FullName.Substring($OutputPath.TrimEnd('\','/').Length + 1).Replace('\','/')
-    })
+    $verifiedPaths = @(Get-ChildItem -LiteralPath $OutputPath -File -Recurse -Name |
+        Where-Object { ($_ -split '[/\\]')[-1] -ne $reportName } |
+        ForEach-Object { $_ -replace '\\','/' })
 
     # 4. Render file tree -- sorted paths, depth-based indent, each folder name once
     if ($verifiedPaths.Count -gt 0) {
