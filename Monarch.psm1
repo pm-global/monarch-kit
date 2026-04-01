@@ -2,7 +2,8 @@
 # Active Directory audit and administration suite.
 # Composes OctoDoc stratagems for sensor data and provides the interpretation
 # layer that produces actionable domain answers.
-#
+
+
 # Structure: single .psm1 per CLAUDE.md spec, organized by #region blocks.
 # Each region corresponds to a domain from docs/domain-specs.md.
 
@@ -177,7 +178,7 @@ function Get-ForestDomainLevel
     .SYNOPSIS
         Domain/forest functional levels and schema version.
     .DESCRIPTION
-        Focused check for the orchestrator. Overlaps with New-DomainBaseline intentionally  -- 
+        Focused check for the orchestrator. Overlaps with New-DomainBaseline intentionally  --
         baseline is a snapshot document, this is a quick level check.
         Each query is independent -- if one fails, others still populate.
     .PARAMETER Server
@@ -1836,7 +1837,7 @@ function New-DomainBaseline
     .SYNOPSIS
         Comprehensive domain snapshot -- functional levels, DCs, FSMO, OUs, object counts, password policy.
     .DESCRIPTION
-        Collects baseline data across seven sections. Each section is independent  -- 
+        Collects baseline data across seven sections. Each section is independent  --
         if one fails, the rest still populate and the failure appears in Warnings.
         Pattern-setting function: all subsequent API functions follow this contract.
     .PARAMETER Server
@@ -2859,13 +2860,12 @@ function Invoke-DomainAudit
         [string]$OutputPath
     )
 
-    # Auto-reload if source changed on disk since last import
+    # If hashes fail, call preflight and bail
     $currentHash = (Get-FileHash "$PSScriptRoot\Monarch.psm1" -Algorithm MD5).Hash
     if ($currentHash -ne $script:_moduleHash) {
         Write-Host 'preflight: module source changed on disk, reloading...' -ForegroundColor DarkGray
-        Import-Module "$PSScriptRoot\Monarch.psd1" -Force -ErrorAction Stop
-        Invoke-DomainAudit @PSBoundParameters
-        return
+        Start-Process -FilePath powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -NoExit -File ""$PSScriptRoot\preflight-win.ps1"" -AndMonarch -OutputPath ""$OutputPath"""
+        exit
     }
 
     if ($Phase -ne 'Discovery') { throw "Phase '$Phase' is not yet implemented." }
@@ -2888,7 +2888,7 @@ function Invoke-DomainAudit
 
     # Discovery function sequence -- Domain key maps each function to its functional domain
     $calls = @(
-        @{ Name = 'New-DomainBaseline';           Domain = 'AuditCompliance';       Params = @{ Server = $dc; OutputPath = $dirs.Baseline } }
+        @{ Name = 'New-DomainBaseline';            Domain = 'AuditCompliance';      Params = @{ Server = $dc; OutputPath = $dirs.Baseline } }
         @{ Name = 'Get-FSMORolePlacement';         Domain = 'InfrastructureHealth'; Params = @{ Server = $dc } }
         @{ Name = 'Get-ReplicationHealth';         Domain = 'InfrastructureHealth'; Params = @{ Server = $dc } }
         @{ Name = 'Get-SiteTopology';              Domain = 'InfrastructureHealth'; Params = @{ Server = $dc } }
