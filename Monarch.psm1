@@ -2830,7 +2830,7 @@ function New-MonarchReport
                 if ($IsRoot) {
                     [void]$SB.Append("<div class='group'><a href='$href' class='folder'>$dir/</a><div class='tree-children'>")
                 } else {
-                    [void]$SB.Append("<div class='tree-item'><a href='$href' class='folder'>$dir/</a></div><div class='tree-children'>")
+                    [void]$SB.Append("<a href='$href' class='folder'>$dir/</a><div class='tree-children'>")
                 }
                 & $renderTree $Node.Children[$dir] $href $false $SB
                 [void]$SB.Append("</div>")

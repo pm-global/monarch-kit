@@ -3939,6 +3939,51 @@ Describe 'New-MonarchReport' {
             $content | Should -Not -Match "<div class='output-section'>"
         }
     }
+
+    Context 'Nested subdirectories cascade without repeating folder names' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-nested'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+
+            # Create nested structure: 02-GPO-Audit/00-SUMMARY/EXEC.txt and 02-GPO-Audit/01-HTML/INDEX.html
+            $gpoDir = Join-Path $outDir '02-GPO-Audit'
+            New-Item -ItemType Directory -Path (Join-Path $gpoDir '00-SUMMARY') -Force | Out-Null
+            New-Item -ItemType Directory -Path (Join-Path $gpoDir '01-HTML') -Force | Out-Null
+            Set-Content -Path (Join-Path $gpoDir '00-SUMMARY/EXEC.txt') -Value 'summary'
+            Set-Content -Path (Join-Path $gpoDir '01-HTML/INDEX.html') -Value '<html>'
+
+            $script:mockResults = [PSCustomObject]@{
+                Phase     = 'Discovery'
+                Domain    = 'contoso.com'
+                DCUsed    = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'
+                EndTime   = [datetime]'2026-03-25 14:30'
+                Results   = @()
+                Failures  = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'parent folder rendered as folder link exactly once' {
+            $matches = [regex]::Matches($content, "class='folder'>02-GPO-Audit/</a>")
+            $matches.Count | Should -Be 1
+        }
+
+        It 'subfolder names rendered as folder links exactly once each' {
+            ([regex]::Matches($content, "class='folder'>00-SUMMARY/</a>")).Count | Should -Be 1
+            ([regex]::Matches($content, "class='folder'>01-HTML/</a>")).Count | Should -Be 1
+        }
+
+        It 'subfolders are not wrapped in tree-item divs' {
+            $content | Should -Not -Match "<div class='tree-item'><a [^>]*class='folder'>"
+        }
+
+        It 'leaf files are wrapped in tree-item divs with links' {
+            $content | Should -Match "<div class='tree-item'><a href='02-GPO-Audit/00-SUMMARY/EXEC\.txt'>EXEC\.txt</a></div>"
+            $content | Should -Match "<div class='tree-item'><a href='02-GPO-Audit/01-HTML/INDEX\.html'>INDEX\.html</a></div>"
+        }
+    }
 }
 
 # =============================================================================
