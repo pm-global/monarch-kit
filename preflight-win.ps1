@@ -5,7 +5,9 @@
 #
 
 param(
-    [switch]$AndMonarch
+    [switch]$AndMonarch,
+    [string]$Phase = 'Discovery',
+    [string]$OutputPath
 )
 
 # --- 1. Remove cached module ---
@@ -113,5 +115,7 @@ Write-Host "preflight OK: Monarch loaded ($($funcs.Count) functions), PowerShell
 # --- 11. Run main kit if -AndMonarch specified ---
 if ($AndMonarch) {
     Write-Host 'preflight: running Monarch...' -ForegroundColor DarkGray
-    & "$PSScriptRoot\Monarch.psm1"
+    $invokeParams = @{ Phase = $Phase }
+    if ($OutputPath) { $invokeParams['OutputPath'] = $OutputPath }
+    Invoke-DomainAudit @invokeParams
 }
