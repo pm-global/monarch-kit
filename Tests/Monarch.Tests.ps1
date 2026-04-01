@@ -3975,13 +3975,15 @@ Describe 'New-MonarchReport' {
             ([regex]::Matches($content, "class='folder'>01-HTML/</a>")).Count | Should -Be 1
         }
 
-        It 'subfolders are not wrapped in tree-item divs' {
-            $content | Should -Not -Match "<div class='tree-item'><a [^>]*class='folder'>"
+        It 'subfolders rendered with deeper indent than parent' {
+            # Parent at 0px, subfolder at 24px
+            $content | Should -Match "padding-left:0px.*02-GPO-Audit/"
+            $content | Should -Match "padding-left:24px.*00-SUMMARY/"
         }
 
-        It 'leaf files are wrapped in tree-item divs with links' {
-            $content | Should -Match "<div class='tree-item'><a href='02-GPO-Audit/00-SUMMARY/EXEC\.txt'>EXEC\.txt</a></div>"
-            $content | Should -Match "<div class='tree-item'><a href='02-GPO-Audit/01-HTML/INDEX\.html'>INDEX\.html</a></div>"
+        It 'leaf files are tree-items with links' {
+            $content | Should -Match "tree-item.*<a href='02-GPO-Audit/00-SUMMARY/EXEC\.txt'>EXEC\.txt</a>"
+            $content | Should -Match "tree-item.*<a href='02-GPO-Audit/01-HTML/INDEX\.html'>INDEX\.html</a>"
         }
     }
 

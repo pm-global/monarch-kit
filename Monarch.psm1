@@ -2672,7 +2672,6 @@ function New-MonarchReport
         ".file-tree{font-family:'Cascadia Code','Consolas',monospace;font-size:var(--t5);margin-top:var(--gap-tight)}" +
         ".file-tree .group{margin-bottom:var(--gap-related)}.file-tree .group:last-child{margin-bottom:0}" +
         ".file-tree .folder{font-weight:600;color:var(--text-1);text-decoration:none;display:block;line-height:1.3;margin-bottom:var(--gap-micro)}" +
-        ".file-tree .tree-children{padding-left:var(--gap-related);border-left:1px solid var(--border-1)}" +
         ".file-tree .tree-item{color:var(--text-2);line-height:1.8;position:relative}.file-tree .tree-item::before{content:'\2500 ';color:var(--text-3)}" +
         ".file-tree a.folder:hover{color:var(--accent-primary);text-decoration:underline}" +
         ".file-tree .tree-item a{color:var(--accent-primary);text-decoration:none}.file-tree .tree-item a:hover{text-decoration:underline}" +
@@ -2807,44 +2806,25 @@ function New-MonarchReport
         $_.FullName.Substring($OutputPath.TrimEnd('\','/').Length + 1).Replace('\','/')
     })
 
-    # 4. Build recursive tree, render with nesting
+    # 4. Render file tree -- sorted paths, depth-based indent, each folder name once
     if ($verifiedPaths.Count -gt 0) {
-        # Build tree: each node is @{ Children = @{}; Files = @() }
-        $tree = @{ Children = [ordered]@{}; Files = [System.Collections.Generic.List[string]]::new() }
-        foreach ($rel in $verifiedPaths) {
-            $parts = $rel -split '/'
-            $node = $tree
-            for ($i = 0; $i -lt $parts.Count - 1; $i++) {
-                if (-not $node.Children.Contains($parts[$i])) {
-                    $node.Children[$parts[$i]] = @{ Children = [ordered]@{}; Files = [System.Collections.Generic.List[string]]::new() }
-                }
-                $node = $node.Children[$parts[$i]]
-            }
-            $node.Files.Add($parts[-1])
-        }
-        # Recursive renderer using StringBuilder (reference type, visible inside scriptblock)
-        $sb = [System.Text.StringBuilder]::new()
-        $renderTree = {
-            param($Node, $Prefix, $IsRoot, $SB)
-            foreach ($dir in $Node.Children.Keys | Sort-Object) {
-                $href = if ($Prefix) { "$Prefix$dir/" } else { "$dir/" }
-                if ($IsRoot) {
-                    [void]$SB.Append("<div class='group'><a href='$href' class='folder'>$dir/</a><div class='tree-children'>")
-                } else {
-                    [void]$SB.Append("<a href='$href' class='folder'>$dir/</a><div class='tree-children'>")
-                }
-                & $renderTree $Node.Children[$dir] $href $false $SB
-                [void]$SB.Append("</div>")
-                if ($IsRoot) { [void]$SB.Append("</div>") }
-            }
-            foreach ($file in $Node.Files | Sort-Object) {
-                $href = if ($Prefix) { "$Prefix$file" } else { $file }
-                [void]$SB.Append("<div class='tree-item'><a href='$href'>$file</a></div>")
-            }
-        }
         $html += "<div class='output-section'><div class='section-label neutral'>Output Files</div><div class='file-tree'>"
-        & $renderTree $tree '' $true $sb
-        $html += $sb.ToString()
+        $lastSegments = @()
+        foreach ($rel in ($verifiedPaths | Sort-Object)) {
+            $parts = $rel -split '/'
+            $fileName = $parts[-1]
+            $folders = @($parts[0..($parts.Count - 2)])
+            for ($i = 0; $i -lt $folders.Count; $i++) {
+                if ($i -ge $lastSegments.Count -or $folders[$i] -ne $lastSegments[$i]) {
+                    $indent = $i * 24
+                    $href = ($folders[0..$i] -join '/') + '/'
+                    $html += "<div style='padding-left:${indent}px'><a href='$href' class='folder'>$($folders[$i])/</a></div>"
+                }
+            }
+            $lastSegments = $folders
+            $fileIndent = $folders.Count * 24
+            $html += "<div class='tree-item' style='padding-left:${fileIndent}px'><a href='$rel'>$fileName</a></div>"
+        }
         $html += "</div></div>"
     }
 
