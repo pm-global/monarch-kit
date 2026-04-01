@@ -3842,6 +3842,103 @@ Describe 'New-MonarchReport' {
             $content | Should -Match 'Access denied'
         }
     }
+
+    Context 'File tree matches disk -- verified files only' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-filetree'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+
+            # Real files with content
+            $base = Join-Path $outDir '01-Baseline'
+            New-Item -ItemType Directory -Path $base -Force | Out-Null
+            Set-Content -Path (Join-Path $base 'domain-info.csv') -Value 'col1,col2'
+            Set-Content -Path (Join-Path $base 'controllers.csv') -Value 'dc1,dc2'
+
+            # Empty directory (should be cleaned up)
+            $emptyDir = Join-Path $outDir '03-Privileged-Access'
+            New-Item -ItemType Directory -Path $emptyDir -Force | Out-Null
+
+            # Empty file (0 bytes, should be cleaned up)
+            $zeroFile = Join-Path $base 'empty.csv'
+            [IO.File]::WriteAllBytes($zeroFile, [byte[]]@())
+
+            $script:emptyDirPath = $emptyDir
+            $script:zeroFilePath = $zeroFile
+
+            $script:mockResults = [PSCustomObject]@{
+                Phase     = 'Discovery'
+                Domain    = 'contoso.com'
+                DCUsed    = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'
+                EndTime   = [datetime]'2026-03-25 14:30'
+                Results   = @()
+                Failures  = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'real files appear in tree' {
+            $content | Should -Match 'domain-info\.csv'
+            $content | Should -Match 'controllers\.csv'
+        }
+
+        It 'empty directory excluded from tree' {
+            $content | Should -Not -Match '03-Privileged-Access'
+        }
+
+        It 'empty file excluded from tree' {
+            $content | Should -Not -Match 'empty\.csv'
+        }
+
+        It 'folder links are <a> tags with href' {
+            $content | Should -Match "<a href='01-Baseline/' class='folder'>"
+        }
+
+        It 'file links are <a> tags with href' {
+            $content | Should -Match "<a href='01-Baseline/domain-info\.csv'>domain-info\.csv</a>"
+        }
+
+        It 'report file excluded from tree' {
+            $content | Should -Not -Match '00-Discovery-Report\.html'
+        }
+
+        It 'empty directory removed from disk' {
+            Test-Path $script:emptyDirPath | Should -BeFalse
+        }
+
+        It 'empty file removed from disk' {
+            Test-Path $script:zeroFilePath | Should -BeFalse
+        }
+
+        It 'real files untouched on disk' {
+            Test-Path (Join-Path $outDir '01-Baseline/domain-info.csv') | Should -BeTrue
+            Test-Path (Join-Path $outDir '01-Baseline/controllers.csv') | Should -BeTrue
+        }
+    }
+
+    Context 'File tree omitted when no output files exist' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-notree'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+
+            $script:mockResults = [PSCustomObject]@{
+                Phase     = 'Discovery'
+                Domain    = 'contoso.com'
+                DCUsed    = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'
+                EndTime   = [datetime]'2026-03-25 14:30'
+                Results   = @()
+                Failures  = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'no output-section div in HTML' {
+            $content | Should -Not -Match "<div class='output-section'>"
+        }
+    }
 }
 
 # =============================================================================
