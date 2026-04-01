@@ -7,8 +7,15 @@ PowerShell module for Active Directory auditing. Structured discovery across eig
 ## Quick Start
 
 ```powershell
-Import-Module Monarch
+.\preflight-win.ps1                   # check environment and import module (run once per session)
 Invoke-DomainAudit -Phase Discovery   # orchestrates all 25 API functions, generates HTML report
+```
+
+Or import manually:
+
+```powershell
+Import-Module Monarch
+Invoke-DomainAudit -Phase Discovery
 ```
 
 Or call functions directly:

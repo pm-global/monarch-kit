@@ -135,7 +135,15 @@ You need a Windows domain with populated data. Two proven approaches:
 
 ### Pre-flight checks
 
-Before running monarch-kit, verify the lab domain is reachable and the test data is present:
+Run `preflight-win.ps1` from the repo root to verify the environment, remove any cached module, and import fresh:
+
+```powershell
+.\preflight-win.ps1
+```
+
+It checks PowerShell version, detects Server vs Workstation (so install commands match your OS), verifies required and optional components (ActiveDirectory, GroupPolicy, DnsServer, Pester), and imports the module. Failures stop with a copy-pasteable fix command.
+
+Once the preflight passes, verify the lab domain is reachable and the test data is present:
 
 ```powershell
 # Can you reach AD?
@@ -370,7 +378,10 @@ After the first production run:
 ## Quick Reference
 
 ```powershell
-# === Setup ===
+# === Preflight (checks everything below in one step) ===
+.\preflight-win.ps1                                                    # Env check + module import
+
+# === Setup (manual alternative) ===
 Install-WindowsFeature RSAT-AD-PowerShell, RSAT-ADDS-Tools, GPMC    # Server
 Install-Module -Name Pester -Force -SkipPublisherCheck                # Pester 5
 Import-Module C:\path\to\monarch-kit\Monarch.psd1                    # Module

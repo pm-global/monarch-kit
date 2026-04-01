@@ -34,6 +34,7 @@ See `CLAUDE-DEV-PLAN.md` for full roadmap and status.
 | `docs/checklists.md`        | Human review checklists and institutional knowledge                       | Remediation or interactive wrapper work |
 | `docs/design-system.md`     | HTML report visuals and console output rules                              | Reporting changes |
 | `docs/dormant-account-policy.md` | Dormant account compliance policy                                     | Dormant account features |
+| `preflight-win.ps1`         | Windows environment check script (VOM output, server/workstation aware)   | First run on a new Windows host |
 | `docs/deployment-guide.md`  | Environment setup, RSAT, first-run validation                             | Preflight or deployment work |
 | `docs/gpo-review-guide.md`  | GPO review methods and priorities                                         | Group Policy work |
 | `docs/gap-research.md`      | Implementation gap analysis vs industry standards                          | Gap analysis or roadmap work |
