@@ -2859,6 +2859,15 @@ function Invoke-DomainAudit
         [string]$OutputPath
     )
 
+    # Auto-reload if source changed on disk since last import
+    $currentHash = (Get-FileHash "$PSScriptRoot\Monarch.psm1" -Algorithm MD5).Hash
+    if ($currentHash -ne $script:_moduleHash) {
+        Write-Host 'preflight: module source changed on disk, reloading...' -ForegroundColor DarkGray
+        Import-Module "$PSScriptRoot\Monarch.psd1" -Force -ErrorAction Stop
+        Invoke-DomainAudit @PSBoundParameters
+        return
+    }
+
     if ($Phase -ne 'Discovery') { throw "Phase '$Phase' is not yet implemented." }
 
     # Resolve DC -- fatal if fails
@@ -2946,4 +2955,5 @@ function Invoke-DomainAudit
 # Module Initialization
 # ============================================================================
 
+$script:_moduleHash = (Get-FileHash "$PSScriptRoot\Monarch.psm1" -Algorithm MD5).Hash
 Import-MonarchConfig
