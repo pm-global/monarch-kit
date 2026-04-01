@@ -4017,6 +4017,12 @@ Describe 'New-MonarchReport' {
             $content | Should -Not -Match 'TestDrive'
             $content | Should -Not -Match 'report-relpath'
         }
+
+        It 'display text is filename only, not full path' {
+            # The link text between <a> and </a> must be just the filename
+            $content | Should -Match ">info\.csv</a>"
+            $content | Should -Not -Match ">01-Baseline/info\.csv</a>"
+        }
     }
 }
 

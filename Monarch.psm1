@@ -2797,9 +2797,10 @@ function New-MonarchReport
 
     # 2. Scan remaining files as relative paths, exclude the report itself
     $reportName = '00-Discovery-Report.html'
-    $verifiedPaths = @(Get-ChildItem -LiteralPath $OutputPath -File -Recurse -Name |
-        Where-Object { ($_ -split '[/\\]')[-1] -ne $reportName } |
-        ForEach-Object { $_ -replace '\\','/' })
+    $baseFull = (Get-Item -LiteralPath $OutputPath).FullName.TrimEnd('\', '/')
+    $verifiedPaths = @(Get-ChildItem -LiteralPath $OutputPath -File -Recurse |
+        Where-Object { $_.Name -ne $reportName } |
+        ForEach-Object { $_.FullName.Substring($baseFull.Length + 1) -replace '\\','/' })
 
     # 4. Render file tree -- sorted paths, depth-based indent, each folder name once
     if ($verifiedPaths.Count -gt 0) {
