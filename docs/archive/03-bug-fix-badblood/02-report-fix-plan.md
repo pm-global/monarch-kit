@@ -298,7 +298,7 @@ Add to `Tests/Monarch.Tests.ps1` under the `New-MonarchReport` Describe block:
 
 ---
 
-## Pass 3: Integration Smoke Test
+## Pass 3: Integration Smoke Test COMPLETE
 
 **No code changes.** Verify the full pipeline works:
 
