@@ -2781,20 +2781,33 @@ function New-MonarchReport
         $html += "</div>"
     }
 
-    # Output files tree -- collect from result properties
-    $allPaths = @()
-    foreach ($r in $resultsList) {
-        if ($r.PSObject.Properties['OutputPaths'] -and $r.OutputPaths) {
-            $r.OutputPaths.PSObject.Properties | Where-Object { $_.Value } | ForEach-Object { $allPaths += $_.Value }
-        }
-        if ($r.PSObject.Properties['CSVPath'] -and $r.CSVPath) { $allPaths += $r.CSVPath }
-        if ($r.PSObject.Properties['OutputFiles'] -and $r.OutputFiles) { $allPaths += @($r.OutputFiles) }
-    }
-    if ($allPaths.Count -gt 0) {
+    # --- File tree: scan disk, not claims ---
+    # 1. Clean up empties under $OutputPath
+    Get-ChildItem -LiteralPath $OutputPath -File -Recurse |
+        Where-Object { $_.Length -eq 0 } |
+        Remove-Item -Force
+    # Leaf-first empty directory removal (repeat until stable)
+    do {
+        $emptyDirs = @(Get-ChildItem -LiteralPath $OutputPath -Directory -Recurse |
+            Where-Object { @(Get-ChildItem -LiteralPath $_.FullName -Force).Count -eq 0 })
+        $emptyDirs | Remove-Item -Force
+    } while ($emptyDirs.Count -gt 0)
+
+    # 2. Scan remaining files, exclude the report itself
+    $reportName = '00-Discovery-Report.html'
+    $diskFiles = @(Get-ChildItem -LiteralPath $OutputPath -File -Recurse |
+        Where-Object { $_.Name -ne $reportName })
+
+    # 3. Build relative paths (forward slashes for HTML)
+    $verifiedPaths = @($diskFiles | ForEach-Object {
+        $_.FullName.Substring($OutputPath.TrimEnd('\','/').Length + 1).Replace('\','/')
+    })
+
+    # 4. Group by first segment, render
+    if ($verifiedPaths.Count -gt 0) {
         $groups = @{}
-        foreach ($p in $allPaths) {
-            $rel = if ($OutputPath -and $p.StartsWith($OutputPath)) { $p.Substring($OutputPath.Length).TrimStart('\','/') } else { $p }
-            $parts = $rel -split '[/\\]'
+        foreach ($rel in $verifiedPaths) {
+            $parts = $rel -split '/'
             $folder = if ($parts.Count -gt 1) { $parts[0] } else { '.' }
             if (-not $groups.ContainsKey($folder)) { $groups[$folder] = [System.Collections.Generic.List[string]]::new() }
             $child = if ($parts.Count -gt 1) { ($parts[1..($parts.Count-1)] -join '/') } else { $parts[0] }
