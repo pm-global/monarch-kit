@@ -1,5 +1,12 @@
 # preflight-win.ps1 — environment check for monarch-kit on Windows
 # Run from the monarch-kit repo root: .\preflight-win.ps1
+# Use -AndMonarch to run the main kit after preflight succeeds
+#
+#
+
+param(
+    [switch]$AndMonarch
+)
 
 # --- 1. Remove cached module ---
 Remove-Module Monarch -Force -ErrorAction SilentlyContinue
@@ -102,3 +109,9 @@ if ($funcs.Count -eq 0) {
 
 # --- 10. Success ---
 Write-Host "preflight OK: Monarch loaded ($($funcs.Count) functions), PowerShell $($psv.Major).$($psv.Minor), Windows $osLabel" -ForegroundColor Green
+
+# --- 11. Run main kit if -AndMonarch specified ---
+if ($AndMonarch) {
+    Write-Host 'preflight: running Monarch...' -ForegroundColor DarkGray
+    & "$PSScriptRoot\Monarch.psm1"
+}
