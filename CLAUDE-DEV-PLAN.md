@@ -21,7 +21,7 @@ Blocked by: TODO-1 (complete -- bug list confirmed via BB diagnostic).
 Every function gets a final status: findings, clear, or not assessed. Report must distinguish "checked and clean" from "never checked." Covers degraded-state reporting (missing DNS/GPO modules) and replaces silent omission. Plan: `report-fix-plan.md`.
 Blocked by: TODO-2 (complete).
 
-**TODO-4: Honest file manifest with relative links.**
+**TODO-4: Honest file manifest with relative links. COMPLETE.**
 Build report file tree from verified disk paths, not function claims. Relative links that actually open files. Only list what exists.
 Blocked by: TODO-2 (file output bugs must be fixed first).
 
