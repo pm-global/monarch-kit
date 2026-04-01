@@ -2673,7 +2673,9 @@ function New-MonarchReport
         ".file-tree .group{margin-bottom:var(--gap-related)}.file-tree .group:last-child{margin-bottom:0}" +
         ".file-tree .folder{font-weight:600;color:var(--text-1);text-decoration:none;display:block;line-height:1.3;margin-bottom:var(--gap-micro)}" +
         ".file-tree .tree-children{padding-left:var(--gap-related);border-left:1px solid var(--border-1)}" +
-        ".file-tree .tree-item{color:var(--text-2);line-height:1.8;position:relative}.file-tree .tree-item::before{content:'-- ';color:var(--text-3)}" +
+        ".file-tree .tree-item{color:var(--text-2);line-height:1.8;position:relative}.file-tree .tree-item::before{content:'\2500 ';color:var(--text-3)}" +
+        ".file-tree a.folder:hover{color:var(--accent-primary);text-decoration:underline}" +
+        ".file-tree .tree-item a{color:var(--accent-primary);text-decoration:none}.file-tree .tree-item a:hover{text-decoration:underline}" +
         ".report-footer{margin-top:calc(var(--gap-separate) + var(--gap-related));padding-top:var(--gap-related);border-top:1px solid var(--border-1);" +
         "font-size:var(--t5);line-height:1;color:var(--text-3);display:flex;flex-wrap:wrap;justify-content:space-between;column-gap:var(--gap-related);row-gap:var(--gap-micro)}" +
         "@media(max-width:600px){.container{padding:var(--gap-related)}}" +
@@ -2682,7 +2684,8 @@ function New-MonarchReport
         ".stat.w-critical{border-left:4px solid #000}.stat.w-advisory{border-left:4px solid #666}" +
         ".card.w-critical{border-left:4px solid #000;background:none}.card.w-advisory{border-left:3px solid #666;background:none}" +
         ".card.w-neutral{border-left:3px solid #999;background:none}a{color:#000;text-decoration:none}" +
-        "h2{page-break-after:avoid}.domain-section{page-break-inside:avoid}summary{list-style:none}summary::-webkit-details-marker{display:none}}"
+        "h2{page-break-after:avoid}.domain-section{page-break-inside:avoid}summary{list-style:none}summary::-webkit-details-marker{display:none}" +
+        ".file-tree a::after{content:' (' attr(href) ')';font-size:9pt;color:#666}}"
 
     # --- Assemble HTML ---
     $html = "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1.0'>" +
@@ -2815,8 +2818,13 @@ function New-MonarchReport
         }
         $html += "<div class='output-section'><div class='section-label neutral'>Output Files</div><div class='file-tree'>"
         foreach ($folder in ($groups.Keys | Sort-Object)) {
-            $html += "<div class='group'><span class='folder'>$folder/</span><div class='tree-children'>"
-            foreach ($item in $groups[$folder]) { $html += "<div class='tree-item'>$item</div>" }
+            if ($folder -eq '.') {
+                $html += "<div class='group'><span class='folder'>./</span><div class='tree-children'>"
+                foreach ($item in $groups[$folder]) { $html += "<div class='tree-item'><a href='$item'>$item</a></div>" }
+            } else {
+                $html += "<div class='group'><a href='$folder/' class='folder'>$folder/</a><div class='tree-children'>"
+                foreach ($item in $groups[$folder]) { $html += "<div class='tree-item'><a href='$folder/$item'>$item</a></div>" }
+            }
             $html += "</div></div>"
         }
         $html += "</div></div>"
