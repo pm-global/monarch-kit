@@ -3984,6 +3984,38 @@ Describe 'New-MonarchReport' {
             $content | Should -Match "<div class='tree-item'><a href='02-GPO-Audit/01-HTML/INDEX\.html'>INDEX\.html</a></div>"
         }
     }
+
+    Context 'Relative OutputPath produces relative hrefs' {
+        BeforeAll {
+            # Create output dir, then pass a RELATIVE path to New-MonarchReport
+            $script:absDir = Join-Path $TestDrive 'report-relpath'
+            New-Item -ItemType Directory -Path $script:absDir -Force | Out-Null
+            $base = Join-Path $absDir '01-Baseline'
+            New-Item -ItemType Directory -Path $base -Force | Out-Null
+            Set-Content -Path (Join-Path $base 'info.csv') -Value 'data'
+
+            # Build a relative path from CWD to the test dir
+            Push-Location $TestDrive
+            $script:mockResults = [PSCustomObject]@{
+                Phase     = 'Discovery'
+                Domain    = 'contoso.com'
+                DCUsed    = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'
+                EndTime   = [datetime]'2026-03-25 14:30'
+                Results   = @()
+                Failures  = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath 'report-relpath'
+            $script:content = Get-Content $script:result -Raw
+            Pop-Location
+        }
+
+        It 'hrefs are relative, not absolute' {
+            $content | Should -Match "<a href='01-Baseline/info\.csv'>info\.csv</a>"
+            $content | Should -Not -Match 'TestDrive'
+            $content | Should -Not -Match 'report-relpath'
+        }
+    }
 }
 
 # =============================================================================

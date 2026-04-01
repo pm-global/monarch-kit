@@ -2785,6 +2785,7 @@ function New-MonarchReport
     }
 
     # --- File tree: scan disk, not claims ---
+    $OutputPath = (Resolve-Path -LiteralPath $OutputPath).Path
     # 1. Clean up empties under $OutputPath
     Get-ChildItem -LiteralPath $OutputPath -File -Recurse |
         Where-Object { $_.Length -eq 0 } |
