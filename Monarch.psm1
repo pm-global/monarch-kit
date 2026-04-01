@@ -2806,27 +2806,44 @@ function New-MonarchReport
         $_.FullName.Substring($OutputPath.TrimEnd('\','/').Length + 1).Replace('\','/')
     })
 
-    # 4. Group by first segment, render
+    # 4. Build recursive tree, render with nesting
     if ($verifiedPaths.Count -gt 0) {
-        $groups = @{}
+        # Build tree: each node is @{ Children = @{}; Files = @() }
+        $tree = @{ Children = [ordered]@{}; Files = [System.Collections.Generic.List[string]]::new() }
         foreach ($rel in $verifiedPaths) {
             $parts = $rel -split '/'
-            $folder = if ($parts.Count -gt 1) { $parts[0] } else { '.' }
-            if (-not $groups.ContainsKey($folder)) { $groups[$folder] = [System.Collections.Generic.List[string]]::new() }
-            $child = if ($parts.Count -gt 1) { ($parts[1..($parts.Count-1)] -join '/') } else { $parts[0] }
-            $groups[$folder].Add($child)
+            $node = $tree
+            for ($i = 0; $i -lt $parts.Count - 1; $i++) {
+                if (-not $node.Children.Contains($parts[$i])) {
+                    $node.Children[$parts[$i]] = @{ Children = [ordered]@{}; Files = [System.Collections.Generic.List[string]]::new() }
+                }
+                $node = $node.Children[$parts[$i]]
+            }
+            $node.Files.Add($parts[-1])
+        }
+        # Recursive renderer using StringBuilder (reference type, visible inside scriptblock)
+        $sb = [System.Text.StringBuilder]::new()
+        $renderTree = {
+            param($Node, $Prefix, $IsRoot, $SB)
+            foreach ($dir in $Node.Children.Keys | Sort-Object) {
+                $href = if ($Prefix) { "$Prefix$dir/" } else { "$dir/" }
+                if ($IsRoot) {
+                    [void]$SB.Append("<div class='group'><a href='$href' class='folder'>$dir/</a><div class='tree-children'>")
+                } else {
+                    [void]$SB.Append("<div class='tree-item'><a href='$href' class='folder'>$dir/</a></div><div class='tree-children'>")
+                }
+                & $renderTree $Node.Children[$dir] $href $false $SB
+                [void]$SB.Append("</div>")
+                if ($IsRoot) { [void]$SB.Append("</div>") }
+            }
+            foreach ($file in $Node.Files | Sort-Object) {
+                $href = if ($Prefix) { "$Prefix$file" } else { $file }
+                [void]$SB.Append("<div class='tree-item'><a href='$href'>$file</a></div>")
+            }
         }
         $html += "<div class='output-section'><div class='section-label neutral'>Output Files</div><div class='file-tree'>"
-        foreach ($folder in ($groups.Keys | Sort-Object)) {
-            if ($folder -eq '.') {
-                $html += "<div class='group'><span class='folder'>./</span><div class='tree-children'>"
-                foreach ($item in $groups[$folder]) { $html += "<div class='tree-item'><a href='$item'>$item</a></div>" }
-            } else {
-                $html += "<div class='group'><a href='$folder/' class='folder'>$folder/</a><div class='tree-children'>"
-                foreach ($item in $groups[$folder]) { $html += "<div class='tree-item'><a href='$folder/$item'>$item</a></div>" }
-            }
-            $html += "</div></div>"
-        }
+        & $renderTree $tree '' $true $sb
+        $html += $sb.ToString()
         $html += "</div></div>"
     }
 
