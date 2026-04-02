@@ -2749,6 +2749,17 @@ function New-MonarchReport
                     if ($null -ne $domainResult.DetectionTier) { $html += "<div class='domain-metric'>Detection Tier: <strong>$($domainResult.DetectionTier) of 3</strong></div>" }
                 }
             }
+            'PrivilegedAccess' {
+                $privGrp = $domainResults | Where-Object { $_.Function -eq 'Get-PrivilegedGroupMembership' } | Select-Object -First 1
+                if ($privGrp) {
+                    if ($null -ne $privGrp.DomainAdminCount)     { $html += "<div class='domain-metric'>Domain Admins: <strong>$($privGrp.DomainAdminCount)</strong></div>" }
+                    if ($null -ne $privGrp.EnterpriseAdminCount) { $html += "<div class='domain-metric'>Enterprise Admins: <strong>$($privGrp.EnterpriseAdminCount)</strong></div>" }
+                }
+                $kerb = $domainResults | Where-Object { $_.Function -eq 'Find-KerberoastableAccount' } | Select-Object -First 1
+                if ($kerb    -and $null -ne $kerb.PrivilegedCount) { $html += "<div class='domain-metric'>Kerberoastable (privileged): <strong>$($kerb.PrivilegedCount)</strong></div>" }
+                $orphans = $domainResults | Where-Object { $_.Function -eq 'Find-AdminCountOrphan' } | Select-Object -First 1
+                if ($orphans -and $null -ne $orphans.Count)        { $html += "<div class='domain-metric'>AdminCount Orphans: <strong>$($orphans.Count)</strong></div>" }
+            }
         }
         $html += "</div>"
 

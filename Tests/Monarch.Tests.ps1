@@ -4112,6 +4112,84 @@ Describe 'New-MonarchReport' {
             $content | Should -Match 'Detection Tier: <strong>2 of 3</strong>'
         }
     }
+
+    # -------------------------------------------------------------------------
+    # Step 2: Metrics strip -- Privileged Access
+    # -------------------------------------------------------------------------
+
+    Context 'PrivilegedAccess metrics -- all four functions present' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-privaccess-all'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            # DomainAdminStatus=Critical forces a domain section via critical finding
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Get-PrivilegedGroupMembership'
+                        DomainAdminCount = 7; DomainAdminStatus = 'Critical'; EnterpriseAdminCount = 2; Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-KerberoastableAccount'
+                        TotalCount = 5; PrivilegedCount = 1; Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-AdminCountOrphan'
+                        Count = 3; Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Test-ProtectedUsersGap'
+                        GapAccounts = @('u1','u2'); Warnings = @() }
+                )
+                Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'Domain Admins metric renders correct value' {
+            $content | Should -Match "Domain Admins: <strong>7</strong>"
+        }
+
+        It 'Enterprise Admins metric renders correct value' {
+            $content | Should -Match "Enterprise Admins: <strong>2</strong>"
+        }
+
+        It 'Kerberoastable privileged metric renders correct value' {
+            $content | Should -Match "Kerberoastable \(privileged\): <strong>1</strong>"
+        }
+
+        It 'AdminCount Orphans metric renders correct value' {
+            $content | Should -Match "AdminCount Orphans: <strong>3</strong>"
+        }
+    }
+
+    Context 'PrivilegedAccess metrics -- Find-AdminCountOrphan absent' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-privaccess-noorphan'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Get-PrivilegedGroupMembership'
+                        DomainAdminCount = 4; DomainAdminStatus = 'Critical'; EnterpriseAdminCount = 1; Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-KerberoastableAccount'
+                        TotalCount = 2; PrivilegedCount = 0; Warnings = @() }
+                )
+                Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'Domain Admins and Enterprise Admins still render' {
+            $content | Should -Match "Domain Admins: <strong>4</strong>"
+            $content | Should -Match "Enterprise Admins: <strong>1</strong>"
+        }
+
+        It 'Kerberoastable privileged still renders' {
+            $content | Should -Match "Kerberoastable \(privileged\): <strong>0</strong>"
+        }
+
+        It 'AdminCount Orphans metric is absent' {
+            $content | Should -Not -Match 'AdminCount Orphans'
+        }
+    }
 }
 
 # =============================================================================
