@@ -4190,6 +4190,123 @@ Describe 'New-MonarchReport' {
             $content | Should -Not -Match 'AdminCount Orphans'
         }
     }
+
+    # -------------------------------------------------------------------------
+    # Step 3: Metrics strip -- Infrastructure Health
+    # -------------------------------------------------------------------------
+
+    Context 'InfrastructureHealth metrics -- all functions present, Single DC FSMO' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-infra-all'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            # AllOnOneDC=true triggers advisory, forcing the domain section to render
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-SiteTopology'
+                        SiteCount = 3; SubnetCount = 8; UnassignedSubnets = @(); EmptySites = @()
+                        Sites = @(
+                            [PSCustomObject]@{ Name = 'Default-First-Site-Name'; DCCount = 2; Subnets = @() }
+                            [PSCustomObject]@{ Name = 'Branch-Site'; DCCount = 1; Subnets = @() }
+                            [PSCustomObject]@{ Name = 'DR-Site'; DCCount = 0; Subnets = @() }
+                        )
+                        Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-ForestDomainLevel'
+                        DomainFunctionalLevel = 'Windows2016Domain'; ForestFunctionalLevel = 'Windows2016Forest'
+                        SchemaVersion = 87; Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-FSMORolePlacement'
+                        AllOnOneDC = $true; UnreachableCount = 0
+                        Roles = @([PSCustomObject]@{ Role = 'PDCEmulator'; Holder = 'DC01.contoso.com'; Reachable = $true; Site = 'Default-First-Site-Name' })
+                        Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-ReplicationHealth'
+                        FailedLinkCount = 0; WarningLinkCount = 0; Warnings = @() }
+                )
+                Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'Domain Controllers metric sums DCCount across sites' {
+            $content | Should -Match "Domain Controllers: <strong>3</strong>"
+        }
+
+        It 'Sites metric renders correct count' {
+            $content | Should -Match "Sites: <strong>3</strong>"
+        }
+
+        It 'Functional Level metric renders' {
+            $content | Should -Match "Functional Level: <strong>Windows2016Domain</strong>"
+        }
+
+        It 'FSMO status renders Single DC' {
+            $content | Should -Match "FSMO: <strong>Single DC</strong>"
+        }
+    }
+
+    Context 'InfrastructureHealth metrics -- FSMO unreachable' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-infra-unreachable'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            # UnreachableCount=2 triggers critical finding, forcing the domain section
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-FSMORolePlacement'
+                        AllOnOneDC = $false; UnreachableCount = 2; Roles = @(); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-SiteTopology'
+                        SiteCount = 1; SubnetCount = 2; UnassignedSubnets = @(); EmptySites = @()
+                        Sites = @([PSCustomObject]@{ Name = 'HQ'; DCCount = 1; Subnets = @() })
+                        Warnings = @() }
+                )
+                Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'FSMO status renders unreachable count' {
+            $content | Should -Match "FSMO: <strong>2 unreachable</strong>"
+        }
+    }
+
+    Context 'InfrastructureHealth metrics -- Distributed FSMO, Get-ForestDomainLevel absent' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-infra-distributed'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            # WarningLinkCount=1 triggers advisory to force domain section; no ForestDomainLevel result
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-ReplicationHealth'
+                        FailedLinkCount = 0; WarningLinkCount = 1; Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-FSMORolePlacement'
+                        AllOnOneDC = $false; UnreachableCount = 0; Roles = @(); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-SiteTopology'
+                        SiteCount = 2; SubnetCount = 4; UnassignedSubnets = @(); EmptySites = @()
+                        Sites = @(
+                            [PSCustomObject]@{ Name = 'HQ'; DCCount = 2; Subnets = @() }
+                            [PSCustomObject]@{ Name = 'Branch'; DCCount = 1; Subnets = @() }
+                        )
+                        Warnings = @() }
+                )
+                Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'FSMO status renders Distributed' {
+            $content | Should -Match "FSMO: <strong>Distributed</strong>"
+        }
+
+        It 'Functional Level metric is absent when Get-ForestDomainLevel not present' {
+            $content | Should -Not -Match 'Functional Level'
+        }
+    }
 }
 
 # =============================================================================

@@ -2760,6 +2760,23 @@ function New-MonarchReport
                 $orphans = $domainResults | Where-Object { $_.Function -eq 'Find-AdminCountOrphan' } | Select-Object -First 1
                 if ($orphans -and $null -ne $orphans.Count)        { $html += "<div class='domain-metric'>AdminCount Orphans: <strong>$($orphans.Count)</strong></div>" }
             }
+            'InfrastructureHealth' {
+                $siteTopo = $domainResults | Where-Object { $_.Function -eq 'Get-SiteTopology' } | Select-Object -First 1
+                if ($siteTopo) {
+                    $dcTotal = ($siteTopo.Sites | Measure-Object -Property DCCount -Sum).Sum
+                    if ($null -ne $dcTotal) { $html += "<div class='domain-metric'>Domain Controllers: <strong>$dcTotal</strong></div>" }
+                    if ($null -ne $siteTopo.SiteCount) { $html += "<div class='domain-metric'>Sites: <strong>$($siteTopo.SiteCount)</strong></div>" }
+                }
+                $forestLevel = $domainResults | Where-Object { $_.Function -eq 'Get-ForestDomainLevel' } | Select-Object -First 1
+                if ($forestLevel -and $null -ne $forestLevel.DomainFunctionalLevel) { $html += "<div class='domain-metric'>Functional Level: <strong>$($forestLevel.DomainFunctionalLevel)</strong></div>" }
+                $fsmo = $domainResults | Where-Object { $_.Function -eq 'Get-FSMORolePlacement' } | Select-Object -First 1
+                if ($fsmo) {
+                    $fsmoStatus = if ($fsmo.UnreachableCount -gt 0) { "$($fsmo.UnreachableCount) unreachable" }
+                                  elseif ($fsmo.AllOnOneDC) { 'Single DC' }
+                                  else { 'Distributed' }
+                    $html += "<div class='domain-metric'>FSMO: <strong>$fsmoStatus</strong></div>"
+                }
+            }
         }
         $html += "</div>"
 
