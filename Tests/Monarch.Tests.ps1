@@ -4024,6 +4024,94 @@ Describe 'New-MonarchReport' {
             $content | Should -Not -Match ">01-Baseline/info\.csv</a>"
         }
     }
+
+    # -------------------------------------------------------------------------
+    # Step 1A: DCUsed serialization guard
+    # -------------------------------------------------------------------------
+
+    Context 'DCUsed as plain string' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-dcstr'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:01'
+                Results = @(); Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'header span contains DC name as plain string' {
+            $content | Should -Match "<span>DC01\.contoso\.com</span>"
+        }
+
+        It 'no serialized object syntax in output' {
+            $content | Should -Not -Match '@\{'
+        }
+    }
+
+    Context 'DCUsed as PSCustomObject with DCName property' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-dcobj'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'
+                DCUsed = [PSCustomObject]@{ DCName = 'DC01.contoso.com'; Logs = @('System') }
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:01'
+                Results = @(); Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'header span contains DCName property value' {
+            $content | Should -Match "<span>DC01\.contoso\.com</span>"
+        }
+
+        It 'no serialized object syntax in output' {
+            $content | Should -Not -Match '@\{'
+        }
+    }
+
+    # -------------------------------------------------------------------------
+    # Step 1B: Multi-result domain collector
+    # -------------------------------------------------------------------------
+
+    Context 'BackupReadiness with two results in same domain (multi-result regression guard)' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-multiresult'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            # Two results with the same Domain -- only Get-BackupReadinessStatus should drive metrics.
+            # CriticalGap=$true forces a domain section so metrics are rendered.
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'BackupReadiness'; Function = 'Get-BackupReadinessStatus'
+                        CriticalGap = $true; DetectionTier = 2; BackupToolDetected = 'Veeam'
+                        TombstoneLifetimeDays = 180; RecycleBinEnabled = $true; Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'BackupReadiness'; Function = 'Test-TombstoneGap'
+                        TombstoneLifetimeDays = 180; Warnings = @() }
+                )
+                Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'BackupReadiness tombstone metric renders correctly' {
+            $content | Should -Match 'Tombstone Lifetime: <strong>180 days</strong>'
+        }
+
+        It 'BackupReadiness recycle bin metric renders correctly' {
+            $content | Should -Match 'Recycle Bin: <strong>Enabled</strong>'
+        }
+
+        It 'BackupReadiness detection tier metric renders correctly' {
+            $content | Should -Match 'Detection Tier: <strong>2 of 3</strong>'
+        }
+    }
 }
 
 # =============================================================================

@@ -2445,7 +2445,7 @@ function New-MonarchReport
 
     # Extract header data
     $domain = $Results.Domain
-    $dc = $Results.DCUsed
+    $dc = if ($Results.DCUsed -is [string]) { $Results.DCUsed } else { $Results.DCUsed.DCName }
     $startTime = $Results.StartTime
     $duration = if ($Results.StartTime -and $Results.EndTime) {
         $span = $Results.EndTime - $Results.StartTime
@@ -2738,11 +2738,12 @@ function New-MonarchReport
         }
         $html += "<div class='domain-section'><h2>$dn$checkStr</h2><div class='domain-metrics'>"
 
-        # Domain-specific metrics from result data
-        $domainResult = $resultsList | Where-Object { $_.Domain -eq $d } | Select-Object -First 1
-        if ($domainResult) {
-            switch ($d) {
-                'BackupReadiness' {
+        # Domain-specific metrics from result data -- collect all results for this domain
+        $domainResults = @($resultsList | Where-Object { $_.Domain -eq $d })
+        switch ($d) {
+            'BackupReadiness' {
+                $domainResult = $domainResults | Where-Object { $_.Function -eq 'Get-BackupReadinessStatus' } | Select-Object -First 1
+                if ($domainResult) {
                     if ($null -ne $domainResult.TombstoneLifetimeDays) { $html += "<div class='domain-metric'>Tombstone Lifetime: <strong>$($domainResult.TombstoneLifetimeDays) days</strong></div>" }
                     if ($null -ne $domainResult.RecycleBinEnabled) { $html += "<div class='domain-metric'>Recycle Bin: <strong>$(if ($domainResult.RecycleBinEnabled) {'Enabled'} else {'Disabled'})</strong></div>" }
                     if ($null -ne $domainResult.DetectionTier) { $html += "<div class='domain-metric'>Detection Tier: <strong>$($domainResult.DetectionTier) of 3</strong></div>" }
