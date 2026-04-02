@@ -8,7 +8,7 @@
 BeforeAll {
     # Import the module from the project root, not from any installed location.
     $modulePath = "$PSScriptRoot\..\Monarch.psm1"
-    
+
     # Remove the module if already loaded so we get a fresh import.
     if (Get-Module -Name 'Monarch')
     {
@@ -82,7 +82,7 @@ Describe 'Module: Load and Export' {
     }
 
     It 'manifest does not list private functions' {
-    	
+
         $manifestPath = "$PSScriptRoot\..\Monarch.psd1"
         $manifest = Import-PowerShellDataFile -Path $manifestPath
 
@@ -1060,7 +1060,11 @@ Describe 'Get-FSMORolePlacement' {
             }
 
             Mock -ModuleName Monarch Test-Connection { param($ComputerName)
-                if ($ComputerName -eq 'DC02.test.local') { $false } else { $true }
+                if ($ComputerName -eq 'DC02.test.local')
+                { $false 
+                } else
+                { $true 
+                }
             }
 
             $script:result = Get-FSMORolePlacement -Server 'DC01.test.local'
@@ -1361,13 +1365,13 @@ Describe 'Get-PasswordPolicyInventory' {
 
             Mock -ModuleName Monarch Get-ADFineGrainedPasswordPolicy {
                 @([PSCustomObject]@{
-                    Name             = 'ServiceAccountPSO'
-                    Precedence       = 10
-                    AppliesTo        = @('CN=SvcAccounts,DC=test,DC=local')
-                    MinPasswordLength = 20
-                    MaxPasswordAge   = New-TimeSpan -Days 60
-                    LockoutThreshold = 0
-                })
+                        Name             = 'ServiceAccountPSO'
+                        Precedence       = 10
+                        AppliesTo        = @('CN=SvcAccounts,DC=test,DC=local')
+                        MinPasswordLength = 20
+                        MaxPasswordAge   = New-TimeSpan -Days 60
+                        LockoutThreshold = 0
+                    })
             }
 
             $script:result = Get-PasswordPolicyInventory
@@ -1526,10 +1530,10 @@ Describe 'Find-WeakAccountFlag' {
                 $Filter -like '*UseDESKeyOnly*'
             } {
                 @([PSCustomObject]@{
-                    SamAccountName = 'svc1'
-                    DisplayName    = 'Service One'
-                    MemberOf       = @()
-                })
+                        SamAccountName = 'svc1'
+                        DisplayName    = 'Service One'
+                        MemberOf       = @()
+                    })
             }
 
             Mock -ModuleName Monarch Get-ADGroup { @() }
@@ -1893,15 +1897,15 @@ Describe 'Get-PrivilegedGroupMembership' {
         BeforeAll {
             Mock -ModuleName Monarch Get-ADGroup {
                 @([PSCustomObject]@{
-                    Name              = 'Domain Admins'
-                    DistinguishedName = $domainAdminsDN
-                    SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
-                })
+                        Name              = 'Domain Admins'
+                        DistinguishedName = $domainAdminsDN
+                        SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                    })
             }
 
             $sevenUsers = @(1..7 | ForEach-Object {
-                [PSCustomObject]@{ SamAccountName = "user$_"; objectClass = 'user' }
-            })
+                    [PSCustomObject]@{ SamAccountName = "user$_"; objectClass = 'user' }
+                })
 
             Mock -ModuleName Monarch Get-ADGroupMember -ParameterFilter {
                 -not $Recursive
@@ -1934,15 +1938,15 @@ Describe 'Get-PrivilegedGroupMembership' {
         BeforeAll {
             Mock -ModuleName Monarch Get-ADGroup {
                 @([PSCustomObject]@{
-                    Name              = 'Domain Admins'
-                    DistinguishedName = $domainAdminsDN
-                    SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
-                })
+                        Name              = 'Domain Admins'
+                        DistinguishedName = $domainAdminsDN
+                        SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                    })
             }
 
             $threeUsers = @(1..3 | ForEach-Object {
-                [PSCustomObject]@{ SamAccountName = "user$_"; objectClass = 'user' }
-            })
+                    [PSCustomObject]@{ SamAccountName = "user$_"; objectClass = 'user' }
+                })
 
             Mock -ModuleName Monarch Get-ADGroupMember -ParameterFilter {
                 -not $Recursive
@@ -1999,10 +2003,10 @@ Describe 'Find-AdminCountOrphan' {
         BeforeAll {
             Mock -ModuleName Monarch Get-ADGroup {
                 @([PSCustomObject]@{
-                    Name              = 'Domain Admins'
-                    DistinguishedName = $domainAdminsDN
-                    SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
-                })
+                        Name              = 'Domain Admins'
+                        DistinguishedName = $domainAdminsDN
+                        SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                    })
             }
 
             Mock -ModuleName Monarch Get-ADUser {
@@ -2062,10 +2066,10 @@ Describe 'Find-KerberoastableAccount' {
         BeforeAll {
             Mock -ModuleName Monarch Get-ADGroup {
                 @([PSCustomObject]@{
-                    Name              = 'Domain Admins'
-                    DistinguishedName = $domainAdminsDN
-                    SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
-                })
+                        Name              = 'Domain Admins'
+                        DistinguishedName = $domainAdminsDN
+                        SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                    })
             }
 
             Mock -ModuleName Monarch Get-ADUser {
@@ -2134,10 +2138,10 @@ Describe 'Find-ASREPRoastableAccount' {
         BeforeAll {
             Mock -ModuleName Monarch Get-ADGroup {
                 @([PSCustomObject]@{
-                    Name              = 'Domain Admins'
-                    DistinguishedName = $domainAdminsDN
-                    SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
-                })
+                        Name              = 'Domain Admins'
+                        DistinguishedName = $domainAdminsDN
+                        SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                    })
             }
 
             Mock -ModuleName Monarch Get-ADUser {
@@ -2202,10 +2206,10 @@ Describe 'Find-DormantAccount' {
         BeforeAll {
             Mock -ModuleName Monarch Get-ADGroup -ParameterFilter { $Filter } {
                 @([PSCustomObject]@{
-                    Name              = 'Domain Admins'
-                    DistinguishedName = $domainAdminsDN
-                    SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
-                })
+                        Name              = 'Domain Admins'
+                        DistinguishedName = $domainAdminsDN
+                        SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                    })
             }
 
             Mock -ModuleName Monarch Get-ADGroup -ParameterFilter { $Identity } {
@@ -2407,10 +2411,10 @@ Describe 'Find-DormantAccount' {
         BeforeAll {
             Mock -ModuleName Monarch Get-ADGroup -ParameterFilter { $Filter } {
                 @([PSCustomObject]@{
-                    Name              = 'Domain Admins'
-                    DistinguishedName = $domainAdminsDN
-                    SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
-                })
+                        Name              = 'Domain Admins'
+                        DistinguishedName = $domainAdminsDN
+                        SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                    })
             }
             Mock -ModuleName Monarch Get-ADGroup -ParameterFilter { $Identity } {
                 [PSCustomObject]@{ Name = 'Some Group' }
@@ -2418,18 +2422,18 @@ Describe 'Find-DormantAccount' {
 
             Mock -ModuleName Monarch Get-ADUser {
                 @([PSCustomObject]@{
-                    SamAccountName       = 'csvUser'
-                    DisplayName          = 'CSV User'
-                    lastLogonTimestamp    = $now.AddDays(-100).ToFileTime()
-                    WhenCreated          = $now.AddDays(-200)
-                    PasswordLastSet      = $now.AddDays(-50)
-                    PasswordNeverExpires = $false
-                    ServicePrincipalName = @()
-                    MemberOf             = @()
-                    objectClass          = 'user'
-                    DistinguishedName    = 'CN=csvUser,OU=Users,DC=test,DC=local'
-                    Enabled              = $true
-                })
+                        SamAccountName       = 'csvUser'
+                        DisplayName          = 'CSV User'
+                        lastLogonTimestamp    = $now.AddDays(-100).ToFileTime()
+                        WhenCreated          = $now.AddDays(-200)
+                        PasswordLastSet      = $now.AddDays(-50)
+                        PasswordNeverExpires = $false
+                        ServicePrincipalName = @()
+                        MemberOf             = @()
+                        objectClass          = 'user'
+                        DistinguishedName    = 'CN=csvUser,OU=Users,DC=test,DC=local'
+                        Enabled              = $true
+                    })
             }
 
             $script:csvPath = Join-Path $TestDrive 'dormant.csv'
@@ -2452,26 +2456,26 @@ Describe 'Find-DormantAccount' {
         BeforeAll {
             Mock -ModuleName Monarch Get-ADGroup -ParameterFilter { $Filter } {
                 @([PSCustomObject]@{
-                    Name              = 'Domain Admins'
-                    DistinguishedName = $domainAdminsDN
-                    SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
-                })
+                        Name              = 'Domain Admins'
+                        DistinguishedName = $domainAdminsDN
+                        SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                    })
             }
 
             Mock -ModuleName Monarch Get-ADUser {
                 @([PSCustomObject]@{
-                    SamAccountName       = 'borderUser'
-                    DisplayName          = 'Border User'
-                    lastLogonTimestamp    = $now.AddDays(-60).ToFileTime()
-                    WhenCreated          = $now.AddDays(-200)
-                    PasswordLastSet      = $now.AddDays(-60)
-                    PasswordNeverExpires = $false
-                    ServicePrincipalName = @()
-                    MemberOf             = @()
-                    objectClass          = 'user'
-                    DistinguishedName    = 'CN=borderUser,OU=Users,DC=test,DC=local'
-                    Enabled              = $true
-                })
+                        SamAccountName       = 'borderUser'
+                        DisplayName          = 'Border User'
+                        lastLogonTimestamp    = $now.AddDays(-60).ToFileTime()
+                        WhenCreated          = $now.AddDays(-200)
+                        PasswordLastSet      = $now.AddDays(-60)
+                        PasswordNeverExpires = $false
+                        ServicePrincipalName = @()
+                        MemberOf             = @()
+                        objectClass          = 'user'
+                        DistinguishedName    = 'CN=borderUser,OU=Users,DC=test,DC=local'
+                        Enabled              = $true
+                    })
             }
 
             Mock -ModuleName Monarch Get-MonarchConfigValue { 50 } -ParameterFilter {
@@ -2493,26 +2497,26 @@ Describe 'Find-DormantAccount' {
         BeforeAll {
             Mock -ModuleName Monarch Get-ADGroup -ParameterFilter { $Filter } {
                 @([PSCustomObject]@{
-                    Name              = 'Domain Admins'
-                    DistinguishedName = $domainAdminsDN
-                    SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
-                })
+                        Name              = 'Domain Admins'
+                        DistinguishedName = $domainAdminsDN
+                        SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                    })
             }
 
             Mock -ModuleName Monarch Get-ADUser {
                 @([PSCustomObject]@{
-                    SamAccountName       = 'CUSTOM-Worker'
-                    DisplayName          = 'Custom Worker'
-                    lastLogonTimestamp    = $now.AddDays(-100).ToFileTime()
-                    WhenCreated          = $now.AddDays(-200)
-                    PasswordLastSet      = $now.AddDays(-100)
-                    PasswordNeverExpires = $false
-                    ServicePrincipalName = @()
-                    MemberOf             = @()
-                    objectClass          = 'user'
-                    DistinguishedName    = 'CN=CUSTOM-Worker,OU=Users,DC=test,DC=local'
-                    Enabled              = $true
-                })
+                        SamAccountName       = 'CUSTOM-Worker'
+                        DisplayName          = 'Custom Worker'
+                        lastLogonTimestamp    = $now.AddDays(-100).ToFileTime()
+                        WhenCreated          = $now.AddDays(-200)
+                        PasswordLastSet      = $now.AddDays(-100)
+                        PasswordNeverExpires = $false
+                        ServicePrincipalName = @()
+                        MemberOf             = @()
+                        objectClass          = 'user'
+                        DistinguishedName    = 'CN=CUSTOM-Worker,OU=Users,DC=test,DC=local'
+                        Enabled              = $true
+                    })
             }
 
             Mock -ModuleName Monarch Get-MonarchConfigValue { @('CUSTOM') } -ParameterFilter {
@@ -2537,8 +2541,12 @@ Describe 'Find-UnlinkedGPO' {
 
     BeforeAll {
         & (Get-Module Monarch) {
-            function script:Get-GPO { param([switch]$All, [string]$Server) }
-            function script:Get-GPOReport { param([string]$Guid, [string]$ReportType, [string]$Path, [string]$Server) }
+            function script:Get-GPO
+            { param([switch]$All, [string]$Server) 
+            }
+            function script:Get-GPOReport
+            { param([string]$Guid, [string]$ReportType, [string]$Path, [string]$Server) 
+            }
         }
     }
 
@@ -2596,8 +2604,12 @@ Describe 'Find-GPOPermissionAnomaly' {
 
     BeforeAll {
         & (Get-Module Monarch) {
-            function script:Get-GPO { param([switch]$All, [string]$Server) }
-            function script:Get-GPPermission { param([string]$Guid, [switch]$All, [string]$Server) }
+            function script:Get-GPO
+            { param([switch]$All, [string]$Server) 
+            }
+            function script:Get-GPPermission
+            { param([string]$Guid, [switch]$All, [string]$Server) 
+            }
         }
     }
 
@@ -2606,9 +2618,9 @@ Describe 'Find-GPOPermissionAnomaly' {
         BeforeAll {
             Mock -ModuleName Monarch Get-GPO {
                 @([PSCustomObject]@{
-                    DisplayName = 'Test Policy'
-                    Id          = 'cccc-3333'
-                })
+                        DisplayName = 'Test Policy'
+                        Id          = 'cccc-3333'
+                    })
             }
 
             Mock -ModuleName Monarch Get-GPPermission {
@@ -2648,11 +2660,21 @@ Describe 'Find-GPOPermissionAnomaly' {
 Describe 'Export-GPOAudit' {
     BeforeAll {
         & (Get-Module Monarch) {
-            function script:Get-GPO { param([switch]$All, [string]$Server) }
-            function script:Get-GPOReport { param([string]$Guid, [string]$ReportType, [string]$Path, [string]$Server) }
-            function script:Backup-GPO { param([switch]$All, [string]$Path, [string]$Server) }
-            function script:Get-GPPermission { param([string]$Guid, [switch]$All, [string]$Server) }
-            function script:Get-ADObject { param([string]$Filter, [string]$Identity, [string[]]$Properties, [string]$Server) }
+            function script:Get-GPO
+            { param([switch]$All, [string]$Server) 
+            }
+            function script:Get-GPOReport
+            { param([string]$Guid, [string]$ReportType, [string]$Path, [string]$Server) 
+            }
+            function script:Backup-GPO
+            { param([switch]$All, [string]$Path, [string]$Server) 
+            }
+            function script:Get-GPPermission
+            { param([string]$Guid, [switch]$All, [string]$Server) 
+            }
+            function script:Get-ADObject
+            { param([string]$Filter, [string]$Identity, [string[]]$Properties, [string]$Server) 
+            }
         }
     }
 
@@ -2800,7 +2822,9 @@ Describe 'Export-GPOAudit' {
         }
 
         AfterAll {
-            if (Test-Path $script:tmpDir) { Remove-Item $script:tmpDir -Recurse -Force }
+            if (Test-Path $script:tmpDir)
+            { Remove-Item $script:tmpDir -Recurse -Force 
+            }
         }
 
         It 'populates all OutputPaths when OutputPath provided' {
@@ -2828,11 +2852,21 @@ Describe 'Export-GPOAudit' {
 Describe 'Get-BackupReadinessStatus' {
     BeforeAll {
         & (Get-Module Monarch) {
-            function script:Get-ADRootDSE { param([string]$Server) }
-            function script:Get-ADOptionalFeature { param([string]$Filter, [string]$Server) }
-            function script:Get-Service { param([string[]]$Name, [string]$ComputerName, [string]$ErrorAction) }
-            function script:Get-ADObject { param([string]$Filter, [string]$Identity, [string[]]$Properties, [string]$Server) }
-            function script:Get-ItemProperty { param([string]$Path, [string]$Name, [string]$ErrorAction) }
+            function script:Get-ADRootDSE
+            { param([string]$Server) 
+            }
+            function script:Get-ADOptionalFeature
+            { param([string]$Filter, [string]$Server) 
+            }
+            function script:Get-Service
+            { param([string[]]$Name, [string]$ComputerName, [string]$ErrorAction) 
+            }
+            function script:Get-ADObject
+            { param([string]$Filter, [string]$Identity, [string[]]$Properties, [string]$Server) 
+            }
+            function script:Get-ItemProperty
+            { param([string]$Path, [string]$Name, [string]$ErrorAction) 
+            }
         }
     }
 
@@ -2984,8 +3018,12 @@ Describe 'Get-BackupReadinessStatus' {
 Describe 'Test-TombstoneGap' {
     BeforeAll {
         & (Get-Module Monarch) {
-            function script:Get-ADRootDSE { param([string]$Server) }
-            function script:Get-ADObject { param([string]$Filter, [string]$Identity, [string[]]$Properties, [string]$Server) }
+            function script:Get-ADRootDSE
+            { param([string]$Server) 
+            }
+            function script:Get-ADObject
+            { param([string]$Filter, [string]$Identity, [string[]]$Properties, [string]$Server) 
+            }
         }
         Mock -ModuleName Monarch Get-ADRootDSE {
             [PSCustomObject]@{ configurationNamingContext = 'CN=Configuration,DC=test,DC=local' }
@@ -3017,15 +3055,20 @@ Describe 'Test-TombstoneGap' {
 
 # =============================================================================
 # Step 11: DNS
-# Tests added in Step 11 implementation.
 # =============================================================================
 
 Describe 'Test-SRVRecordCompleteness' {
     BeforeAll {
         & (Get-Module Monarch) {
-            function script:Get-ADDomain { param([string]$Server) }
-            function script:Get-ADReplicationSite { param([string]$Filter, [string]$Server) }
-            function script:Resolve-DnsName { param([string]$Name, [string]$Type, [string]$Server, [string]$ErrorAction) }
+            function script:Get-ADDomain
+            { param([string]$Server) 
+            }
+            function script:Get-ADReplicationSite
+            { param([string]$Filter, [string]$Server) 
+            }
+            function script:Resolve-DnsName
+            { param([string]$Name, [string]$Type, [string]$Server, [string]$ErrorAction) 
+            }
         }
     }
 
@@ -3048,8 +3091,8 @@ Describe 'Test-SRVRecordCompleteness' {
             Mock -ModuleName Monarch Get-Command { $true } -ParameterFilter { $Name -eq 'Get-DnsServerZone' }
             Mock -ModuleName Monarch Get-ADDomain { [PSCustomObject]@{ DNSRoot = 'test.local' } }
             Mock -ModuleName Monarch Get-ADReplicationSite { @(
-                [PSCustomObject]@{ Name = 'Default-First-Site-Name' }
-            ) }
+                    [PSCustomObject]@{ Name = 'Default-First-Site-Name' }
+                ) }
             Mock -ModuleName Monarch Resolve-DnsName { [PSCustomObject]@{ Name = $Name; Type = 'SRV' } }
             Mock -ModuleName Monarch Resolve-DnsName { $null } -ParameterFilter { $Name -like '_kpasswd._tcp*' }
             $script:result = Test-SRVRecordCompleteness
@@ -3068,8 +3111,8 @@ Describe 'Test-SRVRecordCompleteness' {
             Mock -ModuleName Monarch Get-Command { $true } -ParameterFilter { $Name -eq 'Get-DnsServerZone' }
             Mock -ModuleName Monarch Get-ADDomain { [PSCustomObject]@{ DNSRoot = 'test.local' } }
             Mock -ModuleName Monarch Get-ADReplicationSite { @(
-                [PSCustomObject]@{ Name = 'Site1' }
-            ) }
+                    [PSCustomObject]@{ Name = 'Site1' }
+                ) }
             Mock -ModuleName Monarch Resolve-DnsName { [PSCustomObject]@{ Name = $Name; Type = 'SRV' } }
             $script:result = Test-SRVRecordCompleteness
         }
@@ -3085,8 +3128,12 @@ Describe 'Test-SRVRecordCompleteness' {
 Describe 'Get-DNSScavengingConfiguration' {
     BeforeAll {
         & (Get-Module Monarch) {
-            function script:Get-DnsServerZone { param([string]$ComputerName) }
-            function script:Get-DnsServerZoneAging { param([string]$Name, [string]$ComputerName) }
+            function script:Get-DnsServerZone
+            { param([string]$ComputerName) 
+            }
+            function script:Get-DnsServerZoneAging
+            { param([string]$Name, [string]$ComputerName) 
+            }
         }
     }
 
@@ -3107,8 +3154,8 @@ Describe 'Get-DNSScavengingConfiguration' {
         BeforeAll {
             Mock -ModuleName Monarch Get-Command { $true } -ParameterFilter { $Name -eq 'Get-DnsServerZone' }
             Mock -ModuleName Monarch Get-DnsServerZone { @(
-                [PSCustomObject]@{ ZoneName = 'test.local'; IsDsIntegrated = $true; IsAutoCreated = $false }
-            ) }
+                    [PSCustomObject]@{ ZoneName = 'test.local'; IsDsIntegrated = $true; IsAutoCreated = $false }
+                ) }
             Mock -ModuleName Monarch Get-DnsServerZoneAging {
                 [PSCustomObject]@{
                     AgingEnabled      = $true
@@ -3132,7 +3179,9 @@ Describe 'Get-DNSScavengingConfiguration' {
 Describe 'Test-ZoneReplicationScope' {
     BeforeAll {
         & (Get-Module Monarch) {
-            function script:Get-DnsServerZone { param([string]$ComputerName) }
+            function script:Get-DnsServerZone
+            { param([string]$ComputerName) 
+            }
         }
     }
 
@@ -3153,14 +3202,14 @@ Describe 'Test-ZoneReplicationScope' {
         BeforeAll {
             Mock -ModuleName Monarch Get-Command { $true } -ParameterFilter { $Name -eq 'Get-DnsServerZone' }
             Mock -ModuleName Monarch Get-DnsServerZone { @(
-                [PSCustomObject]@{
-                    ZoneName               = 'test.local'
-                    IsDsIntegrated         = $true
-                    IsAutoCreated          = $false
-                    DirectoryPartitionName = 'DomainDnsZones.test.local'
-                    ZoneType               = 'Primary'
-                }
-            ) }
+                    [PSCustomObject]@{
+                        ZoneName               = 'test.local'
+                        IsDsIntegrated         = $true
+                        IsAutoCreated          = $false
+                        DirectoryPartitionName = 'DomainDnsZones.test.local'
+                        ZoneType               = 'Primary'
+                    }
+                ) }
             $script:result = Test-ZoneReplicationScope
         }
 
@@ -3177,8 +3226,12 @@ Describe 'Test-ZoneReplicationScope' {
 Describe 'Get-DNSForwarderConfiguration' {
     BeforeAll {
         & (Get-Module Monarch) {
-            function script:Get-ADDomainController { param([string]$Filter, [string]$Server) }
-            function script:Get-DnsServerForwarder { param([string]$ComputerName) }
+            function script:Get-ADDomainController
+            { param([string]$Filter, [string]$Server) 
+            }
+            function script:Get-DnsServerForwarder
+            { param([string]$ComputerName) 
+            }
         }
     }
 
@@ -3200,9 +3253,9 @@ Describe 'Get-DNSForwarderConfiguration' {
         BeforeAll {
             Mock -ModuleName Monarch Get-Command { $true } -ParameterFilter { $Name -eq 'Get-DnsServerZone' }
             Mock -ModuleName Monarch Get-ADDomainController { @(
-                [PSCustomObject]@{ HostName = 'DC1.test.local' },
-                [PSCustomObject]@{ HostName = 'DC2.test.local' }
-            ) }
+                    [PSCustomObject]@{ HostName = 'DC1.test.local' },
+                    [PSCustomObject]@{ HostName = 'DC2.test.local' }
+                ) }
             Mock -ModuleName Monarch Get-DnsServerForwarder {
                 [PSCustomObject]@{ IPAddress = @('8.8.8.8', '8.8.4.4'); UseRootHints = $true }
             }
@@ -3219,13 +3272,15 @@ Describe 'Get-DNSForwarderConfiguration' {
         BeforeAll {
             Mock -ModuleName Monarch Get-Command { $true } -ParameterFilter { $Name -eq 'Get-DnsServerZone' }
             Mock -ModuleName Monarch Get-ADDomainController { @(
-                [PSCustomObject]@{ HostName = 'DC1.test.local' },
-                [PSCustomObject]@{ HostName = 'DC2.test.local' }
-            ) }
+                    [PSCustomObject]@{ HostName = 'DC1.test.local' },
+                    [PSCustomObject]@{ HostName = 'DC2.test.local' }
+                ) }
             Mock -ModuleName Monarch Get-DnsServerForwarder {
-                if ($ComputerName -eq 'DC1.test.local') {
+                if ($ComputerName -eq 'DC1.test.local')
+                {
                     [PSCustomObject]@{ IPAddress = @('8.8.8.8'); UseRootHints = $true }
-                } else {
+                } else
+                {
                     [PSCustomObject]@{ IPAddress = @('1.1.1.1'); UseRootHints = $false }
                 }
             }
@@ -3243,8 +3298,8 @@ Describe 'Get-DNSForwarderConfiguration' {
         BeforeAll {
             Mock -ModuleName Monarch Get-Command { $true } -ParameterFilter { $Name -eq 'Get-DnsServerZone' }
             Mock -ModuleName Monarch Get-ADDomainController { @(
-                [PSCustomObject]@{ HostName = 'DC1.test.local' }
-            ) }
+                    [PSCustomObject]@{ HostName = 'DC1.test.local' }
+                ) }
             Mock -ModuleName Monarch Get-DnsServerForwarder {
                 [PSCustomObject]@{ IPAddress = @('8.8.8.8', '8.8.4.4') }
             }
@@ -3268,17 +3323,21 @@ Describe 'Get-DNSForwarderConfiguration' {
 Describe 'Get-AuditPolicyConfiguration' {
     BeforeAll {
         & (Get-Module Monarch) {
-            function script:Get-ADDomainController { param([string]$Filter, [string]$Server) }
-            function script:Invoke-Command { param([string]$ComputerName, [scriptblock]$ScriptBlock, [string]$ErrorAction) }
+            function script:Get-ADDomainController
+            { param([string]$Filter, [string]$Server) 
+            }
+            function script:Invoke-Command
+            { param([string]$ComputerName, [scriptblock]$ScriptBlock, [string]$ErrorAction) 
+            }
         }
     }
 
     Context 'DCs with identical audit settings' {
         BeforeAll {
             Mock -ModuleName Monarch Get-ADDomainController { @(
-                [PSCustomObject]@{ HostName = 'DC1.test.local' },
-                [PSCustomObject]@{ HostName = 'DC2.test.local' }
-            ) }
+                    [PSCustomObject]@{ HostName = 'DC1.test.local' },
+                    [PSCustomObject]@{ HostName = 'DC2.test.local' }
+                ) }
             $csvLines = @(
                 '"Machine Name","Policy Target","Subcategory","Subcategory GUID","Inclusion Setting","Exclusion Setting"',
                 '"DC","System","Security State Change","{0CCE9210-69AE-11D9-BED3-505054503030}","Success and Failure","No Auditing"',
@@ -3300,9 +3359,9 @@ Describe 'Get-AuditPolicyConfiguration' {
     Context 'DCs with different audit settings' {
         BeforeAll {
             Mock -ModuleName Monarch Get-ADDomainController { @(
-                [PSCustomObject]@{ HostName = 'DC1.test.local' },
-                [PSCustomObject]@{ HostName = 'DC2.test.local' }
-            ) }
+                    [PSCustomObject]@{ HostName = 'DC1.test.local' },
+                    [PSCustomObject]@{ HostName = 'DC2.test.local' }
+                ) }
             $csvDC1 = @(
                 '"Machine Name","Policy Target","Subcategory","Subcategory GUID","Inclusion Setting","Exclusion Setting"',
                 '"DC1","System","Security State Change","{0CCE9210}","Success and Failure","No Auditing"'
@@ -3327,21 +3386,25 @@ Describe 'Get-AuditPolicyConfiguration' {
 Describe 'Get-EventLogConfiguration' {
     BeforeAll {
         & (Get-Module Monarch) {
-            function script:Get-ADDomainController { param([string]$Filter, [string]$Server) }
-            function script:Invoke-Command { param([string]$ComputerName, [scriptblock]$ScriptBlock, $ArgumentList, [string]$ErrorAction) }
+            function script:Get-ADDomainController
+            { param([string]$Filter, [string]$Server) 
+            }
+            function script:Invoke-Command
+            { param([string]$ComputerName, [scriptblock]$ScriptBlock, $ArgumentList, [string]$ErrorAction) 
+            }
         }
     }
 
     Context 'DC with event log data' {
         BeforeAll {
             Mock -ModuleName Monarch Get-ADDomainController { @(
-                [PSCustomObject]@{ HostName = 'DC1.test.local' }
-            ) }
+                    [PSCustomObject]@{ HostName = 'DC1.test.local' }
+                ) }
             Mock -ModuleName Monarch Invoke-Command { @(
-                [PSCustomObject]@{ LogName = 'Security'; MaximumSizeInBytes = 20971520; LogMode = 'Circular' },
-                [PSCustomObject]@{ LogName = 'System'; MaximumSizeInBytes = 20971520; LogMode = 'Circular' },
-                [PSCustomObject]@{ LogName = 'Directory Service'; MaximumSizeInBytes = 16777216; LogMode = 'AutoBackup' }
-            ) }
+                    [PSCustomObject]@{ LogName = 'Security'; MaximumSizeInBytes = 20971520; LogMode = 'Circular' },
+                    [PSCustomObject]@{ LogName = 'System'; MaximumSizeInBytes = 20971520; LogMode = 'Circular' },
+                    [PSCustomObject]@{ LogName = 'Directory Service'; MaximumSizeInBytes = 16777216; LogMode = 'AutoBackup' }
+                ) }
             $script:result = Get-EventLogConfiguration
         }
 
@@ -3358,14 +3421,14 @@ Describe 'Get-EventLogConfiguration' {
     Context 'unreachable DC' {
         BeforeAll {
             Mock -ModuleName Monarch Get-ADDomainController { @(
-                [PSCustomObject]@{ HostName = 'DC1.test.local' },
-                [PSCustomObject]@{ HostName = 'DC2.test.local' }
-            ) }
+                    [PSCustomObject]@{ HostName = 'DC1.test.local' },
+                    [PSCustomObject]@{ HostName = 'DC2.test.local' }
+                ) }
             Mock -ModuleName Monarch Invoke-Command { @(
-                [PSCustomObject]@{ LogName = 'Security'; MaximumSizeInBytes = 20971520; LogMode = 'Circular' },
-                [PSCustomObject]@{ LogName = 'System'; MaximumSizeInBytes = 20971520; LogMode = 'Circular' },
-                [PSCustomObject]@{ LogName = 'Directory Service'; MaximumSizeInBytes = 16777216; LogMode = 'Circular' }
-            ) }
+                    [PSCustomObject]@{ LogName = 'Security'; MaximumSizeInBytes = 20971520; LogMode = 'Circular' },
+                    [PSCustomObject]@{ LogName = 'System'; MaximumSizeInBytes = 20971520; LogMode = 'Circular' },
+                    [PSCustomObject]@{ LogName = 'Directory Service'; MaximumSizeInBytes = 16777216; LogMode = 'Circular' }
+                ) }
             Mock -ModuleName Monarch Invoke-Command { throw 'The RPC server is unavailable' } -ParameterFilter { $ComputerName -eq 'DC2.test.local' }
             $script:result = Get-EventLogConfiguration
         }
@@ -3491,14 +3554,29 @@ Describe 'New-MonarchReport' {
     Context 'Advisory extraction covers all analysis functions' {
         BeforeAll {
             Mock -ModuleName Monarch Get-MonarchConfigValue {
-                switch ($Key) {
-                    'MinPasswordLength'         { 14 }
-                    'RequireLockoutThreshold'   { $true }
-                    'MinSecurityLogSizeKB'      { 1048576 }
-                    'AcceptableOverflowActions' { @('ArchiveTheLogWhenFull') }
-                    'RequireDNSScavenging'      { $true }
-                    'RequireDSIntegration'      { $true }
-                    default                     { '#2E5090' }
+                switch ($Key)
+                {
+                    'MinPasswordLength'
+                    { 14 
+                    }
+                    'RequireLockoutThreshold'
+                    { $true 
+                    }
+                    'MinSecurityLogSizeKB'
+                    { 1048576 
+                    }
+                    'AcceptableOverflowActions'
+                    { @('ArchiveTheLogWhenFull') 
+                    }
+                    'RequireDNSScavenging'
+                    { $true 
+                    }
+                    'RequireDSIntegration'
+                    { $true 
+                    }
+                    default
+                    { '#2E5090' 
+                    }
                 }
             }
             $script:outDir = Join-Path $TestDrive 'report-advisories'
@@ -3630,14 +3708,29 @@ Describe 'New-MonarchReport' {
     Context 'Clean results produce no advisories for threshold functions' {
         BeforeAll {
             Mock -ModuleName Monarch Get-MonarchConfigValue {
-                switch ($Key) {
-                    'MinPasswordLength'         { 14 }
-                    'RequireLockoutThreshold'   { $true }
-                    'MinSecurityLogSizeKB'      { 1048576 }
-                    'AcceptableOverflowActions' { @('ArchiveTheLogWhenFull') }
-                    'RequireDNSScavenging'      { $true }
-                    'RequireDSIntegration'      { $true }
-                    default                     { '#2E5090' }
+                switch ($Key)
+                {
+                    'MinPasswordLength'
+                    { 14 
+                    }
+                    'RequireLockoutThreshold'
+                    { $true 
+                    }
+                    'MinSecurityLogSizeKB'
+                    { 1048576 
+                    }
+                    'AcceptableOverflowActions'
+                    { @('ArchiveTheLogWhenFull') 
+                    }
+                    'RequireDNSScavenging'
+                    { $true 
+                    }
+                    'RequireDSIntegration'
+                    { $true 
+                    }
+                    default
+                    { '#2E5090' 
+                    }
                 }
             }
             $script:outDir = Join-Path $TestDrive 'report-clean'
@@ -3751,7 +3844,8 @@ Describe 'New-MonarchReport' {
         }
 
         It 'domain with not-assessed functions does NOT appear in No findings line' {
-            if ($content -match 'No findings:') {
+            if ($content -match 'No findings:')
+            {
                 $content | Should -Not -Match 'No findings:.*Group Policy'
             }
         }
@@ -3796,7 +3890,8 @@ Describe 'New-MonarchReport' {
         }
 
         It 'Group Policy does not appear in No findings line' {
-            if ($content -match 'No findings:') {
+            if ($content -match 'No findings:')
+            {
                 $content | Should -Not -Match 'No findings:.*Group Policy'
             }
         }
@@ -4026,7 +4121,7 @@ Describe 'New-MonarchReport' {
     }
 
     # -------------------------------------------------------------------------
-    # Step 1A: DCUsed serialization guard
+    # rialization guard
     # -------------------------------------------------------------------------
 
     Context 'DCUsed as plain string' {
@@ -4090,9 +4185,11 @@ Describe 'New-MonarchReport' {
                 Results = @(
                     [PSCustomObject]@{ Domain = 'BackupReadiness'; Function = 'Get-BackupReadinessStatus'
                         CriticalGap = $true; DetectionTier = 2; BackupToolDetected = 'Veeam'
-                        TombstoneLifetimeDays = 180; RecycleBinEnabled = $true; Warnings = @() }
+                        TombstoneLifetimeDays = 180; RecycleBinEnabled = $true; Warnings = @() 
+                    }
                     [PSCustomObject]@{ Domain = 'BackupReadiness'; Function = 'Test-TombstoneGap'
-                        TombstoneLifetimeDays = 180; Warnings = @() }
+                        TombstoneLifetimeDays = 180; Warnings = @() 
+                    }
                 )
                 Failures = @()
             }
@@ -4127,13 +4224,17 @@ Describe 'New-MonarchReport' {
                 StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
                 Results = @(
                     [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Get-PrivilegedGroupMembership'
-                        DomainAdminCount = 7; DomainAdminStatus = 'Critical'; EnterpriseAdminCount = 2; Warnings = @() }
+                        DomainAdminCount = 7; DomainAdminStatus = 'Critical'; EnterpriseAdminCount = 2; Warnings = @() 
+                    }
                     [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-KerberoastableAccount'
-                        TotalCount = 5; PrivilegedCount = 1; Warnings = @() }
+                        TotalCount = 5; PrivilegedCount = 1; Warnings = @() 
+                    }
                     [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-AdminCountOrphan'
-                        Count = 3; Warnings = @() }
+                        Count = 3; Warnings = @() 
+                    }
                     [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Test-ProtectedUsersGap'
-                        GapAccounts = @('u1','u2'); Warnings = @() }
+                        GapAccounts = @('u1','u2'); Warnings = @() 
+                    }
                 )
                 Failures = @()
             }
@@ -4167,9 +4268,11 @@ Describe 'New-MonarchReport' {
                 StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
                 Results = @(
                     [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Get-PrivilegedGroupMembership'
-                        DomainAdminCount = 4; DomainAdminStatus = 'Critical'; EnterpriseAdminCount = 1; Warnings = @() }
+                        DomainAdminCount = 4; DomainAdminStatus = 'Critical'; EnterpriseAdminCount = 1; Warnings = @() 
+                    }
                     [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-KerberoastableAccount'
-                        TotalCount = 2; PrivilegedCount = 0; Warnings = @() }
+                        TotalCount = 2; PrivilegedCount = 0; Warnings = @() 
+                    }
                 )
                 Failures = @()
             }
@@ -4211,16 +4314,20 @@ Describe 'New-MonarchReport' {
                             [PSCustomObject]@{ Name = 'Branch-Site'; DCCount = 1; Subnets = @() }
                             [PSCustomObject]@{ Name = 'DR-Site'; DCCount = 0; Subnets = @() }
                         )
-                        Warnings = @() }
+                        Warnings = @() 
+                    }
                     [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-ForestDomainLevel'
                         DomainFunctionalLevel = 'Windows2016Domain'; ForestFunctionalLevel = 'Windows2016Forest'
-                        SchemaVersion = 87; Warnings = @() }
+                        SchemaVersion = 87; Warnings = @() 
+                    }
                     [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-FSMORolePlacement'
                         AllOnOneDC = $true; UnreachableCount = 0
                         Roles = @([PSCustomObject]@{ Role = 'PDCEmulator'; Holder = 'DC01.contoso.com'; Reachable = $true; Site = 'Default-First-Site-Name' })
-                        Warnings = @() }
+                        Warnings = @() 
+                    }
                     [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-ReplicationHealth'
-                        FailedLinkCount = 0; WarningLinkCount = 0; Warnings = @() }
+                        FailedLinkCount = 0; WarningLinkCount = 0; Warnings = @() 
+                    }
                 )
                 Failures = @()
             }
@@ -4255,11 +4362,13 @@ Describe 'New-MonarchReport' {
                 StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
                 Results = @(
                     [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-FSMORolePlacement'
-                        AllOnOneDC = $false; UnreachableCount = 2; Roles = @(); Warnings = @() }
+                        AllOnOneDC = $false; UnreachableCount = 2; Roles = @(); Warnings = @() 
+                    }
                     [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-SiteTopology'
                         SiteCount = 1; SubnetCount = 2; UnassignedSubnets = @(); EmptySites = @()
                         Sites = @([PSCustomObject]@{ Name = 'HQ'; DCCount = 1; Subnets = @() })
-                        Warnings = @() }
+                        Warnings = @() 
+                    }
                 )
                 Failures = @()
             }
@@ -4282,16 +4391,19 @@ Describe 'New-MonarchReport' {
                 StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
                 Results = @(
                     [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-ReplicationHealth'
-                        FailedLinkCount = 0; WarningLinkCount = 1; Warnings = @() }
+                        FailedLinkCount = 0; WarningLinkCount = 1; Warnings = @() 
+                    }
                     [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-FSMORolePlacement'
-                        AllOnOneDC = $false; UnreachableCount = 0; Roles = @(); Warnings = @() }
+                        AllOnOneDC = $false; UnreachableCount = 0; Roles = @(); Warnings = @() 
+                    }
                     [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-SiteTopology'
                         SiteCount = 2; SubnetCount = 4; UnassignedSubnets = @(); EmptySites = @()
                         Sites = @(
                             [PSCustomObject]@{ Name = 'HQ'; DCCount = 2; Subnets = @() }
                             [PSCustomObject]@{ Name = 'Branch'; DCCount = 1; Subnets = @() }
                         )
-                        Warnings = @() }
+                        Warnings = @() 
+                    }
                 )
                 Failures = @()
             }
@@ -4305,6 +4417,69 @@ Describe 'New-MonarchReport' {
 
         It 'Functional Level metric is absent when Get-ForestDomainLevel not present' {
             $content | Should -Not -Match 'Functional Level'
+        }
+    }
+
+    # -------------------------------------------------------------------------
+    # Metrics strip -- Identity Lifecycle
+    # -------------------------------------------------------------------------
+
+    Context 'IdentityLifecycle metrics -- Find-DormantAccount present' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-identity-all'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            # TotalCount=143 triggers advisory, forcing the domain section to render
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'IdentityLifecycle'; Function = 'Find-DormantAccount'
+                        TotalCount = 143; NeverLoggedOnCount = 12; ThresholdDays = 90; ExcludedCount = 28
+                        Accounts = @(1..143 | ForEach-Object { [PSCustomObject]@{ SamAccountName = "u$_" } })
+                        Warnings = @() 
+                    }
+                )
+                Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'Dormant Accounts metric renders correct count' {
+            $content | Should -Match "Dormant Accounts: <strong>143</strong>"
+        }
+
+        It 'Never Logged On metric renders correct value' {
+            $content | Should -Match "Never Logged On: <strong>12</strong>"
+        }
+
+        It 'Threshold metric renders with days suffix' {
+            $content | Should -Match "Threshold: <strong>90 days</strong>"
+        }
+
+        It 'Excluded metric renders with service/built-in suffix' {
+            $content | Should -Match "Excluded: <strong>28 \(service/built-in\)</strong>"
+        }
+    }
+
+    Context 'IdentityLifecycle metrics -- Find-DormantAccount absent' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-identity-absent'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            # No IdentityLifecycle results at all -- domain section won't render, no error expected
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:01'
+                Results = @(); Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'report generates without error and no identity metrics appear' {
+            Test-Path $result | Should -BeTrue
+            $content | Should -Not -Match 'Dormant Accounts'
+            $content | Should -Not -Match 'Never Logged On'
         }
     }
 }
@@ -4332,7 +4507,8 @@ Describe 'Invoke-DomainAudit' {
             'Get-DNSScavengingConfiguration', 'Test-ZoneReplicationScope',
             'Get-DNSForwarderConfiguration'
         )
-        foreach ($fn in $script:discoveryFunctions) {
+        foreach ($fn in $script:discoveryFunctions)
+        {
             Mock -ModuleName Monarch $fn {
                 [PSCustomObject]@{ Domain = 'Test'; Function = 'MockFunction'; Timestamp = Get-Date; Warnings = @() }
             }
