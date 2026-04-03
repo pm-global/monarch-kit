@@ -2780,10 +2780,22 @@ function New-MonarchReport
             'IdentityLifecycle' {
                 $dormant = $domainResults | Where-Object { $_.Function -eq 'Find-DormantAccount' } | Select-Object -First 1
                 if ($dormant) {
-                    if ($null -ne $dormant.Accounts)         { $html += "<div class='domain-metric'>Dormant Accounts: <strong>$(@($dormant.Accounts).Count)</strong></div>" }
-                    if ($null -ne $dormant.NeverLoggedOnCount) { $html += "<div class='domain-metric'>Never Logged On: <strong>$($dormant.NeverLoggedOnCount)</strong></div>" }
-                    if ($null -ne $dormant.ThresholdDays)    { $html += "<div class='domain-metric'>Threshold: <strong>$($dormant.ThresholdDays) days</strong></div>" }
-                    if ($null -ne $dormant.ExcludedCount)    { $html += "<div class='domain-metric'>Excluded: <strong>$($dormant.ExcludedCount) (service/built-in)</strong></div>" }
+                    # Defensive property access
+                    $accountsCount = if ($dormant.PSObject.Properties['Accounts']) {
+                        @($dormant.Accounts).Count
+                    } else { 0 }
+
+                    $html += "<div class='domain-metric'>Dormant Accounts: <strong>$accountsCount</strong></div>"
+
+                    if ($dormant.PSObject.Properties['NeverLoggedOnCount'] -and $null -ne $dormant.NeverLoggedOnCount) {
+                        $html += "<div class='domain-metric'>Never Logged On: <strong>$($dormant.NeverLoggedOnCount)</strong></div>"
+                    }
+                    if ($dormant.PSObject.Properties['ThresholdDays'] -and $null -ne $dormant.ThresholdDays) {
+                        $html += "<div class='domain-metric'>Threshold: <strong>$($dormant.ThresholdDays) days</strong></div>"
+                    }
+                    if ($dormant.PSObject.Properties['ExcludedCount'] -and $null -ne $dormant.ExcludedCount) {
+                        $html += "<div class='domain-metric'>Excluded: <strong>$($dormant.ExcludedCount) (service/built-in)</strong></div>"
+                    }
                 }
             }
         }
