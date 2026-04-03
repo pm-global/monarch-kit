@@ -130,7 +130,7 @@ function Resolve-MonarchDC
         Domain FQDN. If null, uses the current domain.
     #>
     param([string]$Domain)
-
+    Write-Host "resolve-monarchDC..." -ForegroundColor DarkGray
     if (-not $Domain)
     {
         $Domain = (Get-ADDomain).DNSRoot
@@ -2429,6 +2429,8 @@ function New-MonarchReport
         [string]$Format = 'HTML'
     )
 
+    Write-Host "report: generating discovery report..." -ForegroundColor DarkGray
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     $reportFile = Join-Path $OutputPath '00-Discovery-Report.html'
 
     # Config-driven accent color
@@ -2444,6 +2446,7 @@ function New-MonarchReport
     }
 
     # Extract header data
+    Write-Host "report: extracting header and duration..." -ForegroundColor DarkGray
     $domain = $Results.Domain
     $dc = if ($Results.DCUsed -is [string]) { $Results.DCUsed } else { $Results.DCUsed.DCName }
     $startTime = $Results.StartTime
@@ -2513,6 +2516,7 @@ function New-MonarchReport
     $domainOrder = @('BackupReadiness','InfrastructureHealth','PrivilegedAccess','IdentityLifecycle','GroupPolicy','SecurityPosture','AuditCompliance','DNS')
 
     # --- Critical findings extraction ---
+    Write-Host "report: analyzing findings and building advisories..." -ForegroundColor DarkGray
     $criticals = [System.Collections.Generic.List[PSCustomObject]]::new()
     $advisories = [System.Collections.Generic.List[PSCustomObject]]::new()
 
@@ -2713,6 +2717,8 @@ function New-MonarchReport
         $html += "</div>"
     }
 
+    Write-Host "report: building domain sections and metrics..." -ForegroundColor DarkGray
+
     # Domain sections -- domains with findings or not-assessed functions
     $findingDomains = @{}
     foreach ($f in @($criticals) + @($advisories)) {
@@ -2835,6 +2841,7 @@ function New-MonarchReport
     }
 
     # --- File tree: scan disk, not claims ---
+    Write-Host "report: scanning output files and building tree..." -ForegroundColor DarkGray
     # 1. Clean up empties under $OutputPath
     Get-ChildItem -LiteralPath $OutputPath -File -Recurse |
         Where-Object { $_.Length -eq 0 } |
@@ -2879,7 +2886,10 @@ function New-MonarchReport
     $html += "<div class='report-footer'><span>monarch-kit</span><span>Generated $((Get-Date).ToString('MMMM d, yyyy HH:mm'))</span></div>"
     $html += "</div></body></html>"
 
+    Write-Host "report: assembling and writing HTML report..." -ForegroundColor DarkGray
     $html | Out-File -FilePath $reportFile -Encoding UTF8
+    Write-Host "report OK: generated $($reportFile.Name) with $criticalCount critical, $advisoryCount advisory" -ForegroundColor Green
+
     return $reportFile
 }
 
