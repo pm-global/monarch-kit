@@ -2528,8 +2528,8 @@ function New-MonarchReport
         $dn = if ($domainNames.ContainsKey($r.Domain)) { $domainNames[$r.Domain] } else { $r.Domain }
         switch ($r.Function) {
             'Get-BackupReadinessStatus' {
-                if ($r.CriticalGap -eq $true) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'Backup age exceeds tombstone lifetime -- USN rollback risk' }) }
-                if ($r.DetectionTier -eq 1 -and $null -eq $r.BackupToolDetected) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'No backup tool detected -- verify backup coverage manually' }) }
+                if ($r.CriticalGap -eq $true) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'Backup age exceeds tombstone lifetime (USN rollback risk)' }) }
+                if ($r.DetectionTier -eq 1 -and $null -eq $r.BackupToolDetected) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'No backup tool detected (verify backup coverage manually)' }) }
             }
             'Get-ReplicationHealth' {
                 if ($r.FailedLinkCount -gt 0) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.FailedLinkCount) replication links failing" }) }
@@ -2556,8 +2556,8 @@ function New-MonarchReport
                 if ($r.Consistent -eq $false) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'DNS forwarder configuration inconsistent across DCs' }) }
             }
             'Find-KerberoastableAccount' {
-                if ($r.PrivilegedCount -gt 0) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.PrivilegedCount) privileged accounts with SPNs (Kerberoasting risk -- privileged)" }) }
-                if ($r.TotalCount -gt 0 -and $r.PrivilegedCount -eq 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.TotalCount) accounts with SPNs - 0 privileged" }) }
+                if ($r.PrivilegedCount -gt 0) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.PrivilegedCount) privileged accounts with SPNs (Kerberoasting risk)" }) }
+                if ($r.TotalCount -gt 0 -and $r.PrivilegedCount -eq 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.TotalCount) accounts with SPNs (0 privileged)" }) }
             }
             'Test-ProtectedUsersGap' {
                 if ($r.GapAccounts.Count -gt 0) {
@@ -2568,7 +2568,7 @@ function New-MonarchReport
                         $eaGrp = $privGrpResult.Groups | Where-Object { $_.GroupSID -like '*-519' }
                         $daCount = if ($daGrp) { $daGrp.MemberCount } else { 0 }
                         $eaCount = if ($eaGrp) { $eaGrp.MemberCount } else { 0 }
-                        $gapDesc += " - includes $daCount DAs, $eaCount EAs"
+                        $gapDesc += " (includes $daCount DAs, $eaCount EAs)"
                     }
                     $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = $gapDesc })
                 }
@@ -2583,9 +2583,9 @@ function New-MonarchReport
                 $privCount = @($r.Accounts | Where-Object { $_.IsPrivileged }).Count
                 $total = $r.Count
                 if ($privCount -gt 0) {
-                    $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$total accounts with pre-auth disabled - $privCount privileged" })
+                    $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$total accounts with pre-auth disabled ($privCount privileged)" })
                 } elseif ($total -gt 0) {
-                    $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$total accounts with pre-auth disabled - 0 privileged" })
+                    $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$total accounts with pre-auth disabled (0 privileged)" })
                 }
             }
             'Find-WeakAccountFlag' {
@@ -2720,10 +2720,10 @@ function New-MonarchReport
 
     # --- Assemble HTML ---
     $html = "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1.0'>" +
-        "<title>Discovery Report -- $domain</title><style>$css</style></head><body><div class='container'>"
+        "<title>Discovery Report: $domain</title><style>$css</style></head><body><div class='container'>"
 
     # Header
-    $html += "<div class='report-title'>Discovery Report -- $domain</div>"
+    $html += "<div class='report-title'>Discovery Report: $domain</div>"
     $html += "<div class='report-meta'><span>$dc</span><span>$dateStr</span><span>Duration: $duration</span></div>"
 
     # Stats
