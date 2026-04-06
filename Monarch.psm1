@@ -2580,7 +2580,13 @@ function New-MonarchReport
                 if ($r.UnlinkedCount -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.UnlinkedCount) unlinked (orphaned) GPOs" }) }
             }
             'Find-ASREPRoastableAccount' {
-                if ($r.Count -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.Count) accounts with Kerberos pre-auth disabled (AS-REP roasting risk)" }) }
+                $privCount = @($r.Accounts | Where-Object { $_.IsPrivileged }).Count
+                $total = $r.Count
+                if ($privCount -gt 0) {
+                    $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$total accounts with pre-auth disabled — $privCount privileged" })
+                } elseif ($total -gt 0) {
+                    $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$total accounts with pre-auth disabled — 0 privileged" })
+                }
             }
             'Find-WeakAccountFlag' {
                 if ($r.CountByFlag.ContainsKey('ReversibleEncryption') -or $r.CountByFlag.ContainsKey('DESOnly')) {

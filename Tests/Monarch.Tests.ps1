@@ -3599,7 +3599,11 @@ Describe 'New-MonarchReport' {
                     [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-KerberoastableAccount'; TotalCount = 50; PrivilegedCount = 0; Accounts = @(); Warnings = @() }
 
                     # --- New cases: security-critical ---
-                    [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-ASREPRoastableAccount'; Count = 3; Accounts = @(); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-ASREPRoastableAccount'; Count = 3; Accounts = @(
+                        [PSCustomObject]@{ SamAccountName = 'svc1'; IsPrivileged = $false }
+                        [PSCustomObject]@{ SamAccountName = 'svc2'; IsPrivileged = $false }
+                        [PSCustomObject]@{ SamAccountName = 'svc3'; IsPrivileged = $false }
+                    ); Warnings = @() }
                     [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Find-WeakAccountFlag'; Findings = @(1,2,3); CountByFlag = @{ 'PasswordNeverExpires' = 3 }; Warnings = @() }
                     [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Find-LegacyProtocolExposure'; DCFindings = @([PSCustomObject]@{ Risk = 'Medium'; Finding = 'LDAPSigningDisabled' }); Warnings = @() }
 
@@ -3626,8 +3630,8 @@ Describe 'New-MonarchReport' {
         }
 
         # New cases
-        It 'Find-ASREPRoastableAccount produces advisory' {
-            $content | Should -Match '3 accounts with Kerberos pre-auth disabled'
+        It 'Find-ASREPRoastableAccount with no privileged produces advisory showing 0 privileged' {
+            $content | Should -Match '3 accounts with pre-auth disabled.*0 privileged'
         }
 
         It 'Find-WeakAccountFlag produces advisory' {
@@ -3844,6 +3848,13 @@ Describe 'New-MonarchReport' {
                 Failures = @()
                 Results = @(
                     [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-KerberoastableAccount'; TotalCount = 50; PrivilegedCount = 3; Accounts = @(); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-ASREPRoastableAccount'; Count = 5; Accounts = @(
+                        [PSCustomObject]@{ SamAccountName = 'admin1'; IsPrivileged = $true }
+                        [PSCustomObject]@{ SamAccountName = 'admin2'; IsPrivileged = $true }
+                        [PSCustomObject]@{ SamAccountName = 'svc1'; IsPrivileged = $false }
+                        [PSCustomObject]@{ SamAccountName = 'svc2'; IsPrivileged = $false }
+                        [PSCustomObject]@{ SamAccountName = 'svc3'; IsPrivileged = $false }
+                    ); Warnings = @() }
                     [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Find-WeakAccountFlag'; Findings = @(1,2); CountByFlag = @{ 'ReversibleEncryption' = 2 }; Warnings = @() }
                     [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Find-LegacyProtocolExposure'; DCFindings = @([PSCustomObject]@{ Risk = 'High'; Finding = 'NTLMv1Enabled' }); Warnings = @() }
                     [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-FSMORolePlacement'; Roles = @(); AllOnOneDC = $false; UnreachableCount = 1; Warnings = @() }
@@ -3858,6 +3869,11 @@ Describe 'New-MonarchReport' {
         It 'Kerberoastable with PrivilegedCount escalates to critical' {
             $content | Should -Match 'privileged accounts with SPNs.*privileged'
             $critSection | Should -Match 'privileged accounts with SPNs'
+        }
+
+        It 'ASREPRoastable with privileged accounts escalates to critical' {
+            $content | Should -Match '5 accounts with pre-auth disabled.*2 privileged'
+            $critSection | Should -Match '5 accounts with pre-auth disabled'
         }
 
         It 'WeakAccountFlag ReversibleEncryption escalates to critical' {
