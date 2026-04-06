@@ -2715,7 +2715,7 @@ function New-MonarchReport
         ".stat.w-critical{border-left:4px solid #000}.stat.w-advisory{border-left:4px solid #666}" +
         ".card.w-critical{border-left:4px solid #000;background:none}.card.w-advisory{border-left:3px solid #666;background:none}" +
         ".card.w-neutral{border-left:3px solid #999;background:none}a{color:#000;text-decoration:none}" +
-        "h2{page-break-after:avoid}.domain-section{page-break-inside:avoid}summary{list-style:none}summary::-webkit-details-marker{display:none}" +
+        "h2{page-break-after:avoid}.domain-section{page-break-inside:avoid}" +
         ".file-tree a::after{content:' (' attr(href) ')';font-size:9pt;color:#666}}"
 
     # --- Assemble HTML ---
