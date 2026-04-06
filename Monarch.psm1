@@ -2704,7 +2704,7 @@ function New-MonarchReport
         ".file-tree .group{margin-bottom:var(--gap-related)}.file-tree .group:last-child{margin-bottom:0}" +
         ".file-tree .tree-children{padding-left:var(--gap-related);border-left:1px solid var(--border-1)}" +
         ".file-tree .folder{font-weight:600;color:var(--text-1);text-decoration:none;display:block;line-height:1.3;margin-bottom:var(--gap-micro)}" +
-        ".file-tree .tree-item{color:var(--text-2);line-height:1.8;position:relative}.file-tree .tree-item::before{content:'\2500 ';color:var(--text-3)}" +
+        ".file-tree .tree-item{color:var(--text-2);line-height:1.8;position:relative}.file-tree .tree-item::before{content:'\2500\20 ';color:var(--text-3)}" +
         ".file-tree a.folder:hover{color:var(--accent-primary);text-decoration:underline}" +
         ".file-tree .tree-item a{color:var(--accent-primary);text-decoration:none}.file-tree .tree-item a:hover{text-decoration:underline}" +
         ".report-footer{margin-top:calc(var(--gap-separate) + var(--gap-related));padding-top:var(--gap-related);border-top:1px solid var(--border-1);" +
