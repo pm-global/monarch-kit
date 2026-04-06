@@ -2630,13 +2630,13 @@ function New-MonarchReport
                 $minSize = Get-MonarchConfigValue -Key 'MinSecurityLogSizeKB'
                 $okActions = Get-MonarchConfigValue -Key 'AcceptableOverflowActions'
                 $dcSummaries = @()
-                foreach ($dc in $r.DCs) {
-                    $secLog = $dc.Logs | Where-Object { $_.LogName -eq 'Security' }
+                foreach ($dcEntry in $r.DCs) {
+                    $secLog = $dcEntry.Logs | Where-Object { $_.LogName -eq 'Security' }
                     if ($null -ne $secLog) {
                         $tags = @()
                         if ($secLog.MaxSizeKB -lt $minSize) { $tags += 'undersized' }
                         if ($secLog.OverflowAction -notin $okActions) { $tags += 'overflow action' }
-                        if ($tags.Count -gt 0) { $dcSummaries += "$($dc.DCName) ($($tags -join ', '))" }
+                        if ($tags.Count -gt 0) { $dcSummaries += "$($dcEntry.DCName) ($($tags -join ', '))" }
                     }
                 }
                 if ($dcSummaries.Count -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "Security log: $($dcSummaries -join ', ')" }) }

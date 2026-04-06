@@ -3556,114 +3556,259 @@ Describe 'New-MonarchReport' {
         }
     }
 
-    Context 'Advisory extraction covers all analysis functions' {
+    Context 'Integration — all domains with findings' {
         BeforeAll {
             Mock -ModuleName Monarch Get-MonarchConfigValue {
                 switch ($Key)
                 {
-                    'MinPasswordLength'
-                    { 14 
-                    }
-                    'RequireLockoutThreshold'
-                    { $true 
-                    }
-                    'MinSecurityLogSizeKB'
-                    { 1048576 
-                    }
-                    'AcceptableOverflowActions'
-                    { @('ArchiveTheLogWhenFull') 
-                    }
-                    'RequireDNSScavenging'
-                    { $true 
-                    }
-                    'RequireDSIntegration'
-                    { $true 
-                    }
-                    default
-                    { '#2E5090' 
-                    }
+                    'MinPasswordLength'         { 14 }
+                    'RequireLockoutThreshold'   { $true }
+                    'MinSecurityLogSizeKB'      { 1048576 }
+                    'AcceptableOverflowActions' { @('ArchiveTheLogWhenFull') }
+                    'RequireDNSScavenging'      { $true }
+                    'RequireDSIntegration'      { $true }
+                    default                     { '#2E5090' }
                 }
             }
-            $script:outDir = Join-Path $TestDrive 'report-advisories'
+            $script:outDir = Join-Path $TestDrive 'report-integration'
             New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
             $script:mockResults = [PSCustomObject]@{
                 Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
                 StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:30'
                 Failures = @()
                 Results = @(
-                    # --- Existing cases (sanity) ---
-                    [PSCustomObject]@{ Domain = 'IdentityLifecycle'; Function = 'Find-DormantAccount'; TotalCount = 12; NeverLoggedOnCount = 3; ThresholdDays = 90; ExcludedCount = 5; Warnings = @() }
-                    [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-AdminCountOrphan'; Count = 4; Orphans = @(); Warnings = @() }
+                    # BackupReadiness — DetectionTier=1 + no tool fires advisory, keeping section visible
+                    [PSCustomObject]@{ Domain = 'BackupReadiness'; Function = 'Get-BackupReadinessStatus'
+                        TombstoneLifetimeDays = 180; RecycleBinEnabled = $true; DetectionTier = 1
+                        CriticalGap = $false; BackupToolDetected = $null; Warnings = @() }
 
-                    # --- Fixed case ---
-                    [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-KerberoastableAccount'; TotalCount = 50; PrivilegedCount = 0; Accounts = @(); Warnings = @() }
+                    # InfrastructureHealth
+                    [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-SiteTopology'
+                        SiteCount = 3; SubnetCount = 7; UnassignedSubnets = @(); EmptySites = @()
+                        Sites = @(
+                            [PSCustomObject]@{ SiteName = 'Site-HQ';     DCCount = 3 }
+                            [PSCustomObject]@{ SiteName = 'Site-Branch'; DCCount = 1 }
+                            [PSCustomObject]@{ SiteName = 'Site-DR';     DCCount = 0 }
+                        ); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-ForestDomainLevel'
+                        DomainFunctionalLevel = 'Windows2016Domain'; ForestFunctionalLevel = 'Windows2016Forest'
+                        SchemaVersion = 88; Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-FSMORolePlacement'
+                        Roles = @([PSCustomObject]@{ Role = 'PDCEmulator'; Holder = 'DC01.contoso.com'; Reachable = $true; Site = 'Site-HQ' })
+                        AllOnOneDC = $true; UnreachableCount = 0; Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-ReplicationHealth'
+                        FailedLinkCount = 0; WarningLinkCount = 1; Warnings = @() }
 
-                    # --- New cases: security-critical ---
-                    [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-ASREPRoastableAccount'; Count = 3; Accounts = @(
-                        [PSCustomObject]@{ SamAccountName = 'svc1'; IsPrivileged = $false }
-                        [PSCustomObject]@{ SamAccountName = 'svc2'; IsPrivileged = $false }
-                        [PSCustomObject]@{ SamAccountName = 'svc3'; IsPrivileged = $false }
-                    ); Warnings = @() }
-                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Find-WeakAccountFlag'; Findings = @(1,2,3); CountByFlag = @{ 'PasswordNeverExpires' = 3 }; Warnings = @() }
-                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Find-LegacyProtocolExposure'; DCFindings = @([PSCustomObject]@{ Risk = 'Medium'; Finding = 'LDAPSigningDisabled' }); Warnings = @() }
+                    # PrivilegedAccess
+                    [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Get-PrivilegedGroupMembership'
+                        DomainAdminCount = 4; DomainAdminStatus = 'OK'
+                        Groups = @(
+                            [PSCustomObject]@{ GroupName = 'Domain Admins';     GroupSID = 'S-1-5-21-1234-512'; MemberCount = 4 }
+                            [PSCustomObject]@{ GroupName = 'Enterprise Admins'; GroupSID = 'S-1-5-21-1234-519'; MemberCount = 2 }
+                        ); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-KerberoastableAccount'
+                        TotalCount = 12; PrivilegedCount = 0; Accounts = @(); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-AdminCountOrphan'
+                        Count = 7; Orphans = @(); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-ASREPRoastableAccount'
+                        Count = 3; Accounts = @(
+                            [PSCustomObject]@{ SamAccountName = 'svc1'; IsPrivileged = $false }
+                            [PSCustomObject]@{ SamAccountName = 'svc2'; IsPrivileged = $false }
+                            [PSCustomObject]@{ SamAccountName = 'svc3'; IsPrivileged = $false }
+                        ); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Test-ProtectedUsersGap'
+                        GapAccounts = @(1..5 | ForEach-Object { [PSCustomObject]@{ SamAccountName = "gap$_" } })
+                        Warnings = @() }
 
-                    # --- New case: GPO ---
-                    [PSCustomObject]@{ Domain = 'GroupPolicy'; Function = 'Find-GPOPermissionAnomaly'; Count = 2; Anomalies = @(1,2); Warnings = @() }
+                    # IdentityLifecycle
+                    [PSCustomObject]@{ Domain = 'IdentityLifecycle'; Function = 'Find-DormantAccount'
+                        TotalCount = 35; NeverLoggedOnCount = 8; ThresholdDays = 90; ExcludedCount = 12
+                        Accounts = @(1..35 | ForEach-Object { [PSCustomObject]@{ SamAccountName = "u$_" } })
+                        Warnings = @() }
 
-                    # --- New cases: threshold-based ---
-                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Get-PasswordPolicyInventory'; DefaultPolicy = [PSCustomObject]@{ MinLength = 8; ComplexityEnabled = $false; LockoutThreshold = 0; ReversibleEncryption = $false }; FineGrainedPolicies = @(); Warnings = @() }
-                    [PSCustomObject]@{ Domain = 'DNS'; Function = 'Get-DNSScavengingConfiguration'; Zones = @([PSCustomObject]@{ ZoneName = 'contoso.com'; ScavengingEnabled = $false }); Warnings = @() }
-                    [PSCustomObject]@{ Domain = 'AuditCompliance'; Function = 'Get-EventLogConfiguration'; DCs = @([PSCustomObject]@{ DCName = 'DC01'; Logs = @([PSCustomObject]@{ LogName = 'Security'; MaxSizeKB = 512000; OverflowAction = 'OverwriteAsNeeded' }) }); Warnings = @() }
-                    [PSCustomObject]@{ Domain = 'DNS'; Function = 'Test-ZoneReplicationScope'; Zones = @([PSCustomObject]@{ ZoneName = 'contoso.com'; IsDsIntegrated = $false; ReplicationScope = $null; ZoneType = 'Primary' }); Warnings = @() }
+                    # GroupPolicy
+                    [PSCustomObject]@{ Domain = 'GroupPolicy'; Function = 'Export-GPOAudit'
+                        TotalGPOs = 45; UnlinkedCount = 6; DisabledCount = 2
+                        HighRiskCounts = [PSCustomObject]@{ UserRights = 12; Scripts = 8; SecurityOptions = 3; SoftwareInstall = 1 }
+                        Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'GroupPolicy'; Function = 'Find-GPOPermissionAnomaly'
+                        Count = 3; Anomalies = @(); Warnings = @() }
 
-                    # --- Judgment-call ---
-                    [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-FSMORolePlacement'; Roles = @(); AllOnOneDC = $true; UnreachableCount = 0; Warnings = @() }
+                    # SecurityPosture
+                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Find-WeakAccountFlag'
+                        CountByFlag = @{ 'PasswordNeverExpires' = 22 }
+                        Findings = @(1..22 | ForEach-Object { [PSCustomObject]@{ SamAccountName = "f$_" } })
+                        Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Find-LegacyProtocolExposure'
+                        DCFindings = @(
+                            [PSCustomObject]@{ Risk = 'Medium'; DCName = 'DC01'; Finding = 'LDAPSigning' }
+                            [PSCustomObject]@{ Risk = 'Medium'; DCName = 'DC02'; Finding = 'NTLMv2Only' }
+                        ); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Get-PasswordPolicyInventory'
+                        DefaultPolicy = [PSCustomObject]@{ MinLength = 8; ComplexityEnabled = $false; LockoutThreshold = 0; ReversibleEncryption = $false }
+                        FineGrainedPolicies = @(); Warnings = @() }
+
+                    # AuditCompliance
+                    [PSCustomObject]@{ Domain = 'AuditCompliance'; Function = 'Get-AuditPolicyConfiguration'
+                        Consistent = $false; Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'AuditCompliance'; Function = 'Get-EventLogConfiguration'
+                        DCs = @(
+                            [PSCustomObject]@{ DCName = 'DC01'; Logs = @([PSCustomObject]@{ LogName = 'Security'; MaxSizeKB = 512000; OverflowAction = 'OverwriteAsNeeded' }) }
+                            [PSCustomObject]@{ DCName = 'DC02'; Logs = @([PSCustomObject]@{ LogName = 'Security'; MaxSizeKB = 512000; OverflowAction = 'OverwriteAsNeeded' }) }
+                        ); Warnings = @() }
+
+                    # DNS
+                    [PSCustomObject]@{ Domain = 'DNS'; Function = 'Get-DNSForwarderConfiguration'
+                        Consistent = $false; Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'DNS'; Function = 'Get-DNSScavengingConfiguration'
+                        Zones = @([PSCustomObject]@{ ZoneName = 'contoso.com'; ScavengingEnabled = $false }); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'DNS'; Function = 'Test-ZoneReplicationScope'
+                        Zones = @([PSCustomObject]@{ ZoneName = 'contoso.com'; IsDsIntegrated = $false; ReplicationScope = $null; ZoneType = 'Primary' }); Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'DNS'; Function = 'Test-SRVRecordCompleteness'
+                        AllComplete = $false
+                        Sites = @(
+                            [PSCustomObject]@{ SiteName = 'Site-HQ';     MissingRecords = @('_ldap._tcp') }
+                            [PSCustomObject]@{ SiteName = 'Site-Branch'; MissingRecords = @() }
+                        ); Warnings = @() }
                 )
             }
-            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:result  = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
             $script:content = Get-Content $script:result -Raw
         }
 
-        # Fixed case
-        It 'Find-KerberoastableAccount with TotalCount produces advisory showing privileged count' {
-            $content | Should -Match '50 accounts with SPNs.*0 privileged'
+        # Header
+        It 'DC header renders as plain string' {
+            $content | Should -Not -Match '@\{'
         }
 
-        # New cases
-        It 'Find-ASREPRoastableAccount with no privileged produces advisory showing 0 privileged' {
+        # Stats bar
+        It 'stats bar shows zero criticals' {
+            $content | Should -Match "class='stat w-outline zero'><div class='stat-number'>0</div><div class='stat-label'>Critical</div>"
+        }
+
+        It 'stats bar advisory count matches rendered advisory cards' {
+            $advCards = ([regex]::Matches($content, "class='card w-advisory'")).Count
+            $content | Should -Match "stat-number'>$advCards<"
+        }
+
+        # Metrics: BackupReadiness
+        It 'BackupReadiness metrics: tombstone lifetime' {
+            $content | Should -Match "Tombstone Lifetime: <strong>180 days</strong>"
+        }
+
+        It 'BackupReadiness metrics: recycle bin enabled' {
+            $content | Should -Match "Recycle Bin: <strong>Enabled</strong>"
+        }
+
+        It 'BackupReadiness metrics: detection tier' {
+            $content | Should -Match "Detection Tier: <strong>1 of 3</strong>"
+        }
+
+        # Metrics: PrivilegedAccess
+        It 'PrivilegedAccess metrics: DA count' {
+            $content | Should -Match "Domain Admins: <strong>4</strong>"
+        }
+
+        It 'PrivilegedAccess metrics: EA count' {
+            $content | Should -Match "Enterprise Admins: <strong>2</strong>"
+        }
+
+        It 'PrivilegedAccess metrics: Kerberoastable privileged count' {
+            $content | Should -Match "Kerberoastable \(privileged\): <strong>0</strong>"
+        }
+
+        It 'PrivilegedAccess metrics: AdminCount orphans' {
+            $content | Should -Match "AdminCount Orphans: <strong>7</strong>"
+        }
+
+        # Metrics: InfrastructureHealth
+        It 'InfrastructureHealth metrics: DC count from sites' {
+            $content | Should -Match "Domain Controllers: <strong>4</strong>"
+        }
+
+        It 'InfrastructureHealth metrics: site count' {
+            $content | Should -Match "Sites: <strong>3</strong>"
+        }
+
+        It 'InfrastructureHealth metrics: functional level' {
+            $content | Should -Match "Functional Level: <strong>Windows2016Domain</strong>"
+        }
+
+        It 'InfrastructureHealth metrics: FSMO single DC' {
+            $content | Should -Match "FSMO: <strong>Single DC</strong>"
+        }
+
+        # Metrics: IdentityLifecycle
+        It 'IdentityLifecycle metrics: dormant account count' {
+            $content | Should -Match "Dormant Accounts: <strong>35</strong>"
+        }
+
+        It 'IdentityLifecycle metrics: never logged on' {
+            $content | Should -Match "Never Logged On: <strong>8</strong>"
+        }
+
+        It 'IdentityLifecycle metrics: threshold' {
+            $content | Should -Match "Threshold: <strong>90 days</strong>"
+        }
+
+        It 'IdentityLifecycle metrics: excluded count' {
+            $content | Should -Match "Excluded: <strong>12 \(service/built-in\)</strong>"
+        }
+
+        # Metrics: GroupPolicy
+        It 'GroupPolicy metrics: total GPOs' {
+            $content | Should -Match "Total GPOs: <strong>45</strong>"
+        }
+
+        It 'GroupPolicy metrics: unlinked GPOs' {
+            $content | Should -Match "Unlinked: <strong>6</strong>"
+        }
+
+        It 'GroupPolicy metrics: with user rights' {
+            $content | Should -Match "With User Rights: <strong>12</strong>"
+        }
+
+        It 'GroupPolicy metrics: with scripts' {
+            $content | Should -Match "With Scripts: <strong>8</strong>"
+        }
+
+        # Metrics: SecurityPosture
+        It 'SecurityPosture metrics: password never expires' {
+            $content | Should -Match "Password Never Expires: <strong>22</strong>"
+        }
+
+        # Advisory descriptions (Steps 4B, 7A-D, 8)
+        It 'FSMO advisory names the DC (Step 7A)' {
+            $content | Should -Match 'All FSMO roles held by DC01\.contoso\.com'
+        }
+
+        It 'dormant advisory includes threshold and excluded count (Step 4B)' {
+            $content | Should -Match '35 dormant accounts \(90-day threshold, 12 excluded\)'
+        }
+
+        It 'event log advisory lists affected DCs with issue types (Step 7B)' {
+            $content | Should -Match 'Security log: DC01 \(undersized, overflow action\), DC02 \(undersized, overflow action\)'
+        }
+
+        It 'protected users advisory includes DA and EA denominator (Step 7C)' {
+            $content | Should -Match '5 privileged accounts not in Protected Users.*4 DAs.*2 EAs'
+        }
+
+        It 'Kerberoastable advisory shows 0 privileged explicitly (Step 7D)' {
+            $content | Should -Match '12 accounts with SPNs.*0 privileged'
+        }
+
+        It 'AS-REP advisory shows 0 privileged (Step 8)' {
             $content | Should -Match '3 accounts with pre-auth disabled.*0 privileged'
         }
 
-        It 'Find-WeakAccountFlag produces advisory' {
-            $content | Should -Match 'accounts with weak security flags'
+        # Structure
+        It 'critical-section absent when no criticals' {
+            $content | Should -Not -Match "class='critical-section'"
         }
 
-        It 'Find-LegacyProtocolExposure medium risk produces advisory' {
-            $content | Should -Match 'legacy protocol findings on DCs'
-        }
-
-        It 'Find-GPOPermissionAnomaly produces advisory' {
-            $content | Should -Match '2 GPOs with non-standard editors'
-        }
-
-        It 'Get-PasswordPolicyInventory weak policy produces advisory' {
-            $content | Should -Match 'minimum length 8'
-        }
-
-        It 'Get-DNSScavengingConfiguration disabled zones produce advisory' {
-            $content | Should -Match 'DNS zones with scavenging disabled'
-        }
-
-        It 'Get-EventLogConfiguration produces advisory naming DC and issue types' {
-            $content | Should -Match 'Security log: DC01 \(undersized, overflow action\)'
-        }
-
-        It 'Test-ZoneReplicationScope non-integrated produces advisory' {
-            $content | Should -Match 'DNS zones not AD-integrated'
-        }
-
-        It 'Get-FSMORolePlacement AllOnOneDC produces advisory' {
-            $content | Should -Match 'All FSMO roles held by a single DC'
+        It 'file tree section absent when no output files written' {
+            $content | Should -Not -Match "class='output-section'"
         }
     }
 
