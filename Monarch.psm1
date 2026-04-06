@@ -2787,6 +2787,17 @@ function New-MonarchReport
                     $html += "<div class='domain-metric'>FSMO: <strong>$fsmoStatus</strong></div>"
                 }
             }
+            'GroupPolicy' {
+                $gpo = $domainResults | Where-Object { $_.Function -eq 'Export-GPOAudit' } | Select-Object -First 1
+                if ($gpo) {
+                    if ($null -ne $gpo.TotalGPOs)    { $html += "<div class='domain-metric'>Total GPOs: <strong>$($gpo.TotalGPOs)</strong></div>" }
+                    if ($null -ne $gpo.UnlinkedCount) { $html += "<div class='domain-metric'>Unlinked: <strong>$($gpo.UnlinkedCount)</strong></div>" }
+                    if ($gpo.HighRiskCounts) {
+                        if ($null -ne $gpo.HighRiskCounts.UserRights) { $html += "<div class='domain-metric'>With User Rights: <strong>$($gpo.HighRiskCounts.UserRights)</strong></div>" }
+                        if ($null -ne $gpo.HighRiskCounts.Scripts)    { $html += "<div class='domain-metric'>With Scripts: <strong>$($gpo.HighRiskCounts.Scripts)</strong></div>" }
+                    }
+                }
+            }
             'IdentityLifecycle' {
                 $dormant = $domainResults | Where-Object { $_.Function -eq 'Find-DormantAccount' } | Select-Object -First 1
                 if ($dormant) {

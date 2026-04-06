@@ -4544,6 +4544,98 @@ Describe 'New-MonarchReport' {
             $content | Should -Not -Match 'dormant accounts'
         }
     }
+
+    # -------------------------------------------------------------------------
+    # Metrics strip -- Group Policy (5A)
+    # -------------------------------------------------------------------------
+
+    Context 'GroupPolicy metrics -- Export-GPOAudit present with HighRiskCounts' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-gpo-all'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            # UnlinkedCount > 0 triggers an advisory, forcing the domain section to render
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'GroupPolicy'; Function = 'Export-GPOAudit'
+                        TotalGPOs = 42; UnlinkedCount = 7; DisabledCount = 2; OverpermissionedCount = 0
+                        HighRiskCounts = [PSCustomObject]@{ UserRights = 5; SecurityOptions = 3; Scripts = 8; SoftwareInstall = 1 }
+                        Warnings = @()
+                    }
+                )
+                Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'Total GPOs metric renders correctly' {
+            $content | Should -Match "Total GPOs: <strong>42</strong>"
+        }
+
+        It 'Unlinked metric renders correctly' {
+            $content | Should -Match "Unlinked: <strong>7</strong>"
+        }
+
+        It 'With User Rights metric renders correctly' {
+            $content | Should -Match "With User Rights: <strong>5</strong>"
+        }
+
+        It 'With Scripts metric renders correctly' {
+            $content | Should -Match "With Scripts: <strong>8</strong>"
+        }
+    }
+
+    Context 'GroupPolicy metrics -- HighRiskCounts absent' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-gpo-nohrc'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'GroupPolicy'; Function = 'Export-GPOAudit'
+                        TotalGPOs = 10; UnlinkedCount = 3; DisabledCount = 0; OverpermissionedCount = 0
+                        HighRiskCounts = $null; Warnings = @()
+                    }
+                )
+                Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'Total GPOs and Unlinked still render' {
+            $content | Should -Match "Total GPOs: <strong>10</strong>"
+            $content | Should -Match "Unlinked: <strong>3</strong>"
+        }
+
+        It 'User Rights and Scripts metrics absent' {
+            $content | Should -Not -Match 'With User Rights'
+            $content | Should -Not -Match 'With Scripts'
+        }
+    }
+
+    Context 'GroupPolicy metrics -- Export-GPOAudit absent' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-gpo-absent'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:01'
+                Results = @(); Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'report generates without error and no GPO metrics appear' {
+            Test-Path $result | Should -BeTrue
+            $content | Should -Not -Match 'Total GPOs'
+            $content | Should -Not -Match 'With User Rights'
+        }
+    }
 }
 
 # =============================================================================
