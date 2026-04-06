@@ -4396,25 +4396,48 @@ Describe 'New-MonarchReport' {
             $script:content = Get-Content $script:result -Raw
         }
 
-        It 'parent folder rendered as folder link exactly once' {
+        It 'top-level folder rendered as folder link exactly once' {
             $matches = [regex]::Matches($content, "class='folder'>02-GPO-Audit/</a>")
             $matches.Count | Should -Be 1
         }
 
-        It 'subfolder names rendered as folder links exactly once each' {
-            ([regex]::Matches($content, "class='folder'>00-SUMMARY/</a>")).Count | Should -Be 1
-            ([regex]::Matches($content, "class='folder'>01-HTML/</a>")).Count | Should -Be 1
+        It 'subfolders not rendered as separate folder links' {
+            $content | Should -Not -Match "class='folder'>00-SUMMARY/"
+            $content | Should -Not -Match "class='folder'>01-HTML/"
         }
 
-        It 'subfolders rendered with deeper indent than parent' {
-            # Parent at 0px, subfolder at 24px
-            $content | Should -Match "padding-left:0px.*02-GPO-Audit/"
-            $content | Should -Match "padding-left:24px.*00-SUMMARY/"
+        It 'tree uses group and tree-children structure with no inline padding' {
+            $content | Should -Match "class='group'"
+            $content | Should -Match "class='tree-children'"
+            $content | Should -Not -Match 'padding-left:\d+px'
         }
 
-        It 'leaf files are tree-items with links' {
-            $content | Should -Match "tree-item.*<a href='02-GPO-Audit/00-SUMMARY/EXEC\.txt'>EXEC\.txt</a>"
-            $content | Should -Match "tree-item.*<a href='02-GPO-Audit/01-HTML/INDEX\.html'>INDEX\.html</a>"
+        It 'leaf files display sub-path relative to top folder' {
+            $content | Should -Match "<a href='02-GPO-Audit/00-SUMMARY/EXEC\.txt'>00-SUMMARY/EXEC\.txt</a>"
+            $content | Should -Match "<a href='02-GPO-Audit/01-HTML/INDEX\.html'>01-HTML/INDEX\.html</a>"
+        }
+    }
+
+    Context 'Root-level file renders as bare tree-item without group wrapper' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-rootfile'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            Set-Content -Path (Join-Path $script:outDir 'summary.txt') -Value 'data'
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:30'
+                Results = @(); Failures = @()
+            }
+            $script:result  = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'root file renders as tree-item with link' {
+            $content | Should -Match "<div class='tree-item'><a href='summary\.txt'>summary\.txt</a></div>"
+        }
+
+        It 'root file has no group wrapper' {
+            $content | Should -Not -Match "class='group'"
         }
     }
 

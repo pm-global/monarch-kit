@@ -2702,6 +2702,7 @@ function New-MonarchReport
         ".output-section{margin-top:var(--gap-separate);border-top:2px solid var(--border-1);padding-top:var(--gap-related)}" +
         ".file-tree{font-family:'Cascadia Code','Consolas',monospace;font-size:var(--t5);margin-top:var(--gap-tight)}" +
         ".file-tree .group{margin-bottom:var(--gap-related)}.file-tree .group:last-child{margin-bottom:0}" +
+        ".file-tree .tree-children{padding-left:var(--gap-related);border-left:1px solid var(--border-1)}" +
         ".file-tree .folder{font-weight:600;color:var(--text-1);text-decoration:none;display:block;line-height:1.3;margin-bottom:var(--gap-micro)}" +
         ".file-tree .tree-item{color:var(--text-2);line-height:1.8;position:relative}.file-tree .tree-item::before{content:'\2500 ';color:var(--text-3)}" +
         ".file-tree a.folder:hover{color:var(--accent-primary);text-decoration:underline}" +
@@ -2915,24 +2916,33 @@ function New-MonarchReport
         Where-Object { $_.Name -ne $reportName } |
         ForEach-Object { $_.FullName.Substring($baseFull.Length + 1) -replace '\\','/' })
 
-    # 4. Render file tree -- sorted paths, depth-based indent, each folder name once
+    # 4. Render file tree -- group by top-level folder, sub-path as display text
     if ($verifiedPaths.Count -gt 0) {
         $html += "<div class='output-section'><div class='section-label neutral'>Output Files</div><div class='file-tree'>"
-        $lastSegments = @()
+        $treeGroups = [System.Collections.Generic.Dictionary[string, System.Collections.Generic.List[PSCustomObject]]]::new()
+        $rootItems  = [System.Collections.Generic.List[string]]::new()
         foreach ($rel in ($verifiedPaths | Sort-Object)) {
             $parts = $rel -split '/'
-            $fileName = $parts[-1]
-            $folders = @($parts[0..($parts.Count - 2)])
-            for ($i = 0; $i -lt $folders.Count; $i++) {
-                if ($i -ge $lastSegments.Count -or $folders[$i] -ne $lastSegments[$i]) {
-                    $indent = $i * 24
-                    $href = ($folders[0..$i] -join '/') + '/'
-                    $html += "<div style='padding-left:${indent}px'><a href='$href' class='folder'>$($folders[$i])/</a></div>"
+            if ($parts.Count -eq 1) {
+                $rootItems.Add($rel)
+            } else {
+                $topFolder = $parts[0]
+                if (-not $treeGroups.ContainsKey($topFolder)) {
+                    $treeGroups[$topFolder] = [System.Collections.Generic.List[PSCustomObject]]::new()
                 }
+                $subPath = ($parts[1..($parts.Count - 1)]) -join '/'
+                $treeGroups[$topFolder].Add([PSCustomObject]@{ SubPath = $subPath; FullRel = $rel })
             }
-            $lastSegments = $folders
-            $fileIndent = $folders.Count * 24
-            $html += "<div class='tree-item' style='padding-left:${fileIndent}px'><a href='$rel'>$fileName</a></div>"
+        }
+        foreach ($f in $rootItems) {
+            $html += "<div class='tree-item'><a href='$f'>$f</a></div>"
+        }
+        foreach ($folder in ($treeGroups.Keys | Sort-Object)) {
+            $html += "<div class='group'><a href='$folder/' class='folder'>$folder/</a><div class='tree-children'>"
+            foreach ($entry in $treeGroups[$folder]) {
+                $html += "<div class='tree-item'><a href='$($entry.FullRel)'>$($entry.SubPath)</a></div>"
+            }
+            $html += "</div></div>"
         }
         $html += "</div></div>"
     }
