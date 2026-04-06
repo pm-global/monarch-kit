@@ -322,6 +322,12 @@ Location: the `'Find-DormantAccount'` case in the advisory-generation switch.
 - Advisory description includes excluded count
 - Zero dormant accounts → no advisory card rendered
 
+**Existing test to update before writing new tests:**
+- `Tests/Monarch.Tests.ps1` line ~3496 asserts the old text (`'12 dormant accounts identified for review'`).
+  Update it to match the new format. The mock for that test (line ~3471) also lacks `ThresholdDays`
+  and `ExcludedCount` properties — add them to the mock at the same time or the interpolation will
+  produce empty values and the updated assertion will fail.
+
 ### Validation before handoff
 - All new and prior tests pass
 

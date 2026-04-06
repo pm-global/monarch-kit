@@ -3468,7 +3468,7 @@ Describe 'New-MonarchReport' {
                 EndTime   = [datetime]'2026-03-25 14:30'
                 Results   = @(
                     [PSCustomObject]@{ Domain = 'BackupReadiness'; Function = 'Get-BackupReadinessStatus'; CriticalGap = $true; DetectionTier = 2; BackupToolDetected = 'Veeam'; TombstoneLifetimeDays = 180; RecycleBinEnabled = $true; Warnings = @() }
-                    [PSCustomObject]@{ Domain = 'IdentityLifecycle'; Function = 'Find-DormantAccount'; TotalCount = 12; NeverLoggedOnCount = 3; Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'IdentityLifecycle'; Function = 'Find-DormantAccount'; TotalCount = 12; NeverLoggedOnCount = 3; ThresholdDays = 90; ExcludedCount = 5; Warnings = @() }
                     [PSCustomObject]@{ Domain = 'DNS'; Function = 'Test-SRVRecordCompleteness'; AllComplete = $true; Sites = @(); Warnings = @() }
                 )
                 Failures = @()
@@ -3493,7 +3493,7 @@ Describe 'New-MonarchReport' {
 
         It 'advisory appears in domain section not critical section' {
             # Advisory text present in file
-            $content | Should -Match '12 dormant accounts identified for review'
+            $content | Should -Match '12 dormant accounts \(90-day threshold, 5 excluded\)'
             # Split on critical-section closing tag -- advisory should not be before it
             $critSection = ($content -split 'critical-section')[0]
             $critSection | Should -Not -Match 'dormant accounts'
@@ -3592,7 +3592,7 @@ Describe 'New-MonarchReport' {
                 Failures = @()
                 Results = @(
                     # --- Existing cases (sanity) ---
-                    [PSCustomObject]@{ Domain = 'IdentityLifecycle'; Function = 'Find-DormantAccount'; TotalCount = 12; NeverLoggedOnCount = 3; Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'IdentityLifecycle'; Function = 'Find-DormantAccount'; TotalCount = 12; NeverLoggedOnCount = 3; ThresholdDays = 90; ExcludedCount = 5; Warnings = @() }
                     [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-AdminCountOrphan'; Count = 4; Orphans = @(); Warnings = @() }
 
                     # --- Fixed case ---
@@ -3780,7 +3780,7 @@ Describe 'New-MonarchReport' {
                 Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
                 StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:30'
                 Results = @(
-                    [PSCustomObject]@{ Domain = 'IdentityLifecycle'; Function = 'Find-DormantAccount'; TotalCount = 12; NeverLoggedOnCount = 3; Warnings = @() }
+                    [PSCustomObject]@{ Domain = 'IdentityLifecycle'; Function = 'Find-DormantAccount'; TotalCount = 12; NeverLoggedOnCount = 3; ThresholdDays = 90; ExcludedCount = 5; Warnings = @() }
                     [PSCustomObject]@{ Domain = 'DNS'; Function = 'Test-SRVRecordCompleteness'; AllComplete = $true; Sites = @(); Warnings = @() }
                 )
                 Failures = @()
@@ -4485,6 +4485,63 @@ Describe 'New-MonarchReport' {
             Test-Path $result | Should -BeTrue
             $content | Should -Not -Match 'Dormant Accounts'
             $content | Should -Not -Match 'Never Logged On'
+        }
+    }
+
+    # -------------------------------------------------------------------------
+    # Advisory description -- Identity Lifecycle (4B)
+    # -------------------------------------------------------------------------
+
+    Context 'IdentityLifecycle advisory -- description includes threshold and excluded count' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-identity-advisory'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'IdentityLifecycle'; Function = 'Find-DormantAccount'
+                        TotalCount = 143; NeverLoggedOnCount = 12; ThresholdDays = 90; ExcludedCount = 28
+                        Accounts = @(1..143 | ForEach-Object { [PSCustomObject]@{ SamAccountName = "u$_" } })
+                        Warnings = @()
+                    }
+                )
+                Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'advisory description includes threshold value' {
+            $content | Should -Match '90-day threshold'
+        }
+
+        It 'advisory description includes excluded count' {
+            $content | Should -Match '28 excluded'
+        }
+    }
+
+    Context 'IdentityLifecycle advisory -- zero dormant accounts produces no advisory' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-identity-zero'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:01'
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'IdentityLifecycle'; Function = 'Find-DormantAccount'
+                        TotalCount = 0; NeverLoggedOnCount = 0; ThresholdDays = 90; ExcludedCount = 5
+                        Accounts = @(); Warnings = @()
+                    }
+                )
+                Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'no advisory card rendered for zero dormant accounts' {
+            $content | Should -Not -Match 'dormant accounts'
         }
     }
 }

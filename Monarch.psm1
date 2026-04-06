@@ -2540,7 +2540,7 @@ function New-MonarchReport
                 if ($r.DomainAdminStatus -eq 'Warning') { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "Domain Admin count exceeds warning threshold ($($r.DomainAdminCount) members)" }) }
             }
             'Find-DormantAccount' {
-                if ($r.TotalCount -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.TotalCount) dormant accounts identified for review" }) }
+                if ($r.TotalCount -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.TotalCount) dormant accounts ($($r.ThresholdDays)-day threshold, $($r.ExcludedCount) excluded)" }) }
             }
             'Get-SiteTopology' {
                 if ($r.UnassignedSubnets.Count -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.UnassignedSubnets.Count) subnets not assigned to any site" }) }
