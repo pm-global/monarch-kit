@@ -24,7 +24,7 @@ Step 5: Metrics strip — Group Policy                — Sonnet  ✓
 Step 6: Metrics strip — Security Posture            — Sonnet  ✓
 Step 7: Advisory description improvements           — Opus    ✓
 Step 8: AS-REP severity promotion                   — Sonnet  ✓
-Step 9: Integration validation                      — Sonnet
+Step 9: Integration validation                      — Sonnet  ✓
 ```
 
 Steps are sequential. Each step is one chat. Each step has a validation pass as its final action before handoff.

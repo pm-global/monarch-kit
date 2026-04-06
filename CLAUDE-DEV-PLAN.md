@@ -10,23 +10,23 @@ Checklist-driven implementation plan. Each checkbox is a discrete deliverable. C
 
 Items are ordered by priority. Blocking relationships noted where they exist.
 
+**TODO-0: Privileged Access file output missing.**
+Orchestrator creates `03-Privileged-Access` folder but none of the four priv access functions (`Get-PrivilegedGroupMembership`, `Find-AdminCountOrphan`, `Find-KerberoastableAccount`, `Find-ASREPRoastableAccount`) accept `-OutputPath`. The CSV export was removed at some point. Re-add `-OutputPath` support to these functions and wire them up in the orchestrator.
+Blocked by: nothing.
+
 **TODO-1: Action hints in critical/advisory cards.**
 `.card .action-hint` CSS exists but is never emitted. Cards should show an actionable second line (e.g. recommended next step). Required before remediation work begins.
 Blocked by: nothing.
 
-**TODO-2: Integration validation against BadBlood.**
-Full pipeline re-run. Verify GPO counts, advisory counts, domain coverage, manifest accuracy, working links. Compare to report-v5.html reference.
-Blocked by: nothing (predecessors complete).
-
-**TODO-3: Test coverage audit -- estimate current coverage against 80% target.**
+**TODO-2: Test coverage audit -- estimate current coverage against 80% target.**
 SRE + testing specialist review. Includes integration tests added during BB fix work. Broader question: what other end-to-end paths lack integration tests?
-Blocked by: TODO-2 (so BB fix tests are included in the estimate).
+Blocked by: nothing.
 
-**TODO-4: Progress output with silent mode.**
+**TODO-3: Progress output with silent mode.**
 `Write-Progress` for long-running orchestrated runs, suppressible with `-Silent`. Default shows concise status; `-Verbose` shows per-step detail.
 Blocked by: nothing.
 
-**TODO-5: Retroactive research brief for monarch-kit.**
+**TODO-4: Retroactive research brief for monarch-kit.**
 Formalize `initial-research.md` into a proper `research-brief-monarch-kit.md` per the research doc template. Reference work, not implementation.
 Blocked by: nothing.
 
