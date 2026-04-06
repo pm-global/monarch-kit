@@ -2557,7 +2557,7 @@ function New-MonarchReport
             }
             'Find-KerberoastableAccount' {
                 if ($r.PrivilegedCount -gt 0) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.PrivilegedCount) privileged accounts with SPNs (Kerberoasting risk -- privileged)" }) }
-                if ($r.TotalCount -gt 0 -and $r.PrivilegedCount -eq 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.TotalCount) accounts with SPNs — 0 privileged" }) }
+                if ($r.TotalCount -gt 0 -and $r.PrivilegedCount -eq 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.TotalCount) accounts with SPNs - 0 privileged" }) }
             }
             'Test-ProtectedUsersGap' {
                 if ($r.GapAccounts.Count -gt 0) {
@@ -2568,7 +2568,7 @@ function New-MonarchReport
                         $eaGrp = $privGrpResult.Groups | Where-Object { $_.GroupSID -like '*-519' }
                         $daCount = if ($daGrp) { $daGrp.MemberCount } else { 0 }
                         $eaCount = if ($eaGrp) { $eaGrp.MemberCount } else { 0 }
-                        $gapDesc += " — includes $daCount DAs, $eaCount EAs"
+                        $gapDesc += " - includes $daCount DAs, $eaCount EAs"
                     }
                     $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = $gapDesc })
                 }
@@ -2583,9 +2583,9 @@ function New-MonarchReport
                 $privCount = @($r.Accounts | Where-Object { $_.IsPrivileged }).Count
                 $total = $r.Count
                 if ($privCount -gt 0) {
-                    $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$total accounts with pre-auth disabled — $privCount privileged" })
+                    $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$total accounts with pre-auth disabled - $privCount privileged" })
                 } elseif ($total -gt 0) {
-                    $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$total accounts with pre-auth disabled — 0 privileged" })
+                    $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$total accounts with pre-auth disabled - 0 privileged" })
                 }
             }
             'Find-WeakAccountFlag' {
