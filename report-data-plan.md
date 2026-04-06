@@ -422,29 +422,31 @@ Null-guard: if `Roles` is empty or null, fall back to current text.
 **Current logic:** builds an `$issues` array (one entry per issue per DC), then counts issues.
 One DC with two problems → "2 event log configuration issues" (misleading).
 
-**Spec:** Count distinct DCs with at least one issue. Description: `"Security log misconfigured on $n DC(s)"`.
-If multiple distinct issue types exist across DCs, the description can enumerate: `"$n DC(s): size ($x), overflow action ($y)"`.
+**Implemented:** Consolidate to one entry per DC; collect issue tags per DC, then join.
+Description format: `"Security log: DC01 (undersized, overflow action), DC02 (undersized)"`.
+Each DC appears once regardless of how many issues it has.
 
-**Rewrite the issue-building logic** in the `'Get-EventLogConfiguration'` case:
 ```powershell
-$affectedDCs = [System.Collections.Generic.List[string]]::new()
+$dcSummaries = @()
 foreach ($dcEntry in $r.DCs) {
     $secLog = $dcEntry.Logs | Where-Object { $_.LogName -eq 'Security' }
     if ($null -ne $secLog) {
-        $hasIssue = $false
-        if ($secLog.MaxSizeKB -lt $minSize) { $hasIssue = $true }
-        if ($secLog.OverflowAction -notin $okActions) { $hasIssue = $true }
-        if ($hasIssue) { $affectedDCs.Add($dcEntry.DCName) }
+        $tags = @()
+        if ($secLog.MaxSizeKB -lt $minSize) { $tags += 'undersized' }
+        if ($secLog.OverflowAction -notin $okActions) { $tags += 'overflow action' }
+        if ($tags.Count -gt 0) { $dcSummaries += "$($dcEntry.DCName) ($($tags -join ', '))" }
     }
 }
-if ($affectedDCs.Count -gt 0) {
-    $advisories.Add([PSCustomObject]@{ ... Description = "Security log misconfigured on $($affectedDCs.Count) DC(s)" })
+if ($dcSummaries.Count -gt 0) {
+    $advisories.Add([PSCustomObject]@{ ... Description = "Security log: $($dcSummaries -join ', ')" })
 }
 ```
 
+Note: loop variable must be `$dcEntry`, not `$dc` — `$dc` is used earlier for the report header.
+
 **Tests:**
-- 1 DC with 2 issues → "Security log misconfigured on 1 DC(s)"
-- 2 DCs each with 1 issue → "Security log misconfigured on 2 DC(s)"
+- 1 DC with 2 issues → `"Security log: DC01 (undersized, overflow action)"`
+- 2 DCs with different issues → `"Security log: DC01 (undersized, overflow action), DC02 (undersized)"`
 - 0 affected DCs → no advisory
 
 ### Pass 7C — Protected Users gap: add denominator
