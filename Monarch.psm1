@@ -2557,10 +2557,21 @@ function New-MonarchReport
             }
             'Find-KerberoastableAccount' {
                 if ($r.PrivilegedCount -gt 0) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.PrivilegedCount) privileged accounts with SPNs (Kerberoasting risk -- privileged)" }) }
-                if ($r.TotalCount -gt 0 -and $r.PrivilegedCount -eq 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.TotalCount) accounts with SPNs (Kerberoasting risk)" }) }
+                if ($r.TotalCount -gt 0 -and $r.PrivilegedCount -eq 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.TotalCount) accounts with SPNs — 0 privileged" }) }
             }
             'Test-ProtectedUsersGap' {
-                if ($r.GapAccounts.Count -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.GapAccounts.Count) privileged accounts not in Protected Users" }) }
+                if ($r.GapAccounts.Count -gt 0) {
+                    $privGrpResult = $resultsList | Where-Object { $_.Function -eq 'Get-PrivilegedGroupMembership' } | Select-Object -First 1
+                    $gapDesc = "$($r.GapAccounts.Count) privileged accounts not in Protected Users"
+                    if ($privGrpResult -and $privGrpResult.Groups) {
+                        $daGrp = $privGrpResult.Groups | Where-Object { $_.GroupSID -like '*-512' }
+                        $eaGrp = $privGrpResult.Groups | Where-Object { $_.GroupSID -like '*-519' }
+                        $daCount = if ($daGrp) { $daGrp.MemberCount } else { 0 }
+                        $eaCount = if ($eaGrp) { $eaGrp.MemberCount } else { 0 }
+                        $gapDesc += " — includes $daCount DAs, $eaCount EAs"
+                    }
+                    $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = $gapDesc })
+                }
             }
             'Find-AdminCountOrphan' {
                 if ($r.Count -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.Count) AdminCount orphans (stale privilege markers)" }) }
@@ -2612,15 +2623,17 @@ function New-MonarchReport
             'Get-EventLogConfiguration' {
                 $minSize = Get-MonarchConfigValue -Key 'MinSecurityLogSizeKB'
                 $okActions = Get-MonarchConfigValue -Key 'AcceptableOverflowActions'
-                $issues = @()
+                $dcSummaries = @()
                 foreach ($dc in $r.DCs) {
                     $secLog = $dc.Logs | Where-Object { $_.LogName -eq 'Security' }
                     if ($null -ne $secLog) {
-                        if ($secLog.MaxSizeKB -lt $minSize) { $issues += "$($dc.DCName): Security log $($secLog.MaxSizeKB)KB (minimum $minSize)" }
-                        if ($secLog.OverflowAction -notin $okActions) { $issues += "$($dc.DCName): Security log overflow action '$($secLog.OverflowAction)'" }
+                        $tags = @()
+                        if ($secLog.MaxSizeKB -lt $minSize) { $tags += 'undersized' }
+                        if ($secLog.OverflowAction -notin $okActions) { $tags += 'overflow action' }
+                        if ($tags.Count -gt 0) { $dcSummaries += "$($dc.DCName) ($($tags -join ', '))" }
                     }
                 }
-                if ($issues.Count -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($issues.Count) event log configuration issues across DCs" }) }
+                if ($dcSummaries.Count -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "Security log: $($dcSummaries -join ', ')" }) }
             }
             'Test-ZoneReplicationScope' {
                 $reqDS = Get-MonarchConfigValue -Key 'RequireDSIntegration'
@@ -2631,7 +2644,10 @@ function New-MonarchReport
             }
             'Get-FSMORolePlacement' {
                 if ($r.UnreachableCount -gt 0) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.UnreachableCount) FSMO role holders unreachable" }) }
-                if ($r.AllOnOneDC -eq $true) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'All FSMO roles held by a single DC' }) }
+                if ($r.AllOnOneDC -eq $true) {
+                    $fsmoDesc = if ($r.Roles -and $r.Roles.Count -gt 0) { "All FSMO roles held by $($r.Roles[0].Holder)" } else { 'All FSMO roles held by a single DC' }
+                    $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = $fsmoDesc })
+                }
             }
         }
     }
@@ -2762,8 +2778,9 @@ function New-MonarchReport
             'PrivilegedAccess' {
                 $privGrp = $domainResults | Where-Object { $_.Function -eq 'Get-PrivilegedGroupMembership' } | Select-Object -First 1
                 if ($privGrp) {
-                    if ($null -ne $privGrp.DomainAdminCount)     { $html += "<div class='domain-metric'>Domain Admins: <strong>$($privGrp.DomainAdminCount)</strong></div>" }
-                    if ($null -ne $privGrp.EnterpriseAdminCount) { $html += "<div class='domain-metric'>Enterprise Admins: <strong>$($privGrp.EnterpriseAdminCount)</strong></div>" }
+                    if ($null -ne $privGrp.DomainAdminCount) { $html += "<div class='domain-metric'>Domain Admins: <strong>$($privGrp.DomainAdminCount)</strong></div>" }
+                    $eaGrp = if ($privGrp.Groups) { $privGrp.Groups | Where-Object { $_.GroupSID -like '*-519' } } else { $null }
+                    if ($eaGrp) { $html += "<div class='domain-metric'>Enterprise Admins: <strong>$($eaGrp.MemberCount)</strong></div>" }
                 }
                 $kerb = $domainResults | Where-Object { $_.Function -eq 'Find-KerberoastableAccount' } | Select-Object -First 1
                 if ($kerb    -and $null -ne $kerb.PrivilegedCount) { $html += "<div class='domain-metric'>Kerberoastable (privileged): <strong>$($kerb.PrivilegedCount)</strong></div>" }

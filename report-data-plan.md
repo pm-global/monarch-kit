@@ -16,13 +16,13 @@ The return contract (file path string) must not change. Internal HTML structure 
 ## Implementation Sequence
 
 ```
-Step 1: Serialization bugs (A1, A2 skeleton)       — Sonnet
-Step 2: Metrics strip — Privileged Access           — Sonnet
-Step 3: Metrics strip — Infrastructure Health       — Sonnet
-Step 4: Metrics strip — Identity Lifecycle          — Sonnet
-Step 5: Metrics strip — Group Policy                — Sonnet
-Step 6: Metrics strip — Security Posture            — Sonnet
-Step 7: Advisory description improvements           — Opus
+Step 1: Serialization bugs (A1, A2 skeleton)       — Sonnet  ✓
+Step 2: Metrics strip — Privileged Access           — Sonnet  ✓
+Step 3: Metrics strip — Infrastructure Health       — Sonnet  ✓
+Step 4: Metrics strip — Identity Lifecycle          — Sonnet  ✓
+Step 5: Metrics strip — Group Policy                — Sonnet  ✓
+Step 6: Metrics strip — Security Posture            — Sonnet  ✓
+Step 7: Advisory description improvements           — Opus    ✓
 Step 8: AS-REP severity promotion                   — Sonnet
 Step 9: Integration validation                      — Sonnet
 ```
@@ -80,7 +80,7 @@ Results.TotalChecks  — int
 ```
 .DomainAdminCount    — int
 .DomainAdminStatus   — 'Critical' | 'Warning' | 'OK'
-.EnterpriseAdminCount — int
+.Groups              — array of: { GroupName, GroupSID, MemberCount, Members }
 ```
 
 **Find-KerberoastableAccount**

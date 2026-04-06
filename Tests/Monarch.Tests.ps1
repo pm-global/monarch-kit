@@ -3621,8 +3621,8 @@ Describe 'New-MonarchReport' {
         }
 
         # Fixed case
-        It 'Find-KerberoastableAccount with TotalCount produces advisory' {
-            $content | Should -Match '50 accounts with SPNs'
+        It 'Find-KerberoastableAccount with TotalCount produces advisory showing privileged count' {
+            $content | Should -Match '50 accounts with SPNs.*0 privileged'
         }
 
         # New cases
@@ -3650,8 +3650,8 @@ Describe 'New-MonarchReport' {
             $content | Should -Match 'DNS zones with scavenging disabled'
         }
 
-        It 'Get-EventLogConfiguration undersized log produces advisory' {
-            $content | Should -Match 'event log configuration issues'
+        It 'Get-EventLogConfiguration produces advisory naming DC and issue types' {
+            $content | Should -Match 'Security log: DC01 \(undersized, overflow action\)'
         }
 
         It 'Test-ZoneReplicationScope non-integrated produces advisory' {
@@ -3660,6 +3660,176 @@ Describe 'New-MonarchReport' {
 
         It 'Get-FSMORolePlacement AllOnOneDC produces advisory' {
             $content | Should -Match 'All FSMO roles held by a single DC'
+        }
+    }
+
+    # -------------------------------------------------------------------------
+    # Step 7: Advisory description improvements
+    # -------------------------------------------------------------------------
+
+    Context 'FSMO advisory names the DC when Roles populated' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-MonarchConfigValue { '#2E5090' }
+            $script:outDir = Join-Path $TestDrive 'report-fsmo-named'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
+                Failures = @()
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-FSMORolePlacement'
+                        Roles = @([PSCustomObject]@{ Role = 'PDCEmulator'; Holder = 'DC01.contoso.com'; Reachable = $true; Site = 'Default' })
+                        AllOnOneDC = $true; UnreachableCount = 0; Warnings = @()
+                    }
+                )
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'advisory contains DC hostname from Roles[0].Holder' {
+            $content | Should -Match 'All FSMO roles held by DC01\.contoso\.com'
+        }
+    }
+
+    Context 'Event log advisory names DCs with issue types' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-MonarchConfigValue {
+                switch ($Key) {
+                    'MinSecurityLogSizeKB' { 1048576 }
+                    'AcceptableOverflowActions' { @('ArchiveTheLogWhenFull') }
+                    default { '#2E5090' }
+                }
+            }
+            $script:outDir = Join-Path $TestDrive 'report-eventlog-multi'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
+                Failures = @()
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'AuditCompliance'; Function = 'Get-EventLogConfiguration'
+                        DCs = @(
+                            [PSCustomObject]@{ DCName = 'DC01'; Logs = @([PSCustomObject]@{ LogName = 'Security'; MaxSizeKB = 512000; OverflowAction = 'OverwriteAsNeeded' }) }
+                            [PSCustomObject]@{ DCName = 'DC02'; Logs = @([PSCustomObject]@{ LogName = 'Security'; MaxSizeKB = 256000; OverflowAction = 'ArchiveTheLogWhenFull' }) }
+                        )
+                        Warnings = @()
+                    }
+                )
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'DC01 with both issues shows both tags' {
+            $content | Should -Match 'DC01 \(undersized, overflow action\)'
+        }
+
+        It 'DC02 with only undersized shows single tag' {
+            $content | Should -Match 'DC02 \(undersized\)'
+        }
+
+        It 'advisory starts with Security log prefix' {
+            $content | Should -Match 'Security log:'
+        }
+    }
+
+    Context 'Event log advisory absent when no DCs have issues' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-MonarchConfigValue {
+                switch ($Key) {
+                    'MinSecurityLogSizeKB' { 1048576 }
+                    'AcceptableOverflowActions' { @('ArchiveTheLogWhenFull') }
+                    default { '#2E5090' }
+                }
+            }
+            $script:outDir = Join-Path $TestDrive 'report-eventlog-clean'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
+                Failures = @()
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'AuditCompliance'; Function = 'Get-EventLogConfiguration'
+                        DCs = @(
+                            [PSCustomObject]@{ DCName = 'DC01'; Logs = @([PSCustomObject]@{ LogName = 'Security'; MaxSizeKB = 2097152; OverflowAction = 'ArchiveTheLogWhenFull' }) }
+                        )
+                        Warnings = @()
+                    }
+                )
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'no Security log advisory rendered' {
+            $content | Should -Not -Match 'Security log:'
+        }
+    }
+
+    Context 'Protected Users gap advisory includes DA and EA context' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-MonarchConfigValue { '#2E5090' }
+            $script:outDir = Join-Path $TestDrive 'report-pugap-context'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
+                Failures = @()
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Get-PrivilegedGroupMembership'
+                        DomainAdminCount = 7; DomainAdminStatus = 'Warning'
+                        Groups = @(
+                            [PSCustomObject]@{ GroupName = 'Domain Admins'; GroupSID = 'S-1-5-21-1234-512'; MemberCount = 7; Members = @() }
+                            [PSCustomObject]@{ GroupName = 'Enterprise Admins'; GroupSID = 'S-1-5-21-1234-519'; MemberCount = 2; Members = @() }
+                        )
+                        Warnings = @()
+                    }
+                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Test-ProtectedUsersGap'
+                        GapAccounts = @(
+                            [PSCustomObject]@{ SamAccountName = 'admin1'; PrivilegedGroups = @('Domain Admins'); HasSPN = $false }
+                            [PSCustomObject]@{ SamAccountName = 'admin2'; PrivilegedGroups = @('Domain Admins'); HasSPN = $false }
+                            [PSCustomObject]@{ SamAccountName = 'svcacct'; PrivilegedGroups = @('Server Operators'); HasSPN = $true }
+                        )
+                        Warnings = @()
+                    }
+                )
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'advisory includes gap count and DA/EA breakdown' {
+            $content | Should -Match '3 privileged accounts not in Protected Users'
+            $content | Should -Match 'includes 7 DAs, 2 EAs'
+        }
+    }
+
+    Context 'Protected Users gap advisory without PrivilegedGroupMembership falls back to count-only' {
+        BeforeAll {
+            Mock -ModuleName Monarch Get-MonarchConfigValue { '#2E5090' }
+            $script:outDir = Join-Path $TestDrive 'report-pugap-nopriv'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
+                Failures = @()
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Test-ProtectedUsersGap'
+                        GapAccounts = @(
+                            [PSCustomObject]@{ SamAccountName = 'admin1'; PrivilegedGroups = @('Domain Admins'); HasSPN = $false }
+                        )
+                        Warnings = @()
+                    }
+                )
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'advisory shows count without DA/EA context' {
+            $content | Should -Match '1 privileged accounts not in Protected Users'
+            $content | Should -Not -Match 'includes'
         }
     }
 
@@ -4229,16 +4399,21 @@ Describe 'New-MonarchReport' {
                 StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
                 Results = @(
                     [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Get-PrivilegedGroupMembership'
-                        DomainAdminCount = 7; DomainAdminStatus = 'Critical'; EnterpriseAdminCount = 2; Warnings = @() 
+                        DomainAdminCount = 7; DomainAdminStatus = 'Critical'
+                        Groups = @(
+                            [PSCustomObject]@{ GroupName = 'Domain Admins'; GroupSID = 'S-1-5-21-1234-512'; MemberCount = 7; Members = @() }
+                            [PSCustomObject]@{ GroupName = 'Enterprise Admins'; GroupSID = 'S-1-5-21-1234-519'; MemberCount = 2; Members = @() }
+                        )
+                        Warnings = @()
                     }
                     [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-KerberoastableAccount'
-                        TotalCount = 5; PrivilegedCount = 1; Warnings = @() 
+                        TotalCount = 5; PrivilegedCount = 1; Warnings = @()
                     }
                     [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-AdminCountOrphan'
-                        Count = 3; Warnings = @() 
+                        Count = 3; Warnings = @()
                     }
                     [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Test-ProtectedUsersGap'
-                        GapAccounts = @('u1','u2'); Warnings = @() 
+                        GapAccounts = @('u1','u2'); Warnings = @()
                     }
                 )
                 Failures = @()
@@ -4273,7 +4448,12 @@ Describe 'New-MonarchReport' {
                 StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
                 Results = @(
                     [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Get-PrivilegedGroupMembership'
-                        DomainAdminCount = 4; DomainAdminStatus = 'Critical'; EnterpriseAdminCount = 1; Warnings = @() 
+                        DomainAdminCount = 4; DomainAdminStatus = 'Critical'
+                        Groups = @(
+                            [PSCustomObject]@{ GroupName = 'Domain Admins'; GroupSID = 'S-1-5-21-1234-512'; MemberCount = 4; Members = @() }
+                            [PSCustomObject]@{ GroupName = 'Enterprise Admins'; GroupSID = 'S-1-5-21-1234-519'; MemberCount = 1; Members = @() }
+                        )
+                        Warnings = @()
                     }
                     [PSCustomObject]@{ Domain = 'PrivilegedAccess'; Function = 'Find-KerberoastableAccount'
                         TotalCount = 2; PrivilegedCount = 0; Warnings = @() 
