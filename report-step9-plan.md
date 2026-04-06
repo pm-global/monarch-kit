@@ -50,7 +50,7 @@ Items 1 and 3 are in the plan to fix (see below). Items 2 and 4 are todos.
 
 ## Remaining passes
 
-### 9C-B — Trim dead CSS
+### 9C-B — Trim dead CSS ✓
 
 **File:** `Monarch.psm1`, `New-MonarchReport`, CSS string.
 

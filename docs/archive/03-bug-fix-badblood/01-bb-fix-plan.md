@@ -110,17 +110,7 @@ Ran `bb-check.ps1` on BadBlood domain (LIGHT.local, single DC). All 25 functions
 
 ## Step 5 — Integration Validation
 
-**Purpose:** Full pipeline test against BadBlood domain.
-
-**Pass 1:** Re-run Invoke-DomainAudit on BB domain. Verify:
-- GPO count is non-zero and plausible
-- Advisory count reflects actual domain state
-- Every domain section appears with findings or "No findings"
-- No domain says "Not assessed" unless the module is genuinely missing
-- File manifest matches actual disk contents
-- All manifest links open the correct files
-
-**Pass 2:** Compare report output to report-v5.html reference format. Verify domain metrics, advisory cards, expandable detail tables are all populated where data exists.
+Folded into `report-step9-plan.md` pass 9D (live-domain run). See CLAUDE-DEV-PLAN TODO-2.
 
 ---
 
@@ -129,6 +119,6 @@ Ran `bb-check.ps1` on BadBlood domain (LIGHT.local, single DC). All 25 functions
 - TODO-1 (diagnostic pass): COMPLETE
 - TODO-2 (fix bugs): COMPLETE
 - TODO-3 (function disposition): COMPLETE
-- TODO-4 (honest manifest): Step 4
-- TODO-5 (integration validation): Step 5
-- TODO-6 (advisory metrics): deferred, but TODO-3 disposition work is prerequisite
+- TODO-4 (honest manifest): COMPLETE
+- TODO-5 (integration validation): folded into report-step9-plan 9D
+- TODO-6 (advisory metrics): COMPLETE (report-data-plan steps 1-8)
