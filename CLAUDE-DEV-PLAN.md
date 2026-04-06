@@ -2,7 +2,7 @@
 
 Checklist-driven implementation plan. Each checkbox is a discrete deliverable. Check items off as they're completed. Every step includes its tests -- code and tests ship together, never separately.
 
-**Last updated:** 2026-03-31
+**Last updated:** 2026-04-07
 
 ---
 
@@ -10,42 +10,23 @@ Checklist-driven implementation plan. Each checkbox is a discrete deliverable. C
 
 Items are ordered by priority. Blocking relationships noted where they exist.
 
-**TODO-1: Detection pipeline repair -- diagnostic pass. COMPLETE.**
-Ran each Discovery function against BadBlood domain. 5 bugs confirmed, all caused by accessing properties that don't exist on real cmdlet output (mocks hid the problem). Results: `bb-fix-plan.md`.
+**TODO-1: Action hints in critical/advisory cards.**
+`.card .action-hint` CSS exists but is never emitted. Cards should show an actionable second line (e.g. recommended next step). Required before remediation work begins.
+Blocked by: nothing.
 
-**TODO-2: Fix individual detection bugs. COMPLETE.**
-5 confirmed bugs. Individual plan files in repo root: `bb-fix-bug1.md` through `bb-fix-bug5.md`. Execute in fresh chats, archive when validated.
-Blocked by: TODO-1 (complete -- bug list confirmed via BB diagnostic).
-
-**TODO-3: Function disposition in report. COMPLETE.**
-Every function gets a final status: findings, clear, or not assessed. Report must distinguish "checked and clean" from "never checked." Covers degraded-state reporting (missing DNS/GPO modules) and replaces silent omission. Plan: `report-fix-plan.md`.
-Blocked by: TODO-2 (complete).
-
-**TODO-4: Honest file manifest with relative links. COMPLETE.**
-Build report file tree from verified disk paths, not function claims. Relative links that actually open files. Only list what exists.
-Blocked by: TODO-2 (file output bugs must be fixed first).
-
-**TODO-5: Integration validation against BadBlood.**
+**TODO-2: Integration validation against BadBlood.**
 Full pipeline re-run. Verify GPO counts, advisory counts, domain coverage, manifest accuracy, working links. Compare to report-v5.html reference.
-Blocked by: TODO-3, TODO-4.
+Blocked by: nothing (predecessors complete).
 
-**TODO-6: Advisory metrics and counting model.**
-Each advisory card should show contextual numbers (total Kerberoastable count, member counts, password policy summary). The domain-specific metrics section only renders metrics for Backup & Recovery. Additionally, per-item severity should roll up correctly. Needs its own design pass before implementation.
-Blocked by: TODO-2 (the switch cases must exist before metrics can reference them).
-
-**TODO-7: Test coverage audit -- estimate current coverage against 80% target.**
+**TODO-3: Test coverage audit -- estimate current coverage against 80% target.**
 SRE + testing specialist review. Includes integration tests added during BB fix work. Broader question: what other end-to-end paths lack integration tests?
-Blocked by: TODO-5 (so BB fix tests are included in the estimate).
+Blocked by: TODO-2 (so BB fix tests are included in the estimate).
 
-**TODO-8: Preflight validation function (`Test-MonarchEnvironment` or `Invoke-MonarchPreflight`).**
-Validate PowerShell version, AD module availability, optional module presence, domain reachability, and execution context before discovery runs. Returns pass/fail object with blocking issues, warnings for degraded-but-runnable conditions, and the resolved domain + candidate DC.
-Blocked by: nothing. Independent work.
-
-**TODO-9: Progress output with silent mode.**
+**TODO-4: Progress output with silent mode.**
 `Write-Progress` for long-running orchestrated runs, suppressible with `-Silent`. Default shows concise status; `-Verbose` shows per-step detail.
-Blocked by: nothing, but TODO-8 (preflight) should land first since it establishes the pre-run output pattern.
+Blocked by: nothing.
 
-**TODO-10: Retroactive research brief for monarch-kit.**
+**TODO-5: Retroactive research brief for monarch-kit.**
 Formalize `initial-research.md` into a proper `research-brief-monarch-kit.md` per the research doc template. Reference work, not implementation.
 Blocked by: nothing.
 

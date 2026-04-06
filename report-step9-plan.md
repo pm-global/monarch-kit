@@ -64,7 +64,7 @@ Known candidate (verify before removing):
   `@media print` block (~line 2718) — for `<details><summary>` elements that Phase 1
   never emits
 
-Keep `.card .action-hint` — Phase 2 placeholder (see todo item 4 above).
+Keep `.card .action-hint` — not yet emitted but required before remediation (see CLAUDE-DEV-PLAN TODO-1).
 
 No new tests needed. Run full suite to confirm 292 still pass.
 
