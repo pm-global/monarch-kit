@@ -2798,6 +2798,23 @@ function New-MonarchReport
                     }
                 }
             }
+            'SecurityPosture' {
+                $weakFlag = $domainResults | Where-Object { $_.Function -eq 'Find-WeakAccountFlag' } | Select-Object -First 1
+                if ($weakFlag) {
+                    $pneCount = if ($weakFlag.CountByFlag -and $weakFlag.CountByFlag.ContainsKey('PasswordNeverExpires')) { $weakFlag.CountByFlag['PasswordNeverExpires'] } else { 0 }
+                    $html += "<div class='domain-metric'>Password Never Expires: <strong>$pneCount</strong></div>"
+                }
+                $puGap = $domainResults | Where-Object { $_.Function -eq 'Test-ProtectedUsersGap' } | Select-Object -First 1
+                if ($puGap) { $html += "<div class='domain-metric'>Protected Users Gaps: <strong>$(@($puGap.GapAccounts).Count)</strong></div>" }
+                $legacy = $domainResults | Where-Object { $_.Function -eq 'Find-LegacyProtocolExposure' } | Select-Object -First 1
+                if ($legacy) {
+                    $affectedDCs = @($legacy.DCFindings | Where-Object { $_.Risk -in 'High', 'Medium' } | Group-Object DCName)
+                    if ($affectedDCs.Count -gt 0) {
+                        $dcList = ($affectedDCs | ForEach-Object { "$($_.Name) ($($_.Count))" }) -join ', '
+                        $html += "<div class='domain-metric'>Legacy Exposure: <strong>$dcList</strong></div>"
+                    }
+                }
+            }
             'IdentityLifecycle' {
                 $dormant = $domainResults | Where-Object { $_.Function -eq 'Find-DormantAccount' } | Select-Object -First 1
                 if ($dormant) {

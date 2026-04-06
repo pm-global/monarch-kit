@@ -4636,6 +4636,159 @@ Describe 'New-MonarchReport' {
             $content | Should -Not -Match 'With User Rights'
         }
     }
+
+    # -------------------------------------------------------------------------
+    # Metrics strip -- Security Posture (6A)
+    # -------------------------------------------------------------------------
+
+    Context 'SecurityPosture metrics -- all three functions present' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-secpos-all'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            # GapAccounts.Count > 0 triggers an advisory, forcing the domain section to render
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Find-WeakAccountFlag'
+                        Findings = @(); CountByFlag = @{ 'PasswordNeverExpires' = 15; 'ReversibleEncryption' = 2 }
+                        Warnings = @()
+                    }
+                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Test-ProtectedUsersGap'
+                        GapAccounts = @(
+                            [PSCustomObject]@{ SamAccountName = 'admin1'; PrivilegedGroups = @('Domain Admins'); HasSPN = $false }
+                            [PSCustomObject]@{ SamAccountName = 'admin2'; PrivilegedGroups = @('Domain Admins'); HasSPN = $false }
+                        )
+                        ProtectedUsersMembers = @(); DiagnosticHint = $null; Warnings = @()
+                    }
+                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Find-LegacyProtocolExposure'
+                        DCFindings = @(
+                            [PSCustomObject]@{ DCName = 'DC01'; Finding = 'NTLMv1Enabled';      Value = 'LmCompatibilityLevel=0'; Risk = 'High'   }
+                            [PSCustomObject]@{ DCName = 'DC01'; Finding = 'LMHashStored';        Value = 'NoLMHash=0';            Risk = 'High'   }
+                            [PSCustomObject]@{ DCName = 'DC02'; Finding = 'LDAPSigningDisabled'; Value = 'LDAPServerIntegrity=0'; Risk = 'Medium' }
+                        )
+                        Warnings = @()
+                    }
+                )
+                Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'Password Never Expires metric renders correct count' {
+            $content | Should -Match "Password Never Expires: <strong>15</strong>"
+        }
+
+        It 'Protected Users Gaps metric renders correct count' {
+            $content | Should -Match "Protected Users Gaps: <strong>2</strong>"
+        }
+
+        It 'Legacy Exposure renders DC names with per-DC finding counts' {
+            $content | Should -Match "Legacy Exposure: <strong>DC01 \(2\), DC02 \(1\)</strong>"
+        }
+    }
+
+    Context 'SecurityPosture metrics -- PasswordNeverExpires key absent from CountByFlag' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-secpos-nopne'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Find-WeakAccountFlag'
+                        # Only ReversibleEncryption findings -- PasswordNeverExpires key not present
+                        Findings = @(); CountByFlag = @{ 'ReversibleEncryption' = 3 }
+                        Warnings = @()
+                    }
+                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Test-ProtectedUsersGap'
+                        GapAccounts = @(
+                            [PSCustomObject]@{ SamAccountName = 'admin1'; PrivilegedGroups = @('Domain Admins'); HasSPN = $false }
+                        )
+                        ProtectedUsersMembers = @(); DiagnosticHint = $null; Warnings = @()
+                    }
+                )
+                Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'Password Never Expires renders as 0 when key absent' {
+            $content | Should -Match "Password Never Expires: <strong>0</strong>"
+        }
+    }
+
+    Context 'SecurityPosture metrics -- DCFindings with Low risk entries excluded' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-secpos-lowrisk'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Test-ProtectedUsersGap'
+                        GapAccounts = @(
+                            [PSCustomObject]@{ SamAccountName = 'admin1'; PrivilegedGroups = @('Domain Admins'); HasSPN = $false }
+                        )
+                        ProtectedUsersMembers = @(); DiagnosticHint = $null; Warnings = @()
+                    }
+                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Find-LegacyProtocolExposure'
+                        DCFindings = @(
+                            [PSCustomObject]@{ DCName = 'DC01'; Finding = 'NTLMv1Enabled';  Value = 'LmCompatibilityLevel=0'; Risk = 'High' }
+                            [PSCustomObject]@{ DCName = 'DC02'; Finding = 'SomeLowFinding'; Value = 'x=0';                   Risk = 'Low'  }
+                        )
+                        Warnings = @()
+                    }
+                )
+                Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'Legacy Exposure only counts High and Medium DCs -- Low excluded' {
+            $content | Should -Match "Legacy Exposure: <strong>DC01 \(1\)</strong>"
+            $content | Should -Not -Match 'DC02'
+        }
+    }
+
+    Context 'SecurityPosture metrics -- each source function independently absent' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-secpos-partial'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            # Only Test-ProtectedUsersGap present (drives advisory to force section render)
+            # Find-WeakAccountFlag and Find-LegacyProtocolExposure absent
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Test-ProtectedUsersGap'
+                        GapAccounts = @(
+                            [PSCustomObject]@{ SamAccountName = 'admin1'; PrivilegedGroups = @('Domain Admins'); HasSPN = $false }
+                        )
+                        ProtectedUsersMembers = @(); DiagnosticHint = $null; Warnings = @()
+                    }
+                )
+                Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'Protected Users Gaps renders when present' {
+            $content | Should -Match "Protected Users Gaps: <strong>1</strong>"
+        }
+
+        It 'Password Never Expires absent when Find-WeakAccountFlag not present' {
+            $content | Should -Not -Match 'Password Never Expires'
+        }
+
+        It 'Legacy Exposure absent when Find-LegacyProtocolExposure not present' {
+            $content | Should -Not -Match 'Legacy Exposure'
+        }
+    }
 }
 
 # =============================================================================

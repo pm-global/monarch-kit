@@ -377,8 +377,9 @@ Password Never Expires → Find-WeakAccountFlag:        .CountByFlag['PasswordNe
                          null-guard: 0 if key absent
 Protected Users Gaps   → Test-ProtectedUsersGap:      .GapAccounts.Count
 Legacy Exposure        → Find-LegacyProtocolExposure: 
-                         $n = @($r.DCFindings | Where-Object { $_.Risk -in 'High','Medium' }).Count
-                         render as "$n DCs"
+                         Group DCFindings by DCName (High/Medium only), render as "DC01 (2), DC02 (1)"
+                         Note: DCFindings is per-finding not per-DC; grouping by DCName gives correct DC count.
+                         Metric omitted entirely if no High/Medium findings.
 ```
 
 **Tests to write:**
