@@ -299,7 +299,7 @@ Describe 'Resolve-MonarchDC' {
         It 'returns HealthyDC source when OctoDoc succeeds' {
             $result = & $resolveDC 'contoso.com'
             $result.Source | Should -Be 'HealthyDC'
-            $result.DCName | Should -Be 'DC01.contoso.com'
+            $result.DCName | Should -Contain 'DC01.contoso.com'
             $result.Domain | Should -Be 'contoso.com'
         }
     }
@@ -321,7 +321,7 @@ Describe 'Resolve-MonarchDC' {
         It 'falls back to Discovered source' {
             $result = & $resolveDC 'contoso.com'
             $result.Source | Should -Be 'Discovered'
-            $result.DCName | Should -Be 'DC02.contoso.com'
+            $result.DCName | Should -Contain 'DC02.contoso.com'
         }
     }
 
@@ -346,7 +346,7 @@ Describe 'Resolve-MonarchDC' {
         It 'falls back to Discovered source on OctoDoc failure' {
             $result = & $resolveDC 'contoso.com'
             $result.Source | Should -Be 'Discovered'
-            $result.DCName | Should -Be 'DC03.contoso.com'
+            $result.DCName | Should -Contain 'DC03.contoso.com'
         }
     }
 
@@ -389,6 +389,11 @@ Describe 'Resolve-MonarchDC' {
             $result.PSObject.Properties.Name | Should -Contain 'DCName'
             $result.PSObject.Properties.Name | Should -Contain 'Domain'
             $result.PSObject.Properties.Name | Should -Contain 'Source'
+        }
+
+        It 'DCName is always an array' {
+            $result = & $resolveDC 'shape.test'
+            $result.DCName -is [array] | Should -BeTrue
         }
     }
 }
@@ -4491,7 +4496,7 @@ Describe 'New-MonarchReport' {
 Describe 'Invoke-DomainAudit' {
     BeforeAll {
         Mock -ModuleName Monarch Resolve-MonarchDC {
-            [PSCustomObject]@{ DCName = 'DC01.test.local'; Domain = 'test.local'; Source = 'HealthyDC' }
+            [PSCustomObject]@{ DCName = @('DC01.test.local'); Domain = 'test.local'; Source = 'HealthyDC' }
         }
         $script:discoveryFunctions = @(
             'New-DomainBaseline', 'Get-FSMORolePlacement', 'Get-ReplicationHealth',

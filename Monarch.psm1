@@ -128,6 +128,9 @@ function Resolve-MonarchDC
         if OctoDoc is unavailable.
     .PARAMETER Domain
         Domain FQDN. If null, uses the current domain.
+    .NOTES
+        DCName is always a string array. Currently one element -- structure
+        supports future expansion to return multiple healthy DCs.
     #>
     param([string]$Domain)
     Write-Host "resolve-monarchDC..." -ForegroundColor DarkGray
@@ -146,7 +149,7 @@ function Resolve-MonarchDC
             if ($dc)
             {
                 return [PSCustomObject]@{
-                    DCName = $dc.DCName
+                    DCName = @($dc.DCName)
                     Domain = $Domain
                     Source = 'HealthyDC'
                 }
@@ -158,7 +161,8 @@ function Resolve-MonarchDC
     }
 
     # Fallback: standard DC discovery
-    $dc = (Get-ADDomainController -DomainName $Domain -Discover -ErrorAction Stop).HostName
+    # .HostName returns string[] in some environments -- @() normalizes either shape
+    $dc = @((Get-ADDomainController -DomainName $Domain -Discover -ErrorAction Stop).HostName)
     return [PSCustomObject]@{
         DCName = $dc
         Domain = $Domain
@@ -2888,7 +2892,7 @@ function New-MonarchReport
 
     Write-Host "report: assembling and writing HTML report..." -ForegroundColor DarkGray
     $html | Out-File -FilePath $reportFile -Encoding UTF8
-    Write-Host "report OK: generated $($reportFile.Name) with $criticalCount critical, $advisoryCount advisory" -ForegroundColor Green
+    Write-Host "report OK: generated $(Split-Path $reportFile -Leaf) with $criticalCount critical, $advisoryCount advisory" -ForegroundColor Green
 
     return $reportFile
 }
@@ -2932,7 +2936,7 @@ function Invoke-DomainAudit
 
     # Resolve DC -- fatal if fails
     $target = Resolve-MonarchDC -Domain $Domain
-    $dc = $target.DCName
+    $dc = $target.DCName[0]
     $startTime = Get-Date
 
     # Output directory structure
