@@ -2916,7 +2916,8 @@ function New-MonarchReport
         Where-Object { $_.Name -ne $reportName } |
         ForEach-Object { $_.FullName.Substring($baseFull.Length + 1) -replace '\\','/' })
 
-    # 4. Render file tree -- group by top-level folder, sub-path as display text
+    # 4. Render file tree -- group by top-level folder, collapse high-cardinality subfolders
+    $collapseThreshold = 5
     if ($verifiedPaths.Count -gt 0) {
         $html += "<div class='output-section'><div class='section-label neutral'>Output Files</div><div class='file-tree'>"
         $treeGroups = [System.Collections.Generic.Dictionary[string, System.Collections.Generic.List[PSCustomObject]]]::new()
@@ -2939,7 +2940,40 @@ function New-MonarchReport
         }
         foreach ($folder in ($treeGroups.Keys | Sort-Object)) {
             $html += "<div class='group'><a href='$folder/' class='folder'>$folder/</a><div class='tree-children'>"
+            # Group entries by immediate subfolder for collapse detection
+            $subfolderGroups = [System.Collections.Generic.Dictionary[string, System.Collections.Generic.List[PSCustomObject]]]::new()
+            $directFiles = [System.Collections.Generic.List[PSCustomObject]]::new()
             foreach ($entry in $treeGroups[$folder]) {
+                $subParts = $entry.SubPath -split '/'
+                if ($subParts.Count -eq 1) {
+                    $directFiles.Add($entry)
+                } else {
+                    $subFolder = $subParts[0]
+                    if (-not $subfolderGroups.ContainsKey($subFolder)) {
+                        $subfolderGroups[$subFolder] = [System.Collections.Generic.List[PSCustomObject]]::new()
+                    }
+                    $subfolderGroups[$subFolder].Add($entry)
+                }
+            }
+            foreach ($sf in ($subfolderGroups.Keys | Sort-Object)) {
+                $sfEntries = $subfolderGroups[$sf]
+                if ($sfEntries.Count -gt $collapseThreshold) {
+                    # Surface index files (00-*), collapse the rest
+                    $indexFiles = @($sfEntries | Where-Object { ($_.SubPath -split '/')[-1] -like '00-*' })
+                    $collapsedCount = $sfEntries.Count - $indexFiles.Count
+                    foreach ($idx in $indexFiles) {
+                        $html += "<div class='tree-item'><a href='$($idx.FullRel)'>$($idx.SubPath)</a></div>"
+                    }
+                    if ($collapsedCount -gt 0) {
+                        $html += "<div class='tree-item' style='color:var(--text-3)'>$sf/* ($collapsedCount files)</div>"
+                    }
+                } else {
+                    foreach ($entry in $sfEntries) {
+                        $html += "<div class='tree-item'><a href='$($entry.FullRel)'>$($entry.SubPath)</a></div>"
+                    }
+                }
+            }
+            foreach ($entry in $directFiles) {
                 $html += "<div class='tree-item'><a href='$($entry.FullRel)'>$($entry.SubPath)</a></div>"
             }
             $html += "</div></div>"

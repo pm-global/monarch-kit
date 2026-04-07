@@ -174,12 +174,12 @@ Labels and values both use `--text-1`. Only values are bold (`font-weight: 600`)
 
 ## File Tree
 
-- Pure directory listing -- no counts, no promoted links, no navigation hints
 - Folder names are clickable links (open the directory)
 - Files with meaningful targets are clickable links
 - Tree structure uses left border + indentation, not box-drawing characters
 - `::before` pseudo-element for the `-` connector (never wraps separately)
 - Built dynamically from the orchestrator's results -- only files that were actually generated appear
+- **Folder collapse:** Subfolders with more than 5 sibling files collapse to a count line (`subfolder/* (N files)`). Index files (`00-*`) render as separate clickable entries above the collapsed line. The count is informational -- answers "how many items were exported?" without listing each one. This keeps generated file sets (GPO HTML reports, XML backups) from overwhelming the tree.
 
 ---
 

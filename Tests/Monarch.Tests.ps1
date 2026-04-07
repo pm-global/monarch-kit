@@ -4441,6 +4441,50 @@ Describe 'New-MonarchReport' {
         }
     }
 
+    Context 'High-cardinality subfolder collapses to count line' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'report-collapse'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+
+            # Create 02-GPO-Audit/01-HTML-Reports with an index + 8 GPO files (above threshold of 5)
+            $htmlDir = Join-Path $outDir '02-GPO-Audit/01-HTML-Reports'
+            New-Item -ItemType Directory -Path $htmlDir -Force | Out-Null
+            Set-Content -Path (Join-Path $htmlDir '00-INDEX.html') -Value '<html>index</html>'
+            1..8 | ForEach-Object { Set-Content -Path (Join-Path $htmlDir "GPO-$_.html") -Value '<html>' }
+
+            # Create 02-GPO-Audit/03-CSV with only 2 files (below threshold)
+            $csvDir = Join-Path $outDir '02-GPO-Audit/03-CSV'
+            New-Item -ItemType Directory -Path $csvDir -Force | Out-Null
+            Set-Content -Path (Join-Path $csvDir 'summary.csv') -Value 'data'
+            Set-Content -Path (Join-Path $csvDir 'linkage.csv') -Value 'data'
+
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:30'
+                Results = @(); Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'index file rendered as clickable link' {
+            $content | Should -Match "<a href='02-GPO-Audit/01-HTML-Reports/00-INDEX\.html'>01-HTML-Reports/00-INDEX\.html</a>"
+        }
+
+        It 'individual GPO files collapsed to count line' {
+            $content | Should -Match '01-HTML-Reports/\* \(8 files\)'
+        }
+
+        It 'individual GPO filenames not rendered' {
+            $content | Should -Not -Match 'GPO-1\.html'
+        }
+
+        It 'below-threshold subfolder renders files normally' {
+            $content | Should -Match "<a href='02-GPO-Audit/03-CSV/summary\.csv'>03-CSV/summary\.csv</a>"
+            $content | Should -Match "<a href='02-GPO-Audit/03-CSV/linkage\.csv'>03-CSV/linkage\.csv</a>"
+        }
+    }
+
     Context 'Relative OutputPath produces relative hrefs' {
         BeforeAll {
             # Create output dir, then pass a RELATIVE path to New-MonarchReport
