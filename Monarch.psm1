@@ -1222,16 +1222,19 @@ function Export-GPOAudit {
 
     # HTML reports -- per-GPO HTML + clickable index
     if ($OutputPath) {
-        $htmlIndex = [System.Collections.Generic.List[PSCustomObject]]::new()
+        $htmlGenerated = @{}
         foreach ($gpo in $allGPOs) {
             try {
                 $safeName = $gpo.DisplayName -replace '[\\/:*?"<>|]', '_'
                 Get-GPOReport -Guid $gpo.Id -ReportType Html -Path (Join-Path $paths.HTML "$safeName.html") @splatAD
-                $htmlIndex.Add([PSCustomObject]@{ DisplayName = $gpo.DisplayName; FileName = "$safeName.html"; GUID = $gpo.Id })
+                $htmlGenerated[$gpo.Id.ToString()] = "$safeName.html"
             } catch { $warnings.Add("HTMLReport($($gpo.DisplayName)): $_") }
         }
-        $indexRows = ($htmlIndex | ForEach-Object {
-            "<tr><td>$($_.DisplayName)</td><td style='font-family:monospace'>$($_.GUID)</td><td><a href='$($_.FileName)'>View</a></td></tr>"
+        # Build index from all GPOs -- link to HTML report only if generation succeeded
+        $indexRows = ($allGPOs | ForEach-Object {
+            $fileName = $htmlGenerated[$_.Id.ToString()]
+            $reportCell = if ($fileName) { "<a href='$fileName'>View</a>" } else { "<span style='color:#888'>N/A</span>" }
+            "<tr><td>$($_.DisplayName)</td><td style='font-family:monospace'>$($_.Id)</td><td>$reportCell</td></tr>"
         }) -join "`n"
         $style = 'body{font-family:Segoe UI,sans-serif;margin:20px}table{border-collapse:collapse;width:100%}th{background:#0078d4;color:white;padding:12px;text-align:left}td{padding:10px;border-bottom:1px solid #ddd}tr:hover{background:#f1f1f1}a{color:#0078d4}'
         $indexHtml = "<!DOCTYPE html><html><head><title>GPO Audit Index</title><style>$style</style></head>" +
