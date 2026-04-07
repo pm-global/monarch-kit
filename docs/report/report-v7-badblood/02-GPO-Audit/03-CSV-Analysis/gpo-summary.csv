@@ -1,0 +1,4 @@
+"DisplayName","GUID","CreatedTime","ModifiedTime","UserEnabled","ComputerEnabled","WMIFilter","Description","HasUserRights","HasSecurityOptions","HasScripts","HasSoftwareInstall","Owner"
+"Dev Workstation Policy","0e58ab8c-62c6-4151-b152-01cde43da845","3/27/2026 1:56:10 PM","3/27/2026 2:24:50 PM","True","True",,,"False","False","False","False","LIGHT\Domain Admins"
+"Default Domain Policy","31b2f340-016d-11d2-945f-00c04fb984f9","3/26/2026 10:41:07 AM","3/26/2026 11:08:40 AM","True","True",,,"False","True","False","False","LIGHT\Domain Admins"
+"Default Domain Controllers Policy","6ac1786c-016f-11d2-945f-00c04fb984f9","3/26/2026 10:41:07 AM","3/26/2026 10:41:06 AM","True","True",,,"True","True","False","False","LIGHT\Domain Admins"

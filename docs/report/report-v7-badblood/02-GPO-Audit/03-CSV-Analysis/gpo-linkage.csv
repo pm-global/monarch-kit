@@ -1,0 +1,4 @@
+"GPOName","LinkedTo","Enabled","NoOverride"
+"Dev Workstation Policy","LIGHT.local","true","true"
+"Default Domain Policy","LIGHT.local","true","false"
+"Default Domain Controllers Policy","LIGHT.local/Domain Controllers","true","false"

@@ -29,6 +29,8 @@ See `CLAUDE-DEV-PLAN.md` for full roadmap and status.
 | `Monarch.psd1`              | Module manifest (version, dependencies, exports)                          | Module structure or packaging changes |
 | `preflight-win.ps1`         | Windows environment check script (VOM output, server/workstation aware)   | First run on a new Windows host |
 | `CLAUDE-DEV-PLAN.md`        | Current roadmap, plan status, and implementation sequence                 | Planning or sequencing decisions |
+| `docs/report/report-v7-badblood/` | A completed scan against a badblooded domain, but is not fully to spec yet      | Component output examples |
+| `docs/report/report-v5-to-be-superseded.html` | best-of feature showcase from a mockup, will be deleted once fully implemented      | Implementing v5 feature |
 | `docs/domain-specs.md`      | Audit domains, functions per phase, return contracts                      | Function implementation or orchestrator work |
 | `docs/mechanism-decisions.md` | Technical decisions (config, lastLogonTimestamp, backup tiers, etc.)    | Logic involving config, thresholds, or interpretation |
 | `docs/checklists.md`        | Human review checklists and institutional knowledge                       | Remediation or interactive wrapper work |

@@ -1,0 +1,4 @@
+"GPOName","Trustee","TrusteeSID","Permission","Inherited","Denied"
+"Dev Workstation Policy","SYSTEM","S-1-5-18","GpoEditDeleteModifySecurity","False","False"
+"Default Domain Policy","SYSTEM","S-1-5-18","GpoEditDeleteModifySecurity","False","False"
+"Default Domain Controllers Policy","SYSTEM","S-1-5-18","GpoEditDeleteModifySecurity","False","False"

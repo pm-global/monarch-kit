@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Files clsid="{215B2E53-57CE-475c-80FE-9EEC14635851}"><File clsid="{50BE44C8-567A-4ed1-B1D0-9234FE1F38AF}" name="profile.ps1" status="profile.ps1" image="1" changed="2026-03-27 21:24:50" uid="{34F89BCE-6BE4-4CB3-B318-629027E2E395}"><Properties action="R" fromPath="\\LIGHT-DC\NETLOGON\profile.ps1" targetPath="C:\Windows\System32\WindowsPowerShell\v1.0\profile.ps1" readOnly="0" archive="1" hidden="0" suppress="0"/></File>
+</Files>

@@ -1,0 +1,6 @@
+﻿GROUP POLICY AUDIT SUMMARY
+Domain Audit Date: 04/02/2026 22:44:33
+Total GPOs: 3
+Unlinked GPOs: 0
+Disabled GPOs: 0
+High-Risk: UserRights=1, SecurityOptions=2, Scripts=0, SoftwareInstall=0
