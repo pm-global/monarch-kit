@@ -1226,7 +1226,8 @@ function Export-GPOAudit {
         foreach ($gpo in $allGPOs) {
             try {
                 $safeName = $gpo.DisplayName -replace '[\\/:*?"<>|]', '_'
-                Get-GPOReport -Guid $gpo.Id -ReportType Html -Path (Join-Path $paths.HTML "$safeName.html") @splatAD
+                $gpoHtml = Get-GPOReport -Guid $gpo.Id -ReportType Html -ErrorAction Stop @splatAD
+                $gpoHtml | Out-File -FilePath (Join-Path $paths.HTML "$safeName.html") -Encoding UTF8
                 $htmlGenerated[$gpo.Id.ToString()] = "$safeName.html"
             } catch { $warnings.Add("HTMLReport($($gpo.DisplayName)): $_") }
         }
