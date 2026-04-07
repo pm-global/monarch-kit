@@ -27,14 +27,13 @@ See `CLAUDE-DEV-PLAN.md` for full roadmap and status.
 |-----------------------------|---------------------------------------------------------------------------|-----------|
 | `Monarch.psm1`              | Main module implementation — all functions live here                      | Any code changes or implementation work |
 | `Monarch.psd1`              | Module manifest (version, dependencies, exports)                          | Module structure or packaging changes |
-| `dev-guide.md`              | Full coding standards, safety rules, code budget, analysis framework      | Every implementation or review task |
+| `preflight-win.ps1`         | Windows environment check script (VOM output, server/workstation aware)   | First run on a new Windows host |
 | `CLAUDE-DEV-PLAN.md`        | Current roadmap, plan status, and implementation sequence                 | Planning or sequencing decisions |
 | `docs/domain-specs.md`      | Audit domains, functions per phase, return contracts                      | Function implementation or orchestrator work |
 | `docs/mechanism-decisions.md` | Technical decisions (config, lastLogonTimestamp, backup tiers, etc.)    | Logic involving config, thresholds, or interpretation |
 | `docs/checklists.md`        | Human review checklists and institutional knowledge                       | Remediation or interactive wrapper work |
 | `docs/design-system.md`     | HTML report visuals and console output rules                              | Reporting changes |
 | `docs/dormant-account-policy.md` | Dormant account compliance policy                                     | Dormant account features |
-| `preflight-win.ps1`         | Windows environment check script (VOM output, server/workstation aware)   | First run on a new Windows host |
 | `docs/deployment-guide.md`  | Environment setup, RSAT, first-run validation                             | Preflight or deployment work |
 | `docs/gpo-review-guide.md`  | GPO review methods and priorities                                         | Group Policy work |
 | `docs/gap-research.md`      | Implementation gap analysis vs industry standards                          | Gap analysis or roadmap work |
