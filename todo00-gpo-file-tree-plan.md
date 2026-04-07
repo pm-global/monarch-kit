@@ -59,18 +59,32 @@ Add rule for generated file sets:
 - Index files (`00-*`) render as separate clickable entry above the collapse line
 - Count is informational -- answers "how many items were exported?"
 
+### Change 3: Fix silent HTML report generation failure
+
+**File:** `Monarch.psm1`, Export-GPOAudit HTML report loop (~line 1227)
+
+Two bugs found during implementation:
+
+**Bug A: Non-terminating errors silently swallowed.** `Get-GPOReport` produces non-terminating errors in certain failure conditions (documented on MS Learn). The try/catch block only catches terminating errors. Without `-ErrorAction Stop`, failures are invisible -- no file written, no warning added, catch block never fires. Fix: add `-ErrorAction Stop` (matches existing pattern used throughout the module, e.g. line 165, 1735, 1740).
+
+**Bug B: `-Path` parameter brittleness.** The `-Path` parameter on `Get-GPOReport -ReportType Html` is known to silently fail in some environments. Fix: capture HTML as string, write with `Out-File`. This is the standard workaround documented across multiple practitioner sources.
+
+**Bug C: Index table built from success list only.** The `00-INDEX.html` table was populated from `$htmlIndex` which only got entries when HTML generation succeeded. When all GPOs failed (bugs A+B), the index showed "Total GPOs: 3" but an empty table body. Fix: build index rows from `$allGPOs` (always populated by `Get-GPO -All`), with "View" link conditional on whether the HTML file was actually generated. Failed GPOs show "N/A" in the Report column.
+
 ## What Does NOT Change
 
 - `Export-GPOAudit` return contract -- no new properties
-- `00-INDEX.html` generation -- already works correctly
 - GroupPolicy domain section metrics -- separate issue
 - CSS -- existing styles sufficient; collapsed line uses `--text-3`
 
 ## Verification
 
-1. Run existing Pester file-tree tests
-2. `01-HTML-Reports/00-INDEX.html` appears as clickable link
-3. Individual GPO `.html` files do NOT appear individually
-4. XML backup GUID folders do NOT appear individually
+1. Run existing Pester file-tree tests (135 pass, 0 fail)
+2. `01-HTML-Reports/00-INDEX.html` appears as clickable link in file manifest
+3. Individual GPO `.html` files do NOT appear individually when count exceeds threshold
+4. XML backup GUID folders do NOT appear individually when count exceeds threshold
 5. Collapsed line shows correct count
 6. Non-GPO folders with few files render normally (01-Baseline, etc.)
+7. `00-INDEX.html` lists all GPOs regardless of HTML generation success
+8. GPOs with successful HTML export show clickable "View" link
+9. GPOs where HTML export failed show "N/A" and a warning in the return object

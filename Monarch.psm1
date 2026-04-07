@@ -1220,15 +1220,17 @@ function Export-GPOAudit {
         $linkageDetails | Export-Csv -Path (Join-Path $paths.CSV 'gpo-linkage.csv') -NoTypeInformation
     }
 
-    # HTML reports -- per-GPO HTML + clickable index
+    # HTML reports -- per-GPO HTML in GPOs/ subfolder + clickable index at top level
     if ($OutputPath) {
+        $gpoDir = Join-Path $paths.HTML 'GPOs'
+        New-Item -ItemType Directory -Path $gpoDir -Force | Out-Null
         $htmlGenerated = @{}
         foreach ($gpo in $allGPOs) {
             try {
                 $safeName = $gpo.DisplayName -replace '[\\/:*?"<>|]', '_'
                 $gpoHtml = Get-GPOReport -Guid $gpo.Id -ReportType Html -ErrorAction Stop @splatAD
-                $gpoHtml | Out-File -FilePath (Join-Path $paths.HTML "$safeName.html") -Encoding UTF8
-                $htmlGenerated[$gpo.Id.ToString()] = "$safeName.html"
+                $gpoHtml | Out-File -FilePath (Join-Path $gpoDir "$safeName.html") -Encoding UTF8
+                $htmlGenerated[$gpo.Id.ToString()] = "GPOs/$safeName.html"
             } catch { $warnings.Add("HTMLReport($($gpo.DisplayName)): $_") }
         }
         # Build index from all GPOs -- link to HTML report only if generation succeeded
