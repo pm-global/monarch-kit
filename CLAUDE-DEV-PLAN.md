@@ -30,6 +30,14 @@ Blocked by: nothing.
 Formalize `initial-research.md` into a proper `research-brief-monarch-kit.md` per the research doc template. Reference work, not implementation.
 Blocked by: nothing.
 
+**TODO-5: Find-DormantAccount OutputPath — align to directory semantics.**
+`Find-DormantAccount` currently receives a full file path for `-OutputPath`. TODO-0 establishes directory semantics as the module standard (function receives directory, constructs filename internally). Update `Find-DormantAccount` to match: accept a directory, write `dormant-accounts.csv` internally.
+Blocked by: TODO-0 (establishes the pattern).
+
+**TODO-7: Action hints on advisory cards.**
+TODO-1 adds hints to critical cards only. Advisory cards have a separate hint set — some require more careful wording than criticals (Protected Users gap, non-privileged Kerberoast, medium-risk legacy protocol). Plan and implement separately after TODO-1 ships.
+Blocked by: TODO-1.
+
 ## Roadmap Overview
 
 | Plan | Scope | Status |

@@ -1,101 +1,97 @@
-# TODO-1: Action Hints in Critical/Advisory Cards
+# TODO-1: Action Hints in Critical Cards
 
 ## Problem
 
-`.card .action-hint` CSS rule exists (design-system.md) but no card ever emits an action-hint element. Critical and advisory cards show what was found but not what to do about it.
+`.card .action-hint` CSS rule exists (design-system.md) but no card ever emits an action-hint
+element. Critical cards show what was found but not what to do about it.
+
+Advisory card hints are tracked separately as TODO-7.
 
 ## Current State
 
-The report generates criticals and advisories in `New-MonarchReport` (lines 2528-2640). Each advisory/critical is a `[PSCustomObject]@{ Domain; DisplayDomain; Description }`. The Description is the only text shown. There is no ActionHint property and no `<div class='action-hint'>` emitted.
+Critical findings are generated in `New-MonarchReport` (lines 2528–2664). Each critical is a
+`[PSCustomObject]@{ Domain; DisplayDomain; Description }`. There is no `ActionHint` property
+and no `<div class='action-hint'>` emitted. The CSS rule at line 2694 is ready.
 
-There are currently 20+ distinct advisory/critical descriptions across 15 functions (lines 2535-2640). Each would potentially need its own hint text.
+Critical card rendering is at line 2748:
+```
+"<div class='card w-critical'><div class='domain-tag'>$($c.DisplayDomain)</div><div class='description'>$($c.Description)</div></div>"
+```
+The action-hint div goes after `.description`, inside the card, conditional on `$c.ActionHint`.
 
-## Research Needed (Domain Knowledge -- This Is the Hard Part)
+## Critical Findings That Need Hints
 
-The hint text requires AD administration domain expertise. This is NOT a code question -- it's "what should an experienced admin do when they see this finding?"
-
-For each finding type, research must answer:
-1. **What is the standard remediation?** Not monarch-kit-specific -- what does Microsoft recommend? What do experienced admins actually do?
-2. **Is the next step obvious or non-obvious?** "15 privileged accounts not in Protected Users" -- obvious next step? No. Adding service accounts with SPNs to Protected Users breaks Kerberos delegation. The hint needs to warn about this.
-3. **Is the hint always the same, or conditional on other data?** Example: dormant account hint might differ based on whether the count is 10 vs 1000.
-4. **Does the hint reference a tool or process that exists yet?** "Run Suspend-DormantAccount" only makes sense post-Plan-2. Pre-Plan-2 hints should reference manual steps or CSV review.
-
-### Findings That Need Hints (grouped by complexity)
-
-**Likely self-explanatory (may not need hints):**
-- Replication links failing/warning
-- Audit policy inconsistent across DCs
-- DNS forwarder configuration inconsistent
-
-**Clear next step but non-obvious details:**
-- Domain Admin count exceeds threshold -- "Review membership, remove unnecessary accounts"
-- AdminCount orphans -- "Run `dsacls` to reset inherited permissions, or wait for Plan 2's Remove-AdminCountOrphan"
-- Unlinked GPOs -- "Review in GPMC and delete if no longer needed"
-- Missing SRV records -- "Check DNS registration on affected DCs, run `dcdiag /test:dns`"
-- Event log configuration issues -- "Standardize log sizes and retention across DCs"
-
-**Requires careful wording (risk of bad advice):**
-- Privileged accounts not in Protected Users -- MUST warn about SPN/delegation breakage
-- Kerberoastable privileged accounts -- "Rotate passwords, consider removing SPNs or using gMSA"
-- AS-REP roastable accounts -- "Enable pre-authentication unless there's a documented exception"
-- Legacy protocol exposure (NTLMv1/LM) -- "Audit NTLMv1 usage before disabling; disabling without audit can break authentication"
-- Reversible encryption / DES-only -- "Disable these flags, but verify no legacy applications depend on them"
-- Backup age exceeds tombstone -- critical safety issue, hint must be precise
-- No backup tool detected -- "Verify backup coverage; this check only detects common tools"
-- Password policy weaknesses -- multiple sub-findings, each with different advice
-- Dormant accounts -- depends on count and whether remediation tools exist yet
-- Weak security flags -- varies by flag type
-- GPOs with non-standard editors -- "Review in 04-Permissions/REVIEW-overpermissioned-gpos.csv"
-- DNS scavenging disabled -- "Enable scavenging with appropriate no-refresh/refresh intervals"
-
-### Research Sources
-
-- Microsoft Security Baselines documentation
-- `docs/checklists.md` -- existing institutional knowledge in the repo
-- `docs/gpo-review-guide.md` -- GPO-specific guidance
-- `docs/dormant-account-policy.md` -- dormant account compliance policy
-- Microsoft AD security best practices (TierModel, PAW)
-- CIS Benchmarks for Windows Server (if accessible)
+| Finding | Function | Line |
+|---------|----------|------|
+| Backup age exceeds tombstone lifetime (USN rollback risk) | `Get-BackupReadinessStatus` | 2537 |
+| {N} replication links failing | `Get-ReplicationHealth` | 2541 |
+| Domain Admin count exceeds critical threshold | `Get-PrivilegedGroupMembership` | 2545 |
+| Default domain policy stores passwords with reversible encryption | `Get-PasswordPolicyInventory` | 2620 |
+| {N} privileged accounts with SPNs (Kerberoasting risk) | `Find-KerberoastableAccount` | 2565 |
+| {N} accounts with pre-auth disabled ({N} privileged) | `Find-ASREPRoastableAccount` | 2591 |
+| WeakAccountFlag: reversible encryption (individual accounts) | `Find-WeakAccountFlag` | ~2598 |
+| WeakAccountFlag: DES-only Kerberos | `Find-WeakAccountFlag` | ~2599 |
+| {N} FSMO role holders unreachable | `Get-FSMORolePlacement` | 2658 |
 
 ## Design Decisions
 
-1. **Which cards get hints?** Options:
-   - Every card -- consistent but some hints would be trivially obvious ("replication is failing" -> "fix replication")
-   - Only cards where the next step is non-obvious or risky -- better signal-to-noise
-   - **Recommendation:** Non-obvious and risky findings only. Self-explanatory findings get no hint (silence is success principle).
+**Tone (resolved):**
+- Suggestive for risky actions where blindly following could break things
+- Imperative for safe actions
+- Reference when detailed steps exist elsewhere
 
-2. **Tone.** Options:
-   - Imperative: "Remove unnecessary Domain Admin members"
-   - Suggestive: "Review membership and consider removing unnecessary accounts"
-   - Reference: "See docs/checklists.md for review steps"
-   - **Recommendation:** Suggestive for risky actions (where blindly following could break things), imperative for safe actions, reference when detailed steps exist elsewhere.
+**Data flow (resolved):** Add `ActionHint` property to critical objects. Findings with no hint
+omit the property — rendering checks `if ($c.ActionHint)`.
 
-3. **Conditional hints.** Some hints should vary:
-   - Protected Users gap: if service accounts with SPNs are in the gap list, warn about delegation breakage
-   - Dormant accounts: different hint pre-Plan-2 vs post-Plan-2
-   - **Decision needed:** Are conditional hints worth the complexity for v1, or should all hints be static with a general caveat?
-
-4. **Data flow.** Currently advisories are `{ Domain, DisplayDomain, Description }`. Adding hints means either:
-   - Adding an `ActionHint` property to the advisory/critical objects
-   - Generating hints inline during HTML rendering based on the Description text (fragile)
-   - **Recommendation:** Add `ActionHint` property. Cleaner, testable.
-
-## Scope
-
-- Determine which cards get hints (design decision #1)
-- Write hint text for each qualifying finding (research deliverable)
-- Add `ActionHint` property to critical/advisory objects in finding extraction (lines 2528-2640)
-- Emit `<div class='action-hint'>...</div>` inside card markup when ActionHint is present
-- Tests for hint presence/absence per card type
-
-## Out of Scope
-
-- CSS changes (`.card .action-hint` rule already exists)
-- Linking hints to remediation functions (Plan 2 dependency)
-- Conditional hints based on cross-function data (defer to v2 unless trivially simple)
+**Conditional hints:** Evaluate per finding in Pass 1. Data already present in the critical
+object (counts, specific values) may be worth surfacing inline. Pass 1 decides which findings
+benefit from conditional text and what the conditions are.
 
 ## Implementation
 
-**Model:** Opus for the research pass (domain knowledge, reading docs, writing hint text). Sonnet for the code implementation after hint text is decided.
+**Model:** Opus for Pass 1 (domain knowledge, hint text). Sonnet for Pass 2 (code).
 
-**Passes:** 2. First pass: research + hint text decisions (produces a hint text table). Second pass: code implementation using the decided text.
+### Pass 0 — Tests (write first, confirm they fail before any implementation)
+
+Add to the existing `Describe 'New-MonarchReport'` block in `Tests/Monarch.Tests.ps1`.
+
+**Structural tests — ActionHint presence:**
+For each of the 9 critical finding types, mock the relevant function to return a result that
+triggers the critical, call `New-MonarchReport`, assert the resulting critical object has a
+non-null non-empty `ActionHint`. These tests fail until Pass 2 implements the property.
+
+**HTML rendering — hint present:**
+When a critical object has `ActionHint` set, the rendered HTML contains
+`<div class='action-hint'>`.
+
+**HTML rendering — hint absent:**
+When a critical object has no `ActionHint`, the rendered HTML does not contain `action-hint`.
+
+**Note:** After Pass 1 produces the hint text table, update the structural assertions to match
+exact hint strings. The test structure is the gate; exact text is filled in before Pass 2 begins.
+
+### Pass 1 — Research + hint text table (Opus)
+
+Read `docs/checklists.md`, `docs/gpo-review-guide.md`, and Microsoft Security Baselines.
+For each of the 9 findings, produce a completed row:
+
+| Finding | Hint text | Tone | Conditional? |
+|---------|-----------|------|--------------|
+| ... | ... | suggestive / imperative / reference | yes/no — if yes, specify condition and alternate text |
+
+Apply the tone rules. Evaluate each finding for whether data already in the critical object
+(count, specific values) would improve the hint. After the table is complete, update the Pass 0
+test assertions to match exact hint strings.
+
+### Pass 2 — Implementation (Sonnet)
+
+- Add `ActionHint` to each of the 9 critical object constructions (lines 2537–2658)
+- Update card rendering at line 2748 to conditionally append
+  `<div class='action-hint'>$($c.ActionHint)</div>` after `.description`
+- Run the full test suite. All tests must pass before this pass is considered complete.
+
+## Out of Scope
+
+- CSS changes (`.card .action-hint` rule already exists at line 2694)
+- Advisory card hints (TODO-7)
+- Linking hints to remediation functions (Plan 2 dependency)
