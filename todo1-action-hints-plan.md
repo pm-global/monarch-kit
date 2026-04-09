@@ -29,8 +29,7 @@ The action-hint div goes after `.description`, inside the card, conditional on `
 | Default domain policy stores passwords with reversible encryption | `Get-PasswordPolicyInventory` | 2620 |
 | {N} privileged accounts with SPNs (Kerberoasting risk) | `Find-KerberoastableAccount` | 2565 |
 | {N} accounts with pre-auth disabled ({N} privileged) | `Find-ASREPRoastableAccount` | 2591 |
-| WeakAccountFlag: reversible encryption (individual accounts) | `Find-WeakAccountFlag` | ~2598 |
-| WeakAccountFlag: DES-only Kerberos | `Find-WeakAccountFlag` | ~2599 |
+| WeakAccountFlag: reversible encryption and/or DES-only (one critical, compound description) | `Find-WeakAccountFlag` | 2602 |
 | {N} FSMO role holders unreachable | `Get-FSMORolePlacement` | 2658 |
 
 ## Design Decisions
