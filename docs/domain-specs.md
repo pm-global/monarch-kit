@@ -70,10 +70,11 @@ Audits and remediates privileged group membership and attack surface.
 - Admin account naming pattern `adm|admin` (configurable)
 
 **Functions:**
-- Get-PrivilegedGroupMembership (Discovery) -- enumerate all privileged groups with nested membership
-- Find-AdminCountOrphan (Discovery) -- accounts with AdminCount=1 but no current privileged group membership
-- Find-KerberoastableAccount (Discovery) -- ALL user accounts with SPNs, flag privileged subset separately (not just privileged+SPN)
-- Find-ASREPRoastableAccount (Discovery) -- accounts with pre-auth disabled
+- Get-PrivilegedGroupMembership (Discovery) -- enumerate all privileged groups with nested membership. Accepts `-OutputPath` (directory); writes `privileged-groups.csv` when members exist (one row per member, sorted by SamAccountName). Columns: SamAccountName, GroupName, DisplayName, ObjectType, IsDirect, IsEnabled, LastLogon. Return object includes `CSVPath` (null when not written).
+- Find-AdminCountOrphan (Discovery) -- accounts with AdminCount=1 but no current privileged group membership. Accepts `-OutputPath` (directory); writes `admincount-orphans.csv` when orphans exist. Columns: SamAccountName, DisplayName, Enabled, MemberOf (DNs joined with `'; '`). Return object includes `CSVPath` (null when not written).
+- Find-KerberoastableAccount (Discovery) -- ALL user accounts with SPNs, flag privileged subset separately (not just privileged+SPN). No `-OutputPath`; combined into `roastable-accounts.csv` by the orchestrator.
+- Find-ASREPRoastableAccount (Discovery) -- accounts with pre-auth disabled. No `-OutputPath`; combined into `roastable-accounts.csv` by the orchestrator.
+- **Orchestrator combine:** After both roastable functions complete, `Invoke-DomainAudit` writes `03-Privileged-Access/roastable-accounts.csv` combining both result sets. Columns: ThreatType (Kerberoast/ASREP), SamAccountName, DisplayName, IsPrivileged, Enabled, SPNs (joined with `'; '`), PasswordAgeDays. ASREP rows have empty SPNs and PasswordAgeDays. File is not written if both functions return zero accounts or both fail.
 - Test-TieredAdminCompliance (Discovery) -- verify Tier 0/1/2 separation
 - Remove-AdminCountOrphan (Remediation) -- clear AdminCount flag from orphaned accounts. **Destructive, requires -WhatIf.**
 - Grant-TimeBoundGroupMembership (Remediation) -- add with auto-expiration. **Destructive, requires -WhatIf.**
