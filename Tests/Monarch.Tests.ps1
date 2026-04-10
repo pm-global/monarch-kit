@@ -1986,6 +1986,109 @@ Describe 'Get-PrivilegedGroupMembership' {
             $result.DomainAdminStatus | Should -Be 'Warning'
         }
     }
+
+    Context 'CSV export with OutputPath' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADGroup {
+                @(
+                    [PSCustomObject]@{
+                        Name              = 'Domain Admins'
+                        DistinguishedName = $domainAdminsDN
+                        SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                    }
+                )
+            }
+
+            Mock -ModuleName Monarch Get-ADGroupMember -ParameterFilter { -not $Recursive } {
+                @(
+                    [PSCustomObject]@{ SamAccountName = 'zebra'; objectClass = 'user' },
+                    [PSCustomObject]@{ SamAccountName = 'alpha'; objectClass = 'user' }
+                )
+            }
+
+            Mock -ModuleName Monarch Get-ADGroupMember -ParameterFilter { $Recursive } {
+                @(
+                    [PSCustomObject]@{ SamAccountName = 'zebra'; objectClass = 'user' },
+                    [PSCustomObject]@{ SamAccountName = 'alpha'; objectClass = 'user' }
+                )
+            }
+
+            Mock -ModuleName Monarch Get-ADUser {
+                [PSCustomObject]@{
+                    SamAccountName = $Identity
+                    DisplayName    = "Display $Identity"
+                    Enabled        = $true
+                    LastLogonDate  = (Get-Date).AddDays(-5)
+                }
+            }
+
+            $script:csvDir = Join-Path $TestDrive 'csv-export'
+            New-Item -ItemType Directory -Path $script:csvDir -Force | Out-Null
+            $script:result = Get-PrivilegedGroupMembership -OutputPath $script:csvDir
+        }
+
+        It 'writes privileged-groups.csv to OutputPath' {
+            Join-Path $csvDir 'privileged-groups.csv' | Should -Exist
+        }
+
+        It 'CSV has correct columns' {
+            $rows = Import-Csv (Join-Path $csvDir 'privileged-groups.csv')
+            $cols = $rows[0].PSObject.Properties.Name
+            $cols | Should -Contain 'SamAccountName'
+            $cols | Should -Contain 'GroupName'
+            $cols | Should -Contain 'DisplayName'
+            $cols | Should -Contain 'ObjectType'
+            $cols | Should -Contain 'IsDirect'
+            $cols | Should -Contain 'IsEnabled'
+            $cols | Should -Contain 'LastLogon'
+        }
+
+        It 'rows are sorted by SamAccountName' {
+            $rows = Import-Csv (Join-Path $csvDir 'privileged-groups.csv')
+            $rows[0].SamAccountName | Should -Be 'alpha'
+            $rows[-1].SamAccountName | Should -Be 'zebra'
+        }
+
+        It 'GroupName column is populated on every row' {
+            $rows = Import-Csv (Join-Path $csvDir 'privileged-groups.csv')
+            $rows | ForEach-Object { $_.GroupName | Should -Not -BeNullOrEmpty }
+        }
+
+        It 'CSVPath return field equals constructed path' {
+            $result.CSVPath | Should -Be (Join-Path $csvDir 'privileged-groups.csv')
+        }
+    }
+
+    Context 'CSV export — no file when no members' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADGroup {
+                @(
+                    [PSCustomObject]@{
+                        Name              = 'Domain Admins'
+                        DistinguishedName = $domainAdminsDN
+                        SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                    }
+                )
+            }
+
+            # Both direct and recursive return empty — no members to flatten
+            Mock -ModuleName Monarch Get-ADGroupMember { @() }
+
+            $script:noMembersDir = Join-Path $TestDrive 'csv-no-members'
+            New-Item -ItemType Directory -Path $script:noMembersDir -Force | Out-Null
+            $script:result = Get-PrivilegedGroupMembership -OutputPath $script:noMembersDir
+        }
+
+        It 'does not write a file when all groups have 0 members' {
+            Join-Path $noMembersDir 'privileged-groups.csv' | Should -Not -Exist
+        }
+
+        It 'CSVPath is null when no file written' {
+            $result.CSVPath | Should -BeNullOrEmpty
+        }
+    }
 }
 
 Describe 'Find-AdminCountOrphan' {
@@ -2047,6 +2150,92 @@ Describe 'Find-AdminCountOrphan' {
         It 'Count matches Orphans array length' {
             $result.Count | Should -Be 1
             $result.Orphans | Should -HaveCount $result.Count
+        }
+    }
+
+    Context 'CSV export with OutputPath' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADGroup {
+                @([PSCustomObject]@{
+                        Name              = 'Domain Admins'
+                        DistinguishedName = $domainAdminsDN
+                        SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                    })
+            }
+
+            # Two MemberOf DNs — verifies the '; ' join flattens the array correctly
+            Mock -ModuleName Monarch Get-ADUser {
+                @([PSCustomObject]@{
+                        SamAccountName = 'orphanUser'
+                        DisplayName    = 'Orphan User'
+                        Enabled        = $true
+                        AdminCount     = 1
+                        MemberOf       = @('CN=GroupA,DC=test,DC=local', 'CN=GroupB,DC=test,DC=local')
+                    })
+            }
+
+            $script:csvDir = Join-Path $TestDrive 'csv-export'
+            New-Item -ItemType Directory -Path $script:csvDir -Force | Out-Null
+            $script:result = Find-AdminCountOrphan -OutputPath $script:csvDir
+        }
+
+        It 'writes admincount-orphans.csv to OutputPath' {
+            Join-Path $csvDir 'admincount-orphans.csv' | Should -Exist
+        }
+
+        It 'CSV has correct columns' {
+            $rows = Import-Csv (Join-Path $csvDir 'admincount-orphans.csv')
+            $cols = $rows[0].PSObject.Properties.Name
+            $cols | Should -Contain 'SamAccountName'
+            $cols | Should -Contain 'DisplayName'
+            $cols | Should -Contain 'Enabled'
+            $cols | Should -Contain 'MemberOf'
+        }
+
+        It 'MemberOf cell is "; "-joined DNs' {
+            # PS arrays serialise as space-separated when cast to string — the join is required
+            $rows = Import-Csv (Join-Path $csvDir 'admincount-orphans.csv')
+            $rows[0].MemberOf | Should -Be 'CN=GroupA,DC=test,DC=local; CN=GroupB,DC=test,DC=local'
+        }
+
+        It 'CSVPath return field equals constructed path' {
+            $result.CSVPath | Should -Be (Join-Path $csvDir 'admincount-orphans.csv')
+        }
+    }
+
+    Context 'CSV export — no file when no orphans' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Get-ADGroup {
+                @([PSCustomObject]@{
+                        Name              = 'Domain Admins'
+                        DistinguishedName = $domainAdminsDN
+                        SID               = [PSCustomObject]@{ Value = 'S-1-5-21-1234567890-512' }
+                    })
+            }
+
+            Mock -ModuleName Monarch Get-ADUser {
+                @([PSCustomObject]@{
+                        SamAccountName = 'activeAdmin'
+                        DisplayName    = 'Active Admin'
+                        Enabled        = $true
+                        AdminCount     = 1
+                        MemberOf       = @($domainAdminsDN)
+                    })
+            }
+
+            $script:noOrphansDir = Join-Path $TestDrive 'csv-no-orphans'
+            New-Item -ItemType Directory -Path $script:noOrphansDir -Force | Out-Null
+            $script:result = Find-AdminCountOrphan -OutputPath $script:noOrphansDir
+        }
+
+        It 'does not write a file when there are no orphans' {
+            Join-Path $noOrphansDir 'admincount-orphans.csv' | Should -Not -Exist
+        }
+
+        It 'CSVPath is null when no file written' {
+            $result.CSVPath | Should -BeNullOrEmpty
         }
     }
 }
@@ -5333,6 +5522,280 @@ Describe 'Invoke-DomainAudit' {
     Context 'Non-Discovery phase' {
         It 'throws not-implemented error' {
             { Invoke-DomainAudit -Phase Remediation -OutputPath $TestDrive } | Should -Throw '*not yet implemented*'
+        }
+    }
+
+    Context 'Roastable CSV combine — both functions return accounts' {
+
+        BeforeAll {
+            # Two SPNs on the kerberoast account — verifies array-to-string join fires correctly.
+            # Without the join, PS would serialise the array as "HTTP/h1 HTTP/h2" (space-separated)
+            # rather than the intended "HTTP/h1; HTTP/h2".
+            Mock -ModuleName Monarch Find-KerberoastableAccount {
+                [PSCustomObject]@{
+                    Domain = 'PrivilegedAccess'; Function = 'Find-KerberoastableAccount'
+                    Timestamp = Get-Date; Warnings = @()
+                    Accounts = @(
+                        [PSCustomObject]@{
+                            SamAccountName  = 'svcAcct'
+                            DisplayName     = 'Service Account'
+                            SPNs            = @('HTTP/host1.test.local', 'HTTP/host2.test.local')
+                            IsPrivileged    = $false
+                            PasswordAgeDays = 200
+                            Enabled         = $true
+                        }
+                    )
+                }
+            }
+
+            Mock -ModuleName Monarch Find-ASREPRoastableAccount {
+                [PSCustomObject]@{
+                    Domain = 'PrivilegedAccess'; Function = 'Find-ASREPRoastableAccount'
+                    Timestamp = Get-Date; Warnings = @()
+                    Accounts = @(
+                        [PSCustomObject]@{
+                            SamAccountName = 'asrepUser'
+                            DisplayName    = 'ASREP User'
+                            IsPrivileged   = $false
+                            Enabled        = $true
+                        }
+                    )
+                }
+            }
+
+            $script:outDir = Join-Path $TestDrive 'roast-both'
+            $script:result = Invoke-DomainAudit -Phase Discovery -OutputPath $script:outDir
+            $script:csvFile = Join-Path $outDir '03-Privileged-Access' 'roastable-accounts.csv'
+        }
+
+        It 'writes roastable-accounts.csv' {
+            $csvFile | Should -Exist
+        }
+
+        It 'contains one row per account' {
+            Import-Csv $csvFile | Should -HaveCount 2
+        }
+
+        It 'Kerberoast row has correct ThreatType and non-empty SPNs' {
+            $row = Import-Csv $csvFile | Where-Object ThreatType -eq 'Kerberoast'
+            $row | Should -Not -BeNullOrEmpty
+            $row.SPNs | Should -Not -BeNullOrEmpty
+        }
+
+        It 'multi-SPN array is joined with "; "' {
+            $row = Import-Csv $csvFile | Where-Object ThreatType -eq 'Kerberoast'
+            $row.SPNs | Should -Be 'HTTP/host1.test.local; HTTP/host2.test.local'
+        }
+
+        It 'ASREP row has correct ThreatType and empty SPNs and PasswordAgeDays' {
+            $row = Import-Csv $csvFile | Where-Object ThreatType -eq 'ASREP'
+            $row | Should -Not -BeNullOrEmpty
+            # Empty string is correct signal — ASREP accounts have no SPNs or password age
+            $row.SPNs | Should -BeNullOrEmpty
+            $row.PasswordAgeDays | Should -BeNullOrEmpty
+        }
+    }
+
+    Context 'Roastable CSV combine — only Kerberoast returns accounts' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Find-KerberoastableAccount {
+                [PSCustomObject]@{
+                    Domain = 'PrivilegedAccess'; Function = 'Find-KerberoastableAccount'
+                    Timestamp = Get-Date; Warnings = @()
+                    Accounts = @(
+                        [PSCustomObject]@{
+                            SamAccountName  = 'svcAcct'
+                            DisplayName     = 'Service Account'
+                            SPNs            = @('HTTP/host.test.local')
+                            IsPrivileged    = $false
+                            PasswordAgeDays = 100
+                            Enabled         = $true
+                        }
+                    )
+                }
+            }
+
+            Mock -ModuleName Monarch Find-ASREPRoastableAccount {
+                [PSCustomObject]@{
+                    Domain = 'PrivilegedAccess'; Function = 'Find-ASREPRoastableAccount'
+                    Timestamp = Get-Date; Warnings = @()
+                    Accounts = @()
+                }
+            }
+
+            $script:outDir = Join-Path $TestDrive 'roast-kerb-only'
+            $script:result = Invoke-DomainAudit -Phase Discovery -OutputPath $script:outDir
+            $script:csvFile = Join-Path $outDir '03-Privileged-Access' 'roastable-accounts.csv'
+        }
+
+        It 'writes file when only Kerberoast has accounts' {
+            $csvFile | Should -Exist
+        }
+
+        It 'all rows have ThreatType Kerberoast' {
+            $rows = Import-Csv $csvFile
+            $rows | ForEach-Object { $_.ThreatType | Should -Be 'Kerberoast' }
+        }
+    }
+
+    Context 'Roastable CSV combine — only ASREP returns accounts' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Find-KerberoastableAccount {
+                [PSCustomObject]@{
+                    Domain = 'PrivilegedAccess'; Function = 'Find-KerberoastableAccount'
+                    Timestamp = Get-Date; Warnings = @()
+                    Accounts = @()
+                }
+            }
+
+            Mock -ModuleName Monarch Find-ASREPRoastableAccount {
+                [PSCustomObject]@{
+                    Domain = 'PrivilegedAccess'; Function = 'Find-ASREPRoastableAccount'
+                    Timestamp = Get-Date; Warnings = @()
+                    Accounts = @(
+                        [PSCustomObject]@{
+                            SamAccountName = 'asrepUser'
+                            DisplayName    = 'ASREP User'
+                            IsPrivileged   = $false
+                            Enabled        = $true
+                        }
+                    )
+                }
+            }
+
+            $script:outDir = Join-Path $TestDrive 'roast-asrep-only'
+            $script:result = Invoke-DomainAudit -Phase Discovery -OutputPath $script:outDir
+            $script:csvFile = Join-Path $outDir '03-Privileged-Access' 'roastable-accounts.csv'
+        }
+
+        It 'writes file when only ASREP has accounts' {
+            $csvFile | Should -Exist
+        }
+
+        It 'all rows have ThreatType ASREP' {
+            $rows = Import-Csv $csvFile
+            $rows | ForEach-Object { $_.ThreatType | Should -Be 'ASREP' }
+        }
+    }
+
+    Context 'Roastable CSV combine — both return 0 accounts' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Find-KerberoastableAccount {
+                [PSCustomObject]@{
+                    Domain = 'PrivilegedAccess'; Function = 'Find-KerberoastableAccount'
+                    Timestamp = Get-Date; Warnings = @()
+                    Accounts = @()
+                }
+            }
+
+            Mock -ModuleName Monarch Find-ASREPRoastableAccount {
+                [PSCustomObject]@{
+                    Domain = 'PrivilegedAccess'; Function = 'Find-ASREPRoastableAccount'
+                    Timestamp = Get-Date; Warnings = @()
+                    Accounts = @()
+                }
+            }
+
+            $script:outDir = Join-Path $TestDrive 'roast-none'
+            $script:result = Invoke-DomainAudit -Phase Discovery -OutputPath $script:outDir
+        }
+
+        It 'does not write roastable-accounts.csv when both return 0 accounts' {
+            Join-Path $outDir '03-Privileged-Access' 'roastable-accounts.csv' | Should -Not -Exist
+        }
+    }
+
+    Context 'Roastable CSV combine — Kerberoast threw, ASREP rows still write' {
+
+        BeforeAll {
+            # Kerberoast lands in $failures — Where-Object finds nothing and assigns $null.
+            # Without an explicit null guard, @($null) produces a single-element array in PS,
+            # so the foreach iterates once with $a = $null, creating a garbage row with
+            # ThreatType='Kerberoast' but empty SamAccountName. The guard must block this.
+            Mock -ModuleName Monarch Find-KerberoastableAccount { throw 'SPN query failed' }
+
+            Mock -ModuleName Monarch Find-ASREPRoastableAccount {
+                [PSCustomObject]@{
+                    Domain = 'PrivilegedAccess'; Function = 'Find-ASREPRoastableAccount'
+                    Timestamp = Get-Date; Warnings = @()
+                    Accounts = @(
+                        [PSCustomObject]@{
+                            SamAccountName = 'asrepUser'
+                            DisplayName    = 'ASREP User'
+                            IsPrivileged   = $false
+                            Enabled        = $true
+                        }
+                    )
+                }
+            }
+
+            $script:outDir = Join-Path $TestDrive 'roast-kerb-threw'
+            $script:result = Invoke-DomainAudit -Phase Discovery -OutputPath $script:outDir
+            $script:csvFile = Join-Path $outDir '03-Privileged-Access' 'roastable-accounts.csv'
+        }
+
+        It 'still writes CSV when Kerberoast threw' {
+            $csvFile | Should -Exist
+        }
+
+        It 'contains only ASREP rows — no null garbage row from the failed function' {
+            $rows = Import-Csv $csvFile
+            $rows | Should -HaveCount 1
+            $rows[0].ThreatType | Should -Be 'ASREP'
+        }
+
+        It 'Kerberoast failure is recorded in orchestrator Failures' {
+            $result.Failures | Where-Object Function -eq 'Find-KerberoastableAccount' | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'Roastable CSV combine — Export-Csv throws' {
+
+        BeforeAll {
+            Mock -ModuleName Monarch Find-KerberoastableAccount {
+                [PSCustomObject]@{
+                    Domain = 'PrivilegedAccess'; Function = 'Find-KerberoastableAccount'
+                    Timestamp = Get-Date; Warnings = @()
+                    Accounts = @(
+                        [PSCustomObject]@{
+                            SamAccountName  = 'svcAcct'
+                            DisplayName     = 'Service Account'
+                            SPNs            = @('HTTP/host.test.local')
+                            IsPrivileged    = $false
+                            PasswordAgeDays = 100
+                            Enabled         = $true
+                        }
+                    )
+                }
+            }
+
+            Mock -ModuleName Monarch Find-ASREPRoastableAccount {
+                [PSCustomObject]@{
+                    Domain = 'PrivilegedAccess'; Function = 'Find-ASREPRoastableAccount'
+                    Timestamp = Get-Date; Warnings = @()
+                    Accounts = @(
+                        [PSCustomObject]@{
+                            SamAccountName = 'asrepUser'
+                            DisplayName    = 'ASREP User'
+                            IsPrivileged   = $false
+                            Enabled        = $true
+                        }
+                    )
+                }
+            }
+
+            Mock -ModuleName Monarch Export-Csv { throw 'disk full' }
+            Mock -ModuleName Monarch Write-Warning {}
+
+            $script:outDir = Join-Path $TestDrive 'roast-exportfail'
+            $script:result = Invoke-DomainAudit -Phase Discovery -OutputPath $script:outDir
+        }
+
+        It 'emits Write-Warning with combine context' {
+            Should -Invoke Write-Warning -ModuleName Monarch -Times 1 -ParameterFilter { $Message -match 'combine' }
         }
     }
 }

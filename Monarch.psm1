@@ -764,7 +764,7 @@ function Find-DormantAccount {
 
 function Get-PrivilegedGroupMembership {
     [CmdletBinding()]
-    param([string]$Server)
+    param([string]$Server, [string]$OutputPath)
 
     $timestamp = Get-Date
     $warnings = [System.Collections.Generic.List[string]]::new()
@@ -837,6 +837,21 @@ function Get-PrivilegedGroupMembership {
         }
     }
 
+    $csvPath = $null
+    if ($OutputPath) {
+        $flatMembers = foreach ($g in $groups) {
+            foreach ($m in $g.Members) {
+                $m | Select-Object SamAccountName, @{n='GroupName';e={$g.GroupName}},
+                    DisplayName, ObjectType, IsDirect, IsEnabled, LastLogon
+            }
+        }
+        $flatMembers = @($flatMembers | Sort-Object SamAccountName)
+        if ($flatMembers.Count -gt 0) {
+            $csvPath = Join-Path $OutputPath 'privileged-groups.csv'
+            $flatMembers | Export-Csv -Path $csvPath -NoTypeInformation
+        }
+    }
+
     # --- Section 3: Domain Admin status ---
     $daGroup = $groups | Where-Object { $_.GroupSID -like '*-512' }
     $daCount = if ($daGroup) { $daGroup.MemberCount } else { 0 }
@@ -853,13 +868,14 @@ function Get-PrivilegedGroupMembership {
         Groups            = @($groups)
         DomainAdminCount  = $daCount
         DomainAdminStatus = $daStatus
+        CSVPath           = $csvPath
         Warnings          = @($warnings)
     }
 }
 
 function Find-AdminCountOrphan {
     [CmdletBinding()]
-    param([string]$Server)
+    param([string]$Server, [string]$OutputPath)
 
     $timestamp = Get-Date
     $warnings = [System.Collections.Generic.List[string]]::new()
@@ -908,12 +924,21 @@ function Find-AdminCountOrphan {
         $warnings.Add("AdminCountQuery: $_")
     }
 
+    $csvPath = $null
+    if ($OutputPath -and $orphans.Count -gt 0) {
+        $csvPath = Join-Path $OutputPath 'admincount-orphans.csv'
+        $orphans | Select-Object SamAccountName, DisplayName, Enabled,
+            @{n='MemberOf';e={$_.MemberOf -join '; '}} |
+            Export-Csv -Path $csvPath -NoTypeInformation
+    }
+
     [PSCustomObject]@{
         Domain    = 'PrivilegedAccess'
         Function  = 'Find-AdminCountOrphan'
         Timestamp = $timestamp
         Orphans   = @($orphans)
         Count     = $orphans.Count
+        CSVPath   = $csvPath
         Warnings  = @($warnings)
     }
 }
@@ -3061,8 +3086,8 @@ function Invoke-DomainAudit
         @{ Name = 'Export-GPOAudit';               Domain = 'GroupPolicy';          Params = @{ Server = $dc; OutputPath = $dirs.GPO; IncludePermissions = $true; IncludeWMIFilters = $true } }
         @{ Name = 'Find-UnlinkedGPO';              Domain = 'GroupPolicy';          Params = @{ Server = $dc } }
         @{ Name = 'Find-GPOPermissionAnomaly';     Domain = 'GroupPolicy';          Params = @{ Server = $dc } }
-        @{ Name = 'Get-PrivilegedGroupMembership'; Domain = 'PrivilegedAccess';     Params = @{ Server = $dc } }
-        @{ Name = 'Find-AdminCountOrphan';         Domain = 'PrivilegedAccess';     Params = @{ Server = $dc } }
+        @{ Name = 'Get-PrivilegedGroupMembership'; Domain = 'PrivilegedAccess';     Params = @{ Server = $dc; OutputPath = $dirs.Priv } }
+        @{ Name = 'Find-AdminCountOrphan';         Domain = 'PrivilegedAccess';     Params = @{ Server = $dc; OutputPath = $dirs.Priv } }
         @{ Name = 'Find-KerberoastableAccount';    Domain = 'PrivilegedAccess';     Params = @{ Server = $dc } }
         @{ Name = 'Find-ASREPRoastableAccount';    Domain = 'PrivilegedAccess';     Params = @{ Server = $dc } }
         @{ Name = 'Find-DormantAccount';           Domain = 'IdentityLifecycle';    Params = @{ Server = $dc; OutputPath = $dirs.Dormant } }
@@ -3093,6 +3118,36 @@ function Invoke-DomainAudit
             $failures.Add([PSCustomObject]@{ Function = $call.Name; Error = $_.Exception.Message })
             $dispositions.Add([PSCustomObject]@{ Function = $call.Name; Domain = $call.Domain; Disposition = 'NotAssessed'; Error = $_.Exception.Message })
         }
+    }
+
+    # Combine roastable accounts into a single CSV
+    try {
+        $kerbResult  = $results | Where-Object { $_.Function -eq 'Find-KerberoastableAccount' }
+        $asrepResult = $results | Where-Object { $_.Function -eq 'Find-ASREPRoastableAccount' }
+        $rows = [System.Collections.Generic.List[PSCustomObject]]::new()
+        if ($kerbResult) {
+            foreach ($a in @($kerbResult.Accounts)) {
+                $rows.Add([PSCustomObject]@{
+                    ThreatType = 'Kerberoast'; SamAccountName = $a.SamAccountName
+                    DisplayName = $a.DisplayName; IsPrivileged = $a.IsPrivileged
+                    Enabled = $a.Enabled; SPNs = ($a.SPNs -join '; '); PasswordAgeDays = $a.PasswordAgeDays
+                })
+            }
+        }
+        if ($asrepResult) {
+            foreach ($a in @($asrepResult.Accounts)) {
+                $rows.Add([PSCustomObject]@{
+                    ThreatType = 'ASREP'; SamAccountName = $a.SamAccountName
+                    DisplayName = $a.DisplayName; IsPrivileged = $a.IsPrivileged
+                    Enabled = $a.Enabled; SPNs = $null; PasswordAgeDays = $null
+                })
+            }
+        }
+        if ($rows.Count -gt 0) {
+            $rows | Export-Csv -Path (Join-Path $dirs.Priv 'roastable-accounts.csv') -NoTypeInformation
+        }
+    } catch {
+        Write-Warning "Roastable CSV combine failed: $_"
     }
 
     # Generate report and return
