@@ -4780,7 +4780,9 @@ Describe 'New-MonarchReport' {
                         TombstoneLifetimeDays = 180; RecycleBinEnabled = $true; Warnings = @() 
                     }
                     [PSCustomObject]@{ Domain = 'BackupReadiness'; Function = 'Test-TombstoneGap'
-                        TombstoneLifetimeDays = 180; Warnings = @() 
+                        TombstoneLifetimeDays = 180; CriticalGap = $true; BackupAgeDays = 200
+                        DiagnosticHint = 'Last backup (200 days) exceeds tombstone lifetime (180 days) -- recovery may cause USN rollback.'
+                        Warnings = @()
                     }
                 )
                 Failures = @()
@@ -5256,7 +5258,9 @@ Describe 'New-MonarchReport' {
                             [PSCustomObject]@{ SamAccountName = 'admin1'; PrivilegedGroups = @('Domain Admins'); HasSPN = $false }
                             [PSCustomObject]@{ SamAccountName = 'admin2'; PrivilegedGroups = @('Domain Admins'); HasSPN = $false }
                         )
-                        ProtectedUsersMembers = @(); DiagnosticHint = $null; Warnings = @()
+                        ProtectedUsersMembers = @()
+                        DiagnosticHint = 'WARNING: 1 gap account(s) have SPNs (service accounts). Adding service accounts to Protected Users disables Kerberos delegation and blocks NTLM. Review each account before adding -- blanket addition will break service authentication.'
+                        Warnings = @()
                     }
                     [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Find-LegacyProtocolExposure'
                         DCFindings = @(
@@ -5303,7 +5307,9 @@ Describe 'New-MonarchReport' {
                         GapAccounts = @(
                             [PSCustomObject]@{ SamAccountName = 'admin1'; PrivilegedGroups = @('Domain Admins'); HasSPN = $false }
                         )
-                        ProtectedUsersMembers = @(); DiagnosticHint = $null; Warnings = @()
+                        ProtectedUsersMembers = @()
+                        DiagnosticHint = 'WARNING: 1 gap account(s) have SPNs (service accounts). Adding service accounts to Protected Users disables Kerberos delegation and blocks NTLM. Review each account before adding -- blanket addition will break service authentication.'
+                        Warnings = @()
                     }
                 )
                 Failures = @()
@@ -5329,7 +5335,9 @@ Describe 'New-MonarchReport' {
                         GapAccounts = @(
                             [PSCustomObject]@{ SamAccountName = 'admin1'; PrivilegedGroups = @('Domain Admins'); HasSPN = $false }
                         )
-                        ProtectedUsersMembers = @(); DiagnosticHint = $null; Warnings = @()
+                        ProtectedUsersMembers = @()
+                        DiagnosticHint = 'WARNING: 1 gap account(s) have SPNs (service accounts). Adding service accounts to Protected Users disables Kerberos delegation and blocks NTLM. Review each account before adding -- blanket addition will break service authentication.'
+                        Warnings = @()
                     }
                     [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Find-LegacyProtocolExposure'
                         DCFindings = @(
@@ -5365,7 +5373,9 @@ Describe 'New-MonarchReport' {
                         GapAccounts = @(
                             [PSCustomObject]@{ SamAccountName = 'admin1'; PrivilegedGroups = @('Domain Admins'); HasSPN = $false }
                         )
-                        ProtectedUsersMembers = @(); DiagnosticHint = $null; Warnings = @()
+                        ProtectedUsersMembers = @()
+                        DiagnosticHint = 'WARNING: 1 gap account(s) have SPNs (service accounts). Adding service accounts to Protected Users disables Kerberos delegation and blocks NTLM. Review each account before adding -- blanket addition will break service authentication.'
+                        Warnings = @()
                     }
                 )
                 Failures = @()
@@ -5384,6 +5394,134 @@ Describe 'New-MonarchReport' {
 
         It 'Legacy Exposure absent when Find-LegacyProtocolExposure not present' {
             $content | Should -Not -Match 'Legacy Exposure'
+        }
+    }
+
+    # -------------------------------------------------------------------------
+    # DiagnosticHint flow-through: hint reaches card HTML for all four paths
+    # -------------------------------------------------------------------------
+
+    Context 'DiagnosticHint flow-through -- Get-BackupReadinessStatus critical' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'hint-backup'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'BackupReadiness'; Function = 'Get-BackupReadinessStatus'
+                        CriticalGap = $true; DetectionTier = 3; BackupToolDetected = 'Veeam'
+                        TombstoneLifetimeDays = 180; RecycleBinEnabled = $true
+                        DiagnosticHint = 'backup-hint-test-string'
+                        Warnings = @()
+                    }
+                )
+                Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'hint text appears in rendered HTML' {
+            $content | Should -Match 'backup-hint-test-string'
+        }
+
+        It 'hint is wrapped in diagnostic-hint div' {
+            $content | Should -Match "class='diagnostic-hint'"
+        }
+    }
+
+    Context 'DiagnosticHint flow-through -- Get-ReplicationHealth list' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'hint-replication'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-ReplicationHealth'
+                        FailedLinkCount = 1; WarningLinkCount = 0
+                        DiagnosticHints = @('repl-hint-entry-1', 'repl-hint-entry-2')
+                        Warnings = @()
+                    }
+                )
+                Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'first list entry appears in rendered HTML' {
+            $content | Should -Match 'repl-hint-entry-1'
+        }
+
+        It 'second list entry appears in rendered HTML' {
+            $content | Should -Match 'repl-hint-entry-2'
+        }
+
+        It 'each entry is in its own diagnostic-hint div' {
+            ([regex]::Matches($content, "class='diagnostic-hint'")).Count | Should -BeGreaterOrEqual 2
+        }
+    }
+
+    Context 'DiagnosticHint flow-through -- Test-ProtectedUsersGap advisory' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'hint-protectedusers'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'SecurityPosture'; Function = 'Test-ProtectedUsersGap'
+                        GapAccounts = @(
+                            [PSCustomObject]@{ SamAccountName = 'svc1'; PrivilegedGroups = @('Domain Admins'); HasSPN = $true }
+                        )
+                        ProtectedUsersMembers = @()
+                        DiagnosticHint = 'protectedusers-hint-test-string'
+                        Warnings = @()
+                    }
+                )
+                Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'hint text appears in rendered HTML' {
+            $content | Should -Match 'protectedusers-hint-test-string'
+        }
+
+        It 'hint is wrapped in diagnostic-hint div' {
+            $content | Should -Match "class='diagnostic-hint'"
+        }
+    }
+
+    Context 'DiagnosticHint flow-through -- Test-TombstoneGap critical' {
+        BeforeAll {
+            $script:outDir = Join-Path $TestDrive 'hint-tombstone'
+            New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null
+            $script:mockResults = [PSCustomObject]@{
+                Phase = 'Discovery'; Domain = 'contoso.com'; DCUsed = 'DC01.contoso.com'
+                StartTime = [datetime]'2026-03-25 14:00'; EndTime = [datetime]'2026-03-25 14:05'
+                Results = @(
+                    [PSCustomObject]@{ Domain = 'BackupReadiness'; Function = 'Test-TombstoneGap'
+                        TombstoneLifetimeDays = 180; CriticalGap = $true; BackupAgeDays = 200
+                        DiagnosticHint = 'tombstone-hint-test-string'
+                        Warnings = @()
+                    }
+                )
+                Failures = @()
+            }
+            $script:result = New-MonarchReport -Results $script:mockResults -OutputPath $script:outDir
+            $script:content = Get-Content $script:result -Raw
+        }
+
+        It 'hint text appears in rendered HTML' {
+            $content | Should -Match 'tombstone-hint-test-string'
+        }
+
+        It 'hint is wrapped in diagnostic-hint div' {
+            $content | Should -Match "class='diagnostic-hint'"
         }
     }
 }
