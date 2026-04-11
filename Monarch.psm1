@@ -2559,11 +2559,11 @@ function New-MonarchReport
         $dn = if ($domainNames.ContainsKey($r.Domain)) { $domainNames[$r.Domain] } else { $r.Domain }
         switch ($r.Function) {
             'Get-BackupReadinessStatus' {
-                if ($r.CriticalGap -eq $true) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'Backup age exceeds tombstone lifetime (USN rollback risk)'; DiagnosticHint = $r.DiagnosticHint }) }
+                if ($r.CriticalGap -eq $true) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'Backup age exceeds tombstone lifetime (USN rollback risk)'; DiagnosticHint = ($r | Select-Object -ExpandProperty DiagnosticHint -ErrorAction SilentlyContinue) }) }
                 if ($r.DetectionTier -eq 1 -and $null -eq $r.BackupToolDetected) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'No backup tool detected (verify backup coverage manually)' }) }
             }
             'Get-ReplicationHealth' {
-                if ($r.FailedLinkCount -gt 0) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.FailedLinkCount) replication links failing"; DiagnosticHint = $r.DiagnosticHints }) }
+                if ($r.FailedLinkCount -gt 0) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.FailedLinkCount) replication links failing"; DiagnosticHint = ($r | Select-Object -ExpandProperty DiagnosticHints -ErrorAction SilentlyContinue) }) }
                 if ($r.WarningLinkCount -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.WarningLinkCount) replication links approaching threshold" }) }
             }
             'Get-PrivilegedGroupMembership' {
@@ -2601,7 +2601,7 @@ function New-MonarchReport
                         $eaCount = if ($eaGrp) { $eaGrp.MemberCount } else { 0 }
                         $gapDesc += " (includes $daCount DAs, $eaCount EAs)"
                     }
-                    $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = $gapDesc; DiagnosticHint = $r.DiagnosticHint })
+                    $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = $gapDesc; DiagnosticHint = ($r | Select-Object -ExpandProperty DiagnosticHint -ErrorAction SilentlyContinue) })
                 }
             }
             'Find-AdminCountOrphan' {
@@ -2687,7 +2687,7 @@ function New-MonarchReport
                 }
             }
             'Test-TombstoneGap' {
-                if ($r.CriticalGap -eq $true) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'Backup age exceeds tombstone lifetime (USN rollback risk)'; DiagnosticHint = $r.DiagnosticHint }) }
+                if ($r.CriticalGap -eq $true) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'Backup age exceeds tombstone lifetime (USN rollback risk)'; DiagnosticHint = ($r | Select-Object -ExpandProperty DiagnosticHint -ErrorAction SilentlyContinue) }) }
             }
         }
     }
@@ -2773,7 +2773,7 @@ function New-MonarchReport
     if ($criticalCount -gt 0) {
         $html += "<div class='critical-section'><div class='section-label critical'>Critical Findings</div>"
         foreach ($c in $criticals) {
-            $hintHtml = (@($c.DiagnosticHint) | Where-Object { $_ } | ForEach-Object { "<div class='diagnostic-hint'>$_</div>" }) -join ''
+            $hintHtml = (@($c | Select-Object -ExpandProperty DiagnosticHint -ErrorAction SilentlyContinue) | Where-Object { $_ } | ForEach-Object { "<div class='diagnostic-hint'>$_</div>" }) -join ''
             $html += "<div class='card w-critical'><div class='domain-tag'>$($c.DisplayDomain)</div><div class='description'>$($c.Description)</div>$hintHtml</div>"
         }
         $html += "</div>"
@@ -2901,7 +2901,7 @@ function New-MonarchReport
         # Advisory cards for this domain
         $domainAdvisories = @($advisories | Where-Object { $_.Domain -eq $d })
         foreach ($a in $domainAdvisories) {
-            $hintHtml = (@($a.DiagnosticHint) | Where-Object { $_ } | ForEach-Object { "<div class='diagnostic-hint'>$_</div>" }) -join ''
+            $hintHtml = (@($a | Select-Object -ExpandProperty DiagnosticHint -ErrorAction SilentlyContinue) | Where-Object { $_ } | ForEach-Object { "<div class='diagnostic-hint'>$_</div>" }) -join ''
             $html += "<div class='card w-advisory'><div class='adv-label'>Advisory</div><div class='description'>$($a.Description)</div>$hintHtml</div>"
         }
 
@@ -3119,8 +3119,9 @@ function Invoke-DomainAudit
             $params = $call.Params
             if ($call.Name -eq 'Test-TombstoneGap') {
                 $prior = $results | Where-Object { $_.Function -eq 'Get-BackupReadinessStatus' } | Select-Object -First 1
-                if ($null -ne $prior.LastBackupAge) {
-                    $params = $params.Clone(); $params['BackupAgeDays'] = [int]$prior.LastBackupAge.TotalDays
+                $age = if ($prior) { $prior | Select-Object -ExpandProperty LastBackupAge -ErrorAction SilentlyContinue } else { $null }
+                if ($null -ne $age) {
+                    $params = $params.Clone(); $params['BackupAgeDays'] = [int]$age.TotalDays
                 }
             }
             $results.Add((& $call.Name @params))

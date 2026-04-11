@@ -75,6 +75,7 @@ elsewhere). Work:
   when the critical/advisory object has a non-null `DiagnosticHint`. If
   one of the paths doesn't emit yet, add the emit — same class, same
   shape.
+- **Strict mode / shared loop:** `Set-StrictMode -Version Latest` is active. The card rendering loops are shared by all functions, not just the four in scope. Accessing `$c.DiagnosticHint` directly throws when the property is absent. All property accesses on card objects and source result objects must use `Select-Object -ExpandProperty ... -ErrorAction SilentlyContinue`.
 - For a scalar `DiagnosticHint`: one `<div class="diagnostic-hint">` with
   the text.
 - For a list (only `Get-ReplicationHealth` today): one `<div
