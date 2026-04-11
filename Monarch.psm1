@@ -2559,11 +2559,11 @@ function New-MonarchReport
         $dn = if ($domainNames.ContainsKey($r.Domain)) { $domainNames[$r.Domain] } else { $r.Domain }
         switch ($r.Function) {
             'Get-BackupReadinessStatus' {
-                if ($r.CriticalGap -eq $true) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'Backup age exceeds tombstone lifetime (USN rollback risk)' }) }
+                if ($r.CriticalGap -eq $true) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'Backup age exceeds tombstone lifetime (USN rollback risk)'; DiagnosticHint = $r.DiagnosticHint }) }
                 if ($r.DetectionTier -eq 1 -and $null -eq $r.BackupToolDetected) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'No backup tool detected (verify backup coverage manually)' }) }
             }
             'Get-ReplicationHealth' {
-                if ($r.FailedLinkCount -gt 0) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.FailedLinkCount) replication links failing" }) }
+                if ($r.FailedLinkCount -gt 0) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.FailedLinkCount) replication links failing"; DiagnosticHint = $r.DiagnosticHints }) }
                 if ($r.WarningLinkCount -gt 0) { $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = "$($r.WarningLinkCount) replication links approaching threshold" }) }
             }
             'Get-PrivilegedGroupMembership' {
@@ -2601,7 +2601,7 @@ function New-MonarchReport
                         $eaCount = if ($eaGrp) { $eaGrp.MemberCount } else { 0 }
                         $gapDesc += " (includes $daCount DAs, $eaCount EAs)"
                     }
-                    $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = $gapDesc })
+                    $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = $gapDesc; DiagnosticHint = $r.DiagnosticHint })
                 }
             }
             'Find-AdminCountOrphan' {
@@ -2686,6 +2686,9 @@ function New-MonarchReport
                     $advisories.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = $fsmoDesc })
                 }
             }
+            'Test-TombstoneGap' {
+                if ($r.CriticalGap -eq $true) { $criticals.Add([PSCustomObject]@{ Domain = $r.Domain; DisplayDomain = $dn; Description = 'Backup age exceeds tombstone lifetime (USN rollback risk)'; DiagnosticHint = $r.DiagnosticHint }) }
+            }
         }
     }
 
@@ -2716,7 +2719,7 @@ function New-MonarchReport
         ".card.w-advisory{border-left:3px solid var(--severity-advisory)}.card.w-neutral{border-left:3px solid var(--border-2)}" +
         ".card .domain-tag{font-size:var(--t5);line-height:1;color:var(--text-2);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:var(--gap-micro)}" +
         ".card .description{font-size:var(--t4);line-height:1.35;font-weight:500}" +
-        ".card .action-hint{font-size:var(--t5);line-height:1.4;color:var(--text-2);margin-top:var(--gap-micro)}" +
+        ".card .diagnostic-hint{font-size:var(--t5);line-height:1.4;color:var(--text-2);margin-top:var(--gap-micro)}" +
         ".card .adv-label{font-size:var(--t5);line-height:1;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-2);margin-bottom:var(--gap-micro)}" +
         ".critical-section{margin-bottom:var(--gap-separate)}" +
         ".domain-section{border-top:1px solid var(--border-1);padding-top:var(--gap-tight);margin-top:calc(var(--gap-separate) - var(--gap-tight))}" +
@@ -2770,7 +2773,8 @@ function New-MonarchReport
     if ($criticalCount -gt 0) {
         $html += "<div class='critical-section'><div class='section-label critical'>Critical Findings</div>"
         foreach ($c in $criticals) {
-            $html += "<div class='card w-critical'><div class='domain-tag'>$($c.DisplayDomain)</div><div class='description'>$($c.Description)</div></div>"
+            $hintHtml = (@($c.DiagnosticHint) | Where-Object { $_ } | ForEach-Object { "<div class='diagnostic-hint'>$_</div>" }) -join ''
+            $html += "<div class='card w-critical'><div class='domain-tag'>$($c.DisplayDomain)</div><div class='description'>$($c.Description)</div>$hintHtml</div>"
         }
         $html += "</div>"
     }
@@ -2897,7 +2901,8 @@ function New-MonarchReport
         # Advisory cards for this domain
         $domainAdvisories = @($advisories | Where-Object { $_.Domain -eq $d })
         foreach ($a in $domainAdvisories) {
-            $html += "<div class='card w-advisory'><div class='adv-label'>Advisory</div><div class='description'>$($a.Description)</div></div>"
+            $hintHtml = (@($a.DiagnosticHint) | Where-Object { $_ } | ForEach-Object { "<div class='diagnostic-hint'>$_</div>" }) -join ''
+            $html += "<div class='card w-advisory'><div class='adv-label'>Advisory</div><div class='description'>$($a.Description)</div>$hintHtml</div>"
         }
 
         # Not-assessed cards for this domain
