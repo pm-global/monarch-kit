@@ -27,10 +27,11 @@ The action-hint div goes after `.description`, inside the card, conditional on `
 | {N} replication links failing | `Get-ReplicationHealth` | 2541 |
 | Domain Admin count exceeds critical threshold | `Get-PrivilegedGroupMembership` | 2545 |
 | Default domain policy stores passwords with reversible encryption | `Get-PasswordPolicyInventory` | 2620 |
-| {N} privileged accounts with SPNs (Kerberoasting risk) | `Find-KerberoastableAccount` | 2565 |
-| {N} accounts with pre-auth disabled ({N} privileged) | `Find-ASREPRoastableAccount` | 2591 |
-| WeakAccountFlag: reversible encryption and/or DES-only (one critical, compound description) | `Find-WeakAccountFlag` | 2602 |
-| {N} FSMO role holders unreachable | `Get-FSMORolePlacement` | 2658 |
+| {N} privileged accounts with SPNs (Kerberoasting risk) | `Find-KerberoastableAccount` | 2590 |
+| {N} accounts with pre-auth disabled ({N} privileged) | `Find-ASREPRoastableAccount` | 2617 |
+| WeakAccountFlag: reversible encryption and/or DES-only (one critical, compound description) | `Find-WeakAccountFlag` | 2627 |
+| {N} high-risk legacy protocol findings (NTLMv1/LM hash) | `Find-LegacyProtocolExposure` | 2633 |
+| {N} FSMO role holders unreachable | `Get-FSMORolePlacement` | 2683 |
 
 ## Design Decisions
 
