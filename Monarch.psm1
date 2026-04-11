@@ -3117,6 +3117,12 @@ function Invoke-DomainAudit
     foreach ($call in $calls) {
         try {
             $params = $call.Params
+            if ($call.Name -eq 'Test-TombstoneGap') {
+                $prior = $results | Where-Object { $_.Function -eq 'Get-BackupReadinessStatus' } | Select-Object -First 1
+                if ($null -ne $prior.LastBackupAge) {
+                    $params = $params.Clone(); $params['BackupAgeDays'] = [int]$prior.LastBackupAge.TotalDays
+                }
+            }
             $results.Add((& $call.Name @params))
             $dispositions.Add([PSCustomObject]@{ Function = $call.Name; Domain = $call.Domain; Disposition = 'Assessed'; Error = $null })
         } catch {
