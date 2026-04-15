@@ -5952,8 +5952,8 @@ Describe 'Invoke-DomainAudit: Verbosity' {
                 Warnings  = @()
             }
 
-            Mock Resolve-MonarchDC             { 'dc01.test.local' }
-            Mock New-MonarchReport             { 'C:\fake\report.html' }
+            Mock Resolve-MonarchDC             { [PSCustomObject]@{ DCName = @('dc01.test.local'); Domain = 'test.local'; Source = 'HealthyDC' } }
+            Mock New-MonarchReport             { 'mock-report.html' }
             Mock Write-Host                    { }
             Mock Write-Progress                { }
 
@@ -5987,96 +5987,96 @@ Describe 'Invoke-DomainAudit: Verbosity' {
 
     It 'Silent — Write-Host is never called' {
         InModuleScope Monarch {
-            Invoke-DomainAudit -Verbosity Silent -OutputPath 'C:\fake'
+            Invoke-DomainAudit -Phase Discovery -Verbosity Silent -OutputPath $TestDrive
             Should -Invoke Write-Host -Times 0 -Exactly
         }
     }
 
     It 'Silent — Write-Progress is never called' {
         InModuleScope Monarch {
-            Invoke-DomainAudit -Verbosity Silent -OutputPath 'C:\fake'
+            Invoke-DomainAudit -Phase Discovery -Verbosity Silent -OutputPath $TestDrive
             Should -Invoke Write-Progress -Times 0 -Exactly
         }
     }
 
     It 'Error — Write-Progress is called' {
         InModuleScope Monarch {
-            Invoke-DomainAudit -Verbosity Error -OutputPath 'C:\fake'
-            Should -Invoke Write-Progress -AtLeast -Times 1
+            Invoke-DomainAudit -Phase Discovery -Verbosity Error -OutputPath $TestDrive
+            Should -Invoke Write-Progress
         }
     }
 
     It 'Error — no Green Write-Host (no OK line)' {
         InModuleScope Monarch {
-            Invoke-DomainAudit -Verbosity Error -OutputPath 'C:\fake'
+            Invoke-DomainAudit -Phase Discovery -Verbosity Error -OutputPath $TestDrive
             Should -Invoke Write-Host -Times 0 -ParameterFilter { $ForegroundColor -eq 'Green' }
         }
     }
 
     It 'Error — failure block written for a failing check' {
+        Mock -ModuleName Monarch Find-LegacyProtocolExposure { throw 'WinRM failed' }
         InModuleScope Monarch {
-            Mock Find-LegacyProtocolExposure { throw 'WinRM failed' }
-            Invoke-DomainAudit -Verbosity Error -OutputPath 'C:\fake'
-            Should -Invoke Write-Host -ParameterFilter { $Object -like 'audit FAILED*' }
+            Invoke-DomainAudit -Phase Discovery -Verbosity Error -OutputPath $TestDrive
+            Should -Invoke Write-Host -ParameterFilter { $Object -like '*audit FAILED*' }
         }
     }
 
     It 'Error — failure block contains exception message' {
+        Mock -ModuleName Monarch Find-LegacyProtocolExposure { throw 'WinRM failed' }
         InModuleScope Monarch {
-            Mock Find-LegacyProtocolExposure { throw 'WinRM failed' }
-            Invoke-DomainAudit -Verbosity Error -OutputPath 'C:\fake'
+            Invoke-DomainAudit -Phase Discovery -Verbosity Error -OutputPath $TestDrive
             Should -Invoke Write-Host -ParameterFilter { $Object -like '*WinRM failed*' -and $ForegroundColor -eq 'Red' }
         }
     }
 
     It 'Warn — OK line written on clean run' {
         InModuleScope Monarch {
-            Invoke-DomainAudit -Verbosity Warn -OutputPath 'C:\fake'
+            Invoke-DomainAudit -Phase Discovery -Verbosity Warn -OutputPath $TestDrive
             Should -Invoke Write-Host -ParameterFilter { $Object -like 'audit OK*' -and $ForegroundColor -eq 'Green' }
         }
     }
 
     It 'Warn — OK line lists failed function name when one check fails' {
+        Mock -ModuleName Monarch Find-LegacyProtocolExposure { throw 'WinRM failed' }
         InModuleScope Monarch {
-            Mock Find-LegacyProtocolExposure { throw 'WinRM failed' }
-            Invoke-DomainAudit -Verbosity Warn -OutputPath 'C:\fake'
+            Invoke-DomainAudit -Phase Discovery -Verbosity Warn -OutputPath $TestDrive
             Should -Invoke Write-Host -ParameterFilter { $Object -like '*Find-LegacyProtocolExposure*' -and $ForegroundColor -eq 'Red' }
         }
     }
 
     It 'Info — per-function narration written' {
         InModuleScope Monarch {
-            Invoke-DomainAudit -Verbosity Info -OutputPath 'C:\fake'
+            Invoke-DomainAudit -Phase Discovery -Verbosity Info -OutputPath $TestDrive
             Should -Invoke Write-Host -ParameterFilter { $Object -like '  audit:*' -and $ForegroundColor -eq 'DarkGray' }
         }
     }
 
     It 'Info — Cyan header line written' {
         InModuleScope Monarch {
-            Invoke-DomainAudit -Verbosity Info -OutputPath 'C:\fake'
+            Invoke-DomainAudit -Phase Discovery -Verbosity Info -OutputPath $TestDrive
             Should -Invoke Write-Host -ParameterFilter { $ForegroundColor -eq 'Cyan' }
         }
     }
 
     It 'Return object intact — Silent' {
         InModuleScope Monarch {
-            $r = Invoke-DomainAudit -Verbosity Silent -OutputPath 'C:\fake'
+            $r = Invoke-DomainAudit -Phase Discovery -Verbosity Silent -OutputPath $TestDrive
             $r.TotalChecks  | Should -Be 25
-            $r.Failures     | Should -Not -Be $null
+            $r.PSObject.Properties.Name | Should -Contain 'Failures'
             $r.Dispositions | Should -Not -BeNullOrEmpty
             $r.Results      | Should -Not -BeNullOrEmpty
-            $r.ReportPath   | Should -Be 'C:\fake\report.html'
+            $r.ReportPath   | Should -Be 'mock-report.html'
         }
     }
 
     It 'Return object intact — Info' {
         InModuleScope Monarch {
-            $r = Invoke-DomainAudit -Verbosity Info -OutputPath 'C:\fake'
+            $r = Invoke-DomainAudit -Phase Discovery -Verbosity Info -OutputPath $TestDrive
             $r.TotalChecks  | Should -Be 25
-            $r.Failures     | Should -Not -Be $null
+            $r.PSObject.Properties.Name | Should -Contain 'Failures'
             $r.Dispositions | Should -Not -BeNullOrEmpty
             $r.Results      | Should -Not -BeNullOrEmpty
-            $r.ReportPath   | Should -Be 'C:\fake\report.html'
+            $r.ReportPath   | Should -Be 'mock-report.html'
         }
     }
 }

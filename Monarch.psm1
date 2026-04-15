@@ -3119,11 +3119,22 @@ function Invoke-DomainAudit
         @{ Name = 'Get-DNSForwarderConfiguration'; Domain = 'DNS';                  Params = @{ Server = $dc } }
     )
 
+    if ($showHeader) {
+        Write-Host ''
+        Write-Host "audit: $($target.Domain)  `u{00B7}  DC: $dc  `u{00B7}  $($calls.Count) checks" -ForegroundColor Cyan
+    }
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $total = $calls.Count
+    $i = 0
+
     # Execute with per-function error isolation and disposition tracking
     $results = [System.Collections.Generic.List[PSCustomObject]]::new()
     $failures = [System.Collections.Generic.List[PSCustomObject]]::new()
     $dispositions = [System.Collections.Generic.List[PSCustomObject]]::new()
     foreach ($call in $calls) {
+        $i++
+        if ($showNarration) { Write-Host "  audit: $($call.Name)..." -ForegroundColor DarkGray }
+        if ($showProgress) { Write-Progress -Activity 'Discovery Audit' -Status "$($call.Name) ($i/$total)" -PercentComplete (($i / $total) * 100) }
         try {
             $params = $call.Params
             if ($call.Name -eq 'Test-TombstoneGap') {
@@ -3138,7 +3149,20 @@ function Invoke-DomainAudit
         } catch {
             $failures.Add([PSCustomObject]@{ Function = $call.Name; Error = $_.Exception.Message })
             $dispositions.Add([PSCustomObject]@{ Function = $call.Name; Domain = $call.Domain; Disposition = 'NotAssessed'; Error = $_.Exception.Message })
+            if ($showFailures) {
+                Write-Host "  audit FAILED: $($call.Name)" -ForegroundColor Red
+                Write-Host "    -> $($_.Exception.Message)" -ForegroundColor Red
+            }
         }
+    }
+
+    if ($showProgress) { Write-Progress -Activity 'Discovery Audit' -Completed }
+    $s = [int]$sw.Elapsed.TotalSeconds
+    $dur = if ($s -ge 60) { "$([int]($s / 60))m $($s % 60)s" } else { "${s}s" }
+    if ($showOK) {
+        $passed = $calls.Count - $failures.Count
+        Write-Host "audit OK: $passed/$($calls.Count) checks ($dur)" -ForegroundColor Green
+        foreach ($f in $failures) { Write-Host "  -> failed: $($f.Function)" -ForegroundColor Red }
     }
 
     # Combine roastable accounts into a single CSV
