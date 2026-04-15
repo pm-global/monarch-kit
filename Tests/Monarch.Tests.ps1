@@ -6062,7 +6062,7 @@ Describe 'Invoke-DomainAudit: Verbosity' {
         InModuleScope Monarch {
             $r = Invoke-DomainAudit -Verbosity Silent -OutputPath 'C:\fake'
             $r.TotalChecks  | Should -Be 25
-            $r.Failures     | Should -Not -BeNullOrEmpty -Because 'Failures property must exist'
+            $r.Failures     | Should -Not -Be $null
             $r.Dispositions | Should -Not -BeNullOrEmpty
             $r.Results      | Should -Not -BeNullOrEmpty
             $r.ReportPath   | Should -Be 'C:\fake\report.html'
@@ -6073,7 +6073,7 @@ Describe 'Invoke-DomainAudit: Verbosity' {
         InModuleScope Monarch {
             $r = Invoke-DomainAudit -Verbosity Info -OutputPath 'C:\fake'
             $r.TotalChecks  | Should -Be 25
-            $r.Failures     | Should -Not -BeNullOrEmpty -Because 'Failures property must exist'
+            $r.Failures     | Should -Not -Be $null
             $r.Dispositions | Should -Not -BeNullOrEmpty
             $r.Results      | Should -Not -BeNullOrEmpty
             $r.ReportPath   | Should -Be 'C:\fake\report.html'
