@@ -3052,13 +3052,21 @@ function Invoke-DomainAudit
         [ValidateSet('Discovery','Review','Remediation','Monitoring','Cleanup')]
         [string]$Phase,
         [string]$Domain,
-        [string]$OutputPath
+        [string]$OutputPath,
+        [ValidateSet('Silent','Error','Warn','Info')]
+        [string]$Verbosity = 'Info'
     )
+
+    $showHeader    = $Verbosity -ne 'Silent'
+    $showProgress  = $Verbosity -ne 'Silent'
+    $showNarration = $Verbosity -eq 'Info'
+    $showFailures  = $Verbosity -ne 'Silent'
+    $showOK        = $Verbosity -in @('Warn', 'Info')
 
     # If hashes fail, call preflight and bail
     $currentHash = (Get-FileHash "$PSScriptRoot\Monarch.psm1" -Algorithm MD5).Hash
     if ($currentHash -ne $script:_moduleHash) {
-        Write-Host 'preflight: module source changed on disk, reloading...' -ForegroundColor DarkGray
+        if ($showNarration) { Write-Host 'preflight: module source changed on disk, reloading...' -ForegroundColor DarkGray }
         Start-Process -FilePath powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -NoExit -File ""$PSScriptRoot\preflight-win.ps1"" -AndMonarch -OutputPath ""$OutputPath"""
         exit
     }
@@ -3066,7 +3074,8 @@ function Invoke-DomainAudit
     if ($Phase -ne 'Discovery') { throw "Phase '$Phase' is not yet implemented." }
 
     # Resolve DC -- fatal if fails
-    $target = Resolve-MonarchDC -Domain $Domain
+    if ($showNarration) { Write-Host '  audit: resolving domain controller...' -ForegroundColor DarkGray }
+    $target = Resolve-MonarchDC -Domain $Domain 6>$null
     $dc = $target.DCName[0]
     $startTime = Get-Date
 
