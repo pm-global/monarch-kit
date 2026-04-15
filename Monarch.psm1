@@ -3056,7 +3056,8 @@ function Invoke-DomainAudit
         [string]$Domain,
         [string]$OutputPath,
         [ValidateSet('Silent','Error','Warn','Info')]
-        [string]$Verbosity = 'Info'
+        [string]$Verbosity = 'Info',
+        [switch]$PassThru
     )
 
     $showHeader    = $Verbosity -ne 'Silent'
@@ -3213,7 +3214,7 @@ function Invoke-DomainAudit
         TotalChecks  = $calls.Count
     }
     $orchestratorResult.ReportPath = New-MonarchReport -Results $orchestratorResult -OutputPath $OutputPath -Verbosity $Verbosity
-    return $orchestratorResult
+    if ($PassThru) { return $orchestratorResult }
 }
 
 #endregion Orchestrator
