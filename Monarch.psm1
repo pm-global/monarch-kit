@@ -3070,7 +3070,7 @@ function Invoke-DomainAudit
     if ($currentHash -ne $script:_moduleHash) {
         if ($showNarration) { Write-Host 'preflight: module source changed on disk, reloading...' -ForegroundColor DarkGray }
         Start-Process -FilePath powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -NoExit -File ""$PSScriptRoot\preflight-win.ps1"" -AndMonarch -OutputPath ""$OutputPath"""
-        exit
+        exit 3  # stale module restart — not an error, not success
     }
 
     if ($Phase -ne 'Discovery') { throw "Phase '$Phase' is not yet implemented." }
