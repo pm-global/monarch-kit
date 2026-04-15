@@ -5937,3 +5937,146 @@ Describe 'Invoke-DomainAudit' {
         }
     }
 }
+
+# =============================================================================
+# Invoke-DomainAudit: Verbosity
+# =============================================================================
+
+Describe 'Invoke-DomainAudit: Verbosity' {
+    BeforeAll {
+        InModuleScope Monarch {
+            $script:mockResult = [PSCustomObject]@{
+                Domain    = 'test.local'
+                Function  = 'MockFn'
+                Timestamp = Get-Date
+                Warnings  = @()
+            }
+
+            Mock Resolve-MonarchDC             { 'dc01.test.local' }
+            Mock New-MonarchReport             { 'C:\fake\report.html' }
+            Mock Write-Host                    { }
+            Mock Write-Progress                { }
+
+            Mock Get-FSMORolePlacement         { $script:mockResult }
+            Mock Get-ReplicationHealth         { $script:mockResult }
+            Mock Get-SiteTopology              { $script:mockResult }
+            Mock Get-ForestDomainLevel         { $script:mockResult }
+            Mock Export-GPOAudit               { $script:mockResult }
+            Mock Find-UnlinkedGPO              { $script:mockResult }
+            Mock Find-GPOPermissionAnomaly     { $script:mockResult }
+            Mock Get-PrivilegedGroupMembership { $script:mockResult }
+            Mock Find-AdminCountOrphan         { $script:mockResult }
+            Mock Find-KerberoastableAccount    { $script:mockResult }
+            Mock Find-ASREPRoastableAccount    { $script:mockResult }
+            Mock Find-DormantAccount           { $script:mockResult }
+            Mock Get-PasswordPolicyInventory   { $script:mockResult }
+            Mock Find-WeakAccountFlag          { $script:mockResult }
+            Mock Test-ProtectedUsersGap        { $script:mockResult }
+            Mock Find-LegacyProtocolExposure   { $script:mockResult }
+            Mock Get-BackupReadinessStatus     { $script:mockResult }
+            Mock Test-TombstoneGap             { $script:mockResult }
+            Mock Get-AuditPolicyConfiguration  { $script:mockResult }
+            Mock Get-EventLogConfiguration     { $script:mockResult }
+            Mock Test-SRVRecordCompleteness    { $script:mockResult }
+            Mock Get-DNSScavengingConfiguration { $script:mockResult }
+            Mock Test-ZoneReplicationScope     { $script:mockResult }
+            Mock Get-DNSForwarderConfiguration { $script:mockResult }
+            Mock New-DomainBaseline            { $script:mockResult }
+        }
+    }
+
+    It 'Silent — Write-Host is never called' {
+        InModuleScope Monarch {
+            Invoke-DomainAudit -Verbosity Silent -OutputPath 'C:\fake'
+            Should -Invoke Write-Host -Times 0 -Exactly
+        }
+    }
+
+    It 'Silent — Write-Progress is never called' {
+        InModuleScope Monarch {
+            Invoke-DomainAudit -Verbosity Silent -OutputPath 'C:\fake'
+            Should -Invoke Write-Progress -Times 0 -Exactly
+        }
+    }
+
+    It 'Error — Write-Progress is called' {
+        InModuleScope Monarch {
+            Invoke-DomainAudit -Verbosity Error -OutputPath 'C:\fake'
+            Should -Invoke Write-Progress -AtLeast -Times 1
+        }
+    }
+
+    It 'Error — no Green Write-Host (no OK line)' {
+        InModuleScope Monarch {
+            Invoke-DomainAudit -Verbosity Error -OutputPath 'C:\fake'
+            Should -Invoke Write-Host -Times 0 -ParameterFilter { $ForegroundColor -eq 'Green' }
+        }
+    }
+
+    It 'Error — failure block written for a failing check' {
+        InModuleScope Monarch {
+            Mock Find-LegacyProtocolExposure { throw 'WinRM failed' }
+            Invoke-DomainAudit -Verbosity Error -OutputPath 'C:\fake'
+            Should -Invoke Write-Host -ParameterFilter { $Object -like 'audit FAILED*' }
+        }
+    }
+
+    It 'Error — failure block contains exception message' {
+        InModuleScope Monarch {
+            Mock Find-LegacyProtocolExposure { throw 'WinRM failed' }
+            Invoke-DomainAudit -Verbosity Error -OutputPath 'C:\fake'
+            Should -Invoke Write-Host -ParameterFilter { $Object -like '*WinRM failed*' -and $ForegroundColor -eq 'Red' }
+        }
+    }
+
+    It 'Warn — OK line written on clean run' {
+        InModuleScope Monarch {
+            Invoke-DomainAudit -Verbosity Warn -OutputPath 'C:\fake'
+            Should -Invoke Write-Host -ParameterFilter { $Object -like 'audit OK*' -and $ForegroundColor -eq 'Green' }
+        }
+    }
+
+    It 'Warn — OK line lists failed function name when one check fails' {
+        InModuleScope Monarch {
+            Mock Find-LegacyProtocolExposure { throw 'WinRM failed' }
+            Invoke-DomainAudit -Verbosity Warn -OutputPath 'C:\fake'
+            Should -Invoke Write-Host -ParameterFilter { $Object -like '*Find-LegacyProtocolExposure*' -and $ForegroundColor -eq 'Red' }
+        }
+    }
+
+    It 'Info — per-function narration written' {
+        InModuleScope Monarch {
+            Invoke-DomainAudit -Verbosity Info -OutputPath 'C:\fake'
+            Should -Invoke Write-Host -ParameterFilter { $Object -like '  audit:*' -and $ForegroundColor -eq 'DarkGray' }
+        }
+    }
+
+    It 'Info — Cyan header line written' {
+        InModuleScope Monarch {
+            Invoke-DomainAudit -Verbosity Info -OutputPath 'C:\fake'
+            Should -Invoke Write-Host -ParameterFilter { $ForegroundColor -eq 'Cyan' }
+        }
+    }
+
+    It 'Return object intact — Silent' {
+        InModuleScope Monarch {
+            $r = Invoke-DomainAudit -Verbosity Silent -OutputPath 'C:\fake'
+            $r.TotalChecks  | Should -Be 25
+            $r.Failures     | Should -Not -BeNullOrEmpty -Because 'Failures property must exist'
+            $r.Dispositions | Should -Not -BeNullOrEmpty
+            $r.Results      | Should -Not -BeNullOrEmpty
+            $r.ReportPath   | Should -Be 'C:\fake\report.html'
+        }
+    }
+
+    It 'Return object intact — Info' {
+        InModuleScope Monarch {
+            $r = Invoke-DomainAudit -Verbosity Info -OutputPath 'C:\fake'
+            $r.TotalChecks  | Should -Be 25
+            $r.Failures     | Should -Not -BeNullOrEmpty -Because 'Failures property must exist'
+            $r.Dispositions | Should -Not -BeNullOrEmpty
+            $r.Results      | Should -Not -BeNullOrEmpty
+            $r.ReportPath   | Should -Be 'C:\fake\report.html'
+        }
+    }
+}
