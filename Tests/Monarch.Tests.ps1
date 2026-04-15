@@ -5561,7 +5561,7 @@ Describe 'Invoke-DomainAudit' {
     Context 'Discovery phase with all functions succeeding' {
         BeforeAll {
             $script:outDir = Join-Path $TestDrive 'audit-success'
-            $script:result = Invoke-DomainAudit -Phase Discovery -OutputPath $script:outDir
+            $script:result = Invoke-DomainAudit -Phase Discovery -PassThru -OutputPath $script:outDir
         }
 
         It 'returns correct structure with all results' {
@@ -5591,7 +5591,7 @@ Describe 'Invoke-DomainAudit' {
         BeforeAll {
             Mock -ModuleName Monarch Get-ReplicationHealth { throw 'Replication query failed' }
             $script:outDir = Join-Path $TestDrive 'audit-failure'
-            $script:result = Invoke-DomainAudit -Phase Discovery -OutputPath $script:outDir
+            $script:result = Invoke-DomainAudit -Phase Discovery -PassThru -OutputPath $script:outDir
         }
 
         It 'records failure and continues with remaining functions' {
@@ -5609,7 +5609,7 @@ Describe 'Invoke-DomainAudit' {
                 [PSCustomObject]@{ Domain = 'InfrastructureHealth'; Function = 'Get-ReplicationHealth'; Timestamp = Get-Date; Warnings = @() }
             }
             $script:outDir = Join-Path $TestDrive 'audit-dispositions'
-            $script:result = Invoke-DomainAudit -Phase Discovery -OutputPath $script:outDir
+            $script:result = Invoke-DomainAudit -Phase Discovery -PassThru -OutputPath $script:outDir
         }
 
         It 'Dispositions has 25 entries all Assessed' {
@@ -5638,7 +5638,7 @@ Describe 'Invoke-DomainAudit' {
         BeforeAll {
             Mock -ModuleName Monarch Get-ReplicationHealth { throw 'Replication query failed' }
             $script:outDir = Join-Path $TestDrive 'audit-disp-failure'
-            $script:result = Invoke-DomainAudit -Phase Discovery -OutputPath $script:outDir
+            $script:result = Invoke-DomainAudit -Phase Discovery -PassThru -OutputPath $script:outDir
         }
 
         It 'Dispositions has 25 entries with 1 NotAssessed' {
@@ -5702,7 +5702,7 @@ Describe 'Invoke-DomainAudit' {
             }
 
             $script:outDir = Join-Path $TestDrive 'roast-both'
-            $script:result = Invoke-DomainAudit -Phase Discovery -OutputPath $script:outDir
+            $script:result = Invoke-DomainAudit -Phase Discovery -PassThru -OutputPath $script:outDir
             $script:csvFile = Join-Path $outDir '03-Privileged-Access' 'roastable-accounts.csv'
         }
 
@@ -5763,7 +5763,7 @@ Describe 'Invoke-DomainAudit' {
             }
 
             $script:outDir = Join-Path $TestDrive 'roast-kerb-only'
-            $script:result = Invoke-DomainAudit -Phase Discovery -OutputPath $script:outDir
+            $script:result = Invoke-DomainAudit -Phase Discovery -PassThru -OutputPath $script:outDir
             $script:csvFile = Join-Path $outDir '03-Privileged-Access' 'roastable-accounts.csv'
         }
 
@@ -5804,7 +5804,7 @@ Describe 'Invoke-DomainAudit' {
             }
 
             $script:outDir = Join-Path $TestDrive 'roast-asrep-only'
-            $script:result = Invoke-DomainAudit -Phase Discovery -OutputPath $script:outDir
+            $script:result = Invoke-DomainAudit -Phase Discovery -PassThru -OutputPath $script:outDir
             $script:csvFile = Join-Path $outDir '03-Privileged-Access' 'roastable-accounts.csv'
         }
 
@@ -5838,7 +5838,7 @@ Describe 'Invoke-DomainAudit' {
             }
 
             $script:outDir = Join-Path $TestDrive 'roast-none'
-            $script:result = Invoke-DomainAudit -Phase Discovery -OutputPath $script:outDir
+            $script:result = Invoke-DomainAudit -Phase Discovery -PassThru -OutputPath $script:outDir
         }
 
         It 'does not write roastable-accounts.csv when both return 0 accounts' {
@@ -5871,7 +5871,7 @@ Describe 'Invoke-DomainAudit' {
             }
 
             $script:outDir = Join-Path $TestDrive 'roast-kerb-threw'
-            $script:result = Invoke-DomainAudit -Phase Discovery -OutputPath $script:outDir
+            $script:result = Invoke-DomainAudit -Phase Discovery -PassThru -OutputPath $script:outDir
             $script:csvFile = Join-Path $outDir '03-Privileged-Access' 'roastable-accounts.csv'
         }
 
@@ -6060,7 +6060,7 @@ Describe 'Invoke-DomainAudit: Verbosity' {
 
     It 'Return object intact — Silent' {
         InModuleScope Monarch {
-            $r = Invoke-DomainAudit -Phase Discovery -Verbosity Silent -OutputPath $TestDrive
+            $r = Invoke-DomainAudit -Phase Discovery -Verbosity Silent -PassThru -OutputPath $TestDrive
             $r.TotalChecks  | Should -Be 25
             $r.PSObject.Properties.Name | Should -Contain 'Failures'
             $r.Dispositions | Should -Not -BeNullOrEmpty
@@ -6071,12 +6071,28 @@ Describe 'Invoke-DomainAudit: Verbosity' {
 
     It 'Return object intact — Info' {
         InModuleScope Monarch {
-            $r = Invoke-DomainAudit -Phase Discovery -Verbosity Info -OutputPath $TestDrive
+            $r = Invoke-DomainAudit -Phase Discovery -Verbosity Info -PassThru -OutputPath $TestDrive
             $r.TotalChecks  | Should -Be 25
             $r.PSObject.Properties.Name | Should -Contain 'Failures'
             $r.Dispositions | Should -Not -BeNullOrEmpty
             $r.Results      | Should -Not -BeNullOrEmpty
             $r.ReportPath   | Should -Be 'mock-report.html'
+        }
+    }
+
+    It 'No -PassThru — function emits nothing to the pipeline' {
+        InModuleScope Monarch {
+            $out = Invoke-DomainAudit -Phase Discovery -Verbosity Silent -OutputPath $TestDrive
+            $out | Should -BeNullOrEmpty
+        }
+    }
+
+    It '-PassThru — return object is emitted' {
+        InModuleScope Monarch {
+            $out = Invoke-DomainAudit -Phase Discovery -Verbosity Silent -PassThru -OutputPath $TestDrive
+            $out                          | Should -Not -BeNullOrEmpty
+            $out.TotalChecks              | Should -Be 25
+            $out.PSObject.Properties.Name | Should -Contain 'Failures'
         }
     }
 }
