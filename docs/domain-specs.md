@@ -216,8 +216,11 @@ Individual functions that query AD, compose stratagems, interpret results, and r
 Coordinates which functions run in which order per phase. Returns structured results. No interactive prompts.
 
 ```powershell
-# Non-interactive -- returns objects
-$results = Invoke-DomainAudit -Phase Discovery
+# interactive -- clean console
+Invoke-DomainAudit -Phase Discovery
+
+# automation -- capture result object
+$results = Invoke-DomainAudit -Phase Discovery -PassThru
 ```
 
 **Output directory structure:** The orchestrator creates a date-stamped root directory (`Monarch-Audit-yyyyMMdd`) with numbered subdirectories per domain component:

@@ -2,7 +2,7 @@
 
 A multi-phase Active Directory audit and administration suite. The Discovery phase — currently complete — documents your domain's health across eight audit categories with graded findings and a single-page HTML report. Remediation, monitoring, and cleanup phases are in development, building toward a complete AD management workflow for mid-market domains.
 
-**v0.5.0-beta** — Discovery phase complete (28 functions, 344 tests). Remediation, interactive wrapper, and remaining phases are planned.
+**v0.5.1-beta** — Discovery phase complete (28 functions, 346 tests). Remediation, interactive wrapper, and remaining phases are planned.
 
 ## Requirements
 
@@ -30,10 +30,14 @@ Open an **administrator PowerShell window**, navigate to the repo root, and run:
 Preflight checks your environment, installs any missing RSAT components, and imports the module. Then run the audit:
 
 ```powershell
-$result = Invoke-DomainAudit -Phase Discovery
+# interactive — clean console, follow the report path on the OK line
+Invoke-DomainAudit -Phase Discovery
+
+# automation — capture findings, failures, dispositions
+$result = Invoke-DomainAudit -Phase Discovery -PassThru
 ```
 
-When it finishes, the console prints the report path. Open it in any browser. Assigning to `$result` is the recommended form — it captures the return object (findings, failures, dispositions) for further use and keeps the console clean. If you just want the report, you can ignore `$result` entirely.
+When it finishes, the console prints the report path. Open it in any browser.
 
 **One-liner option** — preflight and launch in a single step (opens in a new window):
 
