@@ -3034,7 +3034,7 @@ Describe 'Export-GPOAudit' {
             $indexPath = "$tmpDir\01-HTML-Reports\00-INDEX.html"
             $indexContent = Get-Content $indexPath -Raw
             # Filename in href is sanitized, display name preserved
-            $indexContent | Should -Match "href='Bad_Name_Test_Policy\.html'"
+            $indexContent | Should -Match "href='GPOs/Bad_Name_Test_Policy\.html'"
         }
     }
 }
@@ -5929,10 +5929,10 @@ Describe 'Invoke-DomainAudit' {
             Mock -ModuleName Monarch Write-Warning {}
 
             $script:outDir = Join-Path $TestDrive 'roast-exportfail'
-            $script:result = Invoke-DomainAudit -Phase Discovery -OutputPath $script:outDir
         }
 
         It 'emits Write-Warning with combine context' {
+            Invoke-DomainAudit -Phase Discovery -OutputPath $script:outDir
             Should -Invoke Write-Warning -ModuleName Monarch -Times 1 -ParameterFilter { $Message -match 'combine' }
         }
     }

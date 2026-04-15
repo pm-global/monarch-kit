@@ -1,4 +1,4 @@
-# TODO-2: Fix Two Pre-Existing Failing Tests
+# TODO-2: Fix Two Pre-Existing Failing Tests — COMPLETE 2026-04-15
 
 ## Goal
 
@@ -64,3 +64,7 @@ It 'emits Write-Warning with combine context' {
 - Both tests pass.
 - No other tests newly fail.
 - No changes to `Monarch.psm1`.
+
+## Completed 2026-04-15
+
+332 passed, 0 failed. Both fixes applied to `Tests/Monarch.Tests.ps1` only.
