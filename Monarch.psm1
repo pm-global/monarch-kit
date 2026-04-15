@@ -2461,10 +2461,12 @@ function New-MonarchReport
     param(
         [PSCustomObject]$Results,
         [string]$OutputPath,
-        [string]$Format = 'HTML'
+        [string]$Format = 'HTML',
+        [ValidateSet('Silent','Error','Warn','Info')]
+        [string]$Verbosity = 'Info'
     )
 
-    Write-Host "report: generating discovery report..." -ForegroundColor DarkGray
+    if ($Verbosity -eq 'Info') { Write-Host "report: generating discovery report..." -ForegroundColor DarkGray }
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     $reportFile = Join-Path $OutputPath '00-Discovery-Report.html'
 
@@ -2481,7 +2483,7 @@ function New-MonarchReport
     }
 
     # Extract header data
-    Write-Host "report: extracting header and duration..." -ForegroundColor DarkGray
+    if ($Verbosity -eq 'Info') { Write-Host "report: extracting header and duration..." -ForegroundColor DarkGray }
     $domain = $Results.Domain
     $dc = if ($Results.DCUsed -is [string]) { $Results.DCUsed } else { $Results.DCUsed.DCName }
     $startTime = $Results.StartTime
@@ -2551,7 +2553,7 @@ function New-MonarchReport
     $domainOrder = @('BackupReadiness','InfrastructureHealth','PrivilegedAccess','IdentityLifecycle','GroupPolicy','SecurityPosture','AuditCompliance','DNS')
 
     # --- Critical findings extraction ---
-    Write-Host "report: analyzing findings and building advisories..." -ForegroundColor DarkGray
+    if ($Verbosity -eq 'Info') { Write-Host "report: analyzing findings and building advisories..." -ForegroundColor DarkGray }
     $criticals = [System.Collections.Generic.List[PSCustomObject]]::new()
     $advisories = [System.Collections.Generic.List[PSCustomObject]]::new()
 
@@ -2779,7 +2781,7 @@ function New-MonarchReport
         $html += "</div>"
     }
 
-    Write-Host "report: building domain sections and metrics..." -ForegroundColor DarkGray
+    if ($Verbosity -eq 'Info') { Write-Host "report: building domain sections and metrics..." -ForegroundColor DarkGray }
 
     # Domain sections -- domains with findings or not-assessed functions
     $findingDomains = @{}
@@ -2933,7 +2935,7 @@ function New-MonarchReport
     }
 
     # --- File tree: scan disk, not claims ---
-    Write-Host "report: scanning output files and building tree..." -ForegroundColor DarkGray
+    if ($Verbosity -eq 'Info') { Write-Host "report: scanning output files and building tree..." -ForegroundColor DarkGray }
     # 1. Clean up empties under $OutputPath
     Get-ChildItem -LiteralPath $OutputPath -File -Recurse |
         Where-Object { $_.Length -eq 0 } |
@@ -3021,9 +3023,9 @@ function New-MonarchReport
     $html += "<div class='report-footer'><span>monarch-kit</span><span>Generated $((Get-Date).ToString('MMMM d, yyyy HH:mm'))</span></div>"
     $html += "</div></body></html>"
 
-    Write-Host "report: assembling and writing HTML report..." -ForegroundColor DarkGray
+    if ($Verbosity -eq 'Info') { Write-Host "report: assembling and writing HTML report..." -ForegroundColor DarkGray }
     $html | Out-File -FilePath $reportFile -Encoding UTF8
-    Write-Host "report OK: generated $(Split-Path $reportFile -Leaf) with $criticalCount critical, $advisoryCount advisory" -ForegroundColor Green
+    if ($Verbosity -eq 'Info') { Write-Host "report OK: generated $(Split-Path $reportFile -Leaf) with $criticalCount critical, $advisoryCount advisory" -ForegroundColor Green }
 
     return $reportFile
 }
@@ -3210,7 +3212,7 @@ function Invoke-DomainAudit
         Dispositions = @($dispositions)
         TotalChecks  = $calls.Count
     }
-    $orchestratorResult.ReportPath = New-MonarchReport -Results $orchestratorResult -OutputPath $OutputPath
+    $orchestratorResult.ReportPath = New-MonarchReport -Results $orchestratorResult -OutputPath $OutputPath -Verbosity $Verbosity
     return $orchestratorResult
 }
 
