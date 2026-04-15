@@ -1,4 +1,4 @@
-# TODO-4 — `-PassThru` for `Invoke-DomainAudit` (v0.5.1-beta)
+# TODO-4 — `-PassThru` for `Invoke-DomainAudit` (v0.5.1-beta) ✓ completed 2026-04-15
 
 ## Context
 
