@@ -15,7 +15,7 @@ A multi-phase Active Directory audit and administration suite. The Discovery pha
 ## Installation
 
 ```powershell
-git clone https://github.com/your-org/monarch-kit.git
+git clone https://github.com/pm-global/monarch-kit.git
 cd monarch-kit
 ```
 
