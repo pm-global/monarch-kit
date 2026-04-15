@@ -3123,7 +3123,7 @@ function Invoke-DomainAudit
 
     if ($showHeader) {
         Write-Host ''
-        Write-Host "audit: $($target.Domain)  `u{00B7}  DC: $dc  `u{00B7}  $($calls.Count) checks" -ForegroundColor Cyan
+        Write-Host "audit: $($target.Domain)  |  DC: $dc  |  $($calls.Count) checks" -ForegroundColor Cyan
     }
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     $total = $calls.Count
@@ -3163,7 +3163,7 @@ function Invoke-DomainAudit
     $dur = if ($s -ge 60) { "$([int]($s / 60))m $($s % 60)s" } else { "${s}s" }
     if ($showOK) {
         $passed = $calls.Count - $failures.Count
-        Write-Host "audit OK: $passed/$($calls.Count) checks ($dur)" -ForegroundColor Green
+        Write-Host "audit OK: $passed/$($calls.Count) checks ($dur)  ->  $(Join-Path $OutputPath '00-Discovery-Report.html')" -ForegroundColor Green
         foreach ($f in $failures) { Write-Host "  -> failed: $($f.Function)" -ForegroundColor Red }
     }
 

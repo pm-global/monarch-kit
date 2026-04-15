@@ -30,8 +30,10 @@ Open an **administrator PowerShell window**, navigate to the repo root, and run:
 Preflight checks your environment, installs any missing RSAT components, and imports the module. Then run the audit:
 
 ```powershell
-Invoke-DomainAudit -Phase Discovery
+$result = Invoke-DomainAudit -Phase Discovery
 ```
+
+When it finishes, the console prints the report path. Open it in any browser. Assigning to `$result` is the recommended form — it captures the return object (findings, failures, dispositions) for further use and keeps the console clean. If you just want the report, you can ignore `$result` entirely.
 
 **One-liner option** — preflight and launch in a single step (opens in a new window):
 
@@ -39,9 +41,7 @@ Invoke-DomainAudit -Phase Discovery
 .\preflight-win.ps1 -AndMonarch
 ```
 
-That's it. The audit runs 25 checks sequentially — expect 1–3 minutes on a typical domain. When it finishes, a folder named `Monarch-Audit-YYYYMMDD` appears in your current directory containing the HTML report (`00-Discovery-Report.html`) and per-function CSV/JSON output files.
-
-Open `00-Discovery-Report.html` in any browser.
+The audit runs 25 checks sequentially — expect 1–3 minutes on a typical domain. When it finishes, a folder named `Monarch-Audit-YYYYMMDD` appears in your current directory containing the HTML report (`00-Discovery-Report.html`) and per-function CSV/JSON output files.
 
 > **Note:** monarch-kit hashes `Monarch.psm1` at import time and rechecks on every run. If the file on disk has changed — e.g. after a `git pull` — `Invoke-DomainAudit` spawns a new elevated PowerShell window running `.\preflight-win.ps1 -AndMonarch`, then exits with code `3`. The new window reloads the module and relaunches the audit automatically. monarch-kit will never run a version of itself that differs from what is on disk. Automation scripts can detect this cycle by checking for exit code `3`.
 
