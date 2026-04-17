@@ -172,7 +172,7 @@ Dormant account policy aligns with PCI DSS v4.0.1, NIST SP 800-53 Rev 5, and Mic
 
 ## License
 
-MIT
+	GPL-3.0
 
 ---
 
