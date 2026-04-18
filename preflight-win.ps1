@@ -19,8 +19,6 @@ if ($AndMonarch) {
     Write-Host '  Preflight will verify your environment, install required tools,' -ForegroundColor White
     Write-Host '  and then automatically launch the domain audit.' -ForegroundColor White
     Write-Host '=================================================================================' -ForegroundColor Cyan
-    Write-Host '  "Sometimes I think this is Godzilla`s world..."' -ForegroundColor White
-    Write-Host '=================================================================================' -ForegroundColor Cyan
     Write-Host ''
 }
 
