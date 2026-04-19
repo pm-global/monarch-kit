@@ -1,6 +1,6 @@
 # monarch-kit
 
-A multi-phase Active Directory audit and administration suite. The Discovery phase — currently complete — documents your domain's health across eight audit categories with graded findings and a single-page HTML report. Remediation, monitoring, and cleanup phases are in development, building toward a complete AD management workflow for mid-market domains.
+A multi-phase Active Directory audit and administration suite. The Discovery phase — currently complete — documents your domain's health across eight audit categories (read-only, no Internet required) and produces graded findings in a single-page HTML report plus an array of csv files allowing for easy offline analysis. Remediation, monitoring, and cleanup phases are in development, building toward a complete AD management workflow for mid-market domains.
 
 **v0.5.1-beta** — Discovery phase complete (28 functions, 346 tests). Remediation, interactive wrapper, and remaining phases are planned.
 
