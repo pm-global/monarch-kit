@@ -2454,20 +2454,16 @@ function New-MonarchReport
         Orchestrator return object (Phase, Domain, DCUsed, StartTime, EndTime, Results, Failures).
     .PARAMETER OutputPath
         Directory to write the report file.
-    .PARAMETER Format
-        Output format. Currently only 'HTML' is supported.
     #>
     [CmdletBinding()]
     param(
         [PSCustomObject]$Results,
         [string]$OutputPath,
-        [string]$Format = 'HTML',
         [ValidateSet('Silent','Error','Warn','Info')]
         [string]$Verbosity = 'Info'
     )
 
     if ($Verbosity -eq 'Info') { Write-Host "report: generating discovery report..." -ForegroundColor DarkGray }
-    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     $reportFile = Join-Path $OutputPath '00-Discovery-Report.html'
 
     # Config-driven accent color
@@ -3071,7 +3067,7 @@ function Invoke-DomainAudit
     if ($currentHash -ne $script:_moduleHash) {
         if ($showNarration) { Write-Host 'preflight: module source changed on disk, reloading...' -ForegroundColor DarkGray }
         Start-Process -FilePath powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -NoExit -File ""$PSScriptRoot\preflight-win.ps1"" -AndMonarch -OutputPath ""$OutputPath"""
-        exit 3  # stale module restart — not an error, not success
+        exit 3  # stale module restart -- not an error, not success
     }
 
     if ($Phase -ne 'Discovery') { throw "Phase '$Phase' is not yet implemented." }
