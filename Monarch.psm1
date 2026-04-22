@@ -737,7 +737,7 @@ function Find-DormantAccount {
     $neverCount = @($accounts | Where-Object { $_.DaysSinceLogon -eq -1 }).Count
     $csvPath = $null
     if ($OutputPath -and $accounts.Count -gt 0) {
-        $csvPath = $OutputPath
+        $csvPath = Join-Path $OutputPath 'dormant-accounts.csv'
         $accounts | Select-Object SamAccountName, DisplayName, LastLogon, DaysSinceLogon, PasswordAgeDays, MemberOfGroups, DormantReason |
             Export-Csv -Path $csvPath -NoTypeInformation
     }
@@ -2032,11 +2032,6 @@ function New-DomainBaseline
     # --- CSV Export ---
     if ($OutputPath)
     {
-        if (-not (Test-Path $OutputPath))
-        {
-            New-Item -ItemType Directory -Path $OutputPath -Force | Out-Null
-        }
-
         if ($domainInfo)
         {
             $csvPath = Join-Path $OutputPath 'domain-info.csv'

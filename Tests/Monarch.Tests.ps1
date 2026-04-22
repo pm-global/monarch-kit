@@ -777,11 +777,8 @@ Describe 'New-DomainBaseline' {
             Mock -ModuleName Monarch Get-ADDefaultDomainPasswordPolicy { [PSCustomObject]@{ MinPasswordLength = 12 } }
 
             $script:csvDir = Join-Path $TestDrive 'baseline-output'
+            New-Item -ItemType Directory -Path $csvDir -Force | Out-Null
             $script:csvResult = New-DomainBaseline -OutputPath $csvDir
-        }
-
-        It 'creates the output directory' {
-            Test-Path $csvDir | Should -BeTrue
         }
 
         It 'writes expected CSV files' {
@@ -848,6 +845,7 @@ Describe 'New-DomainBaseline' {
             Mock -ModuleName Monarch Get-ADDefaultDomainPasswordPolicy { [PSCustomObject]@{ MinPasswordLength = 12 } }
 
             $script:partialDir = Join-Path $TestDrive 'partial-output'
+            New-Item -ItemType Directory -Path $partialDir -Force | Out-Null
             $script:partialResult = New-DomainBaseline -OutputPath $partialDir
         }
 
@@ -2630,18 +2628,20 @@ Describe 'Find-DormantAccount' {
                     })
             }
 
-            $script:csvPath = Join-Path $TestDrive 'dormant.csv'
-            $script:csvResult = Find-DormantAccount -OutputPath $csvPath
+            $script:csvDir = Join-Path $TestDrive 'dormant-output'
+            New-Item -ItemType Directory -Path $csvDir -Force | Out-Null
+            $script:csvResult = Find-DormantAccount -OutputPath $csvDir
         }
 
         It 'writes CSV with correct columns' {
-            $csvPath | Should -Exist
-            $rows = Import-Csv $csvPath
+            $expectedCsv = Join-Path $csvDir 'dormant-accounts.csv'
+            $expectedCsv | Should -Exist
+            $rows = Import-Csv $expectedCsv
             $rows | Should -HaveCount 1
             $rows[0].PSObject.Properties.Name | Should -Contain 'SamAccountName'
             $rows[0].PSObject.Properties.Name | Should -Contain 'DormantReason'
             $rows[0].PSObject.Properties.Name | Should -Contain 'MemberOfGroups'
-            $csvResult.CSVPath | Should -Be $csvPath
+            $csvResult.CSVPath | Should -Be $expectedCsv
         }
     }
 
