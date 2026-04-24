@@ -27,7 +27,6 @@ Current phase: 2. Active plans: `docs/plans/`.
 ├── preflight-win.ps1           ← Windows environment check
 ├── AGENTS.md                   ← project identity and sitemap (this file)
 ├── CONTRIBUTING.md             ← contribution process and merge requirements
-├── CLAUDE-DEV-PLAN.md          ← retired — see header for extraction map
 ├── tests/
 │   └── Monarch.Tests.ps1       ← all tests
 └── docs/
