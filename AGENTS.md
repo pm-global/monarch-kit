@@ -2,7 +2,6 @@
 
 Active Directory audit and administration suite for mid-market domains (100-10,000 users).
 
-`dev-guide.md` defines *how* to program. This file defines *what* this project is.
 Contribution process and merge requirements: see `CONTRIBUTING.md`.
 
 ## Module Identity
