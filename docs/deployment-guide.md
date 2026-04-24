@@ -96,7 +96,7 @@ These are the same 162 tests from development. They mock all AD/GPO/DNS cmdlets 
 
 ```powershell
 cd C:\path\to\monarch-kit
-Invoke-Pester -Path .\Tests\Monarch.Tests.ps1 -Output Detailed
+Invoke-Pester -Path .\tests\Monarch.Tests.ps1 -Output Detailed
 ```
 
 **Expected:** 162 tests, 0 failures. If anything fails here, it's an environment issue (wrong Pester version, missing module, path problem) -- not a domain issue.
@@ -387,7 +387,7 @@ Install-Module -Name Pester -Force -SkipPublisherCheck                # Pester 5
 Import-Module C:\path\to\monarch-kit\Monarch.psd1                    # Module
 
 # === Mocked Tests (no domain needed) ===
-Invoke-Pester -Path .\Tests\Monarch.Tests.ps1 -Output Detailed       # 162 tests
+Invoke-Pester -Path .\tests\Monarch.Tests.ps1 -Output Detailed       # 162 tests
 
 # === Lab Run ===
 Invoke-DomainAudit -Phase Discovery -OutputPath C:\LabOutput

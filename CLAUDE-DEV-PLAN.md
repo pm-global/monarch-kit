@@ -10,33 +10,25 @@ Checklist-driven implementation plan. Each checkbox is a discrete deliverable. C
 
 Items are ordered by priority. Blocking relationships noted where they exist.
 
-**TODO-0: Privileged Access file output missing.**
+**TODO-1: Privileged Access file output missing.**
 Orchestrator creates `03-Privileged-Access` folder but none of the four priv access functions (`Get-PrivilegedGroupMembership`, `Find-AdminCountOrphan`, `Find-KerberoastableAccount`, `Find-ASREPRoastableAccount`) accept `-OutputPath`. The CSV export was removed at some point. Re-add `-OutputPath` support to these functions and wire them up in the orchestrator.
 Blocked by: nothing.
 
-**TODO-1: Action hints in critical/advisory cards.**
-`.card .action-hint` CSS exists but is never emitted. Cards should show an actionable second line (e.g. recommended next step). Required before remediation work begins.
-Blocked by: nothing.
+**TODO-2: Find-DormantAccount OutputPath — align to directory semantics.**
+`Find-DormantAccount` currently receives a full file path for `-OutputPath`. TODO-0 establishes directory semantics as the module standard (function receives directory, constructs filename internally). Update `Find-DormantAccount` to match: accept a directory, write `dormant-accounts.csv` internally.
+Blocked by: TODO-1 (establishes the pattern).
 
-**TODO-2: Test coverage audit -- estimate current coverage against 80% target.**
+**TODO-3: Action hints on advisory cards.**
+TODO-1 adds hints to critical cards only. Advisory cards have a separate hint set — some require more careful wording than criticals (Protected Users gap, non-privileged Kerberoast, medium-risk legacy protocol). Plan and implement separately after TODO-1 ships.
+Blocked by: nothing
+
+**TODO-4: Test coverage audit -- estimate current coverage against 80% target.**
 SRE + testing specialist review. Includes integration tests added during BB fix work. Broader question: what other end-to-end paths lack integration tests?
 Blocked by: nothing.
 
-**TODO-3: Progress output with silent mode.**
-`Write-Progress` for long-running orchestrated runs, suppressible with `-Silent`. Default shows concise status; `-Verbose` shows per-step detail.
-Blocked by: nothing.
-
-**TODO-4: Retroactive research brief for monarch-kit.**
+**TODO-5: Retroactive research brief for monarch-kit.**
 Formalize `initial-research.md` into a proper `research-brief-monarch-kit.md` per the research doc template. Reference work, not implementation.
 Blocked by: nothing.
-
-**TODO-5: Find-DormantAccount OutputPath — align to directory semantics.**
-`Find-DormantAccount` currently receives a full file path for `-OutputPath`. TODO-0 establishes directory semantics as the module standard (function receives directory, constructs filename internally). Update `Find-DormantAccount` to match: accept a directory, write `dormant-accounts.csv` internally.
-Blocked by: TODO-0 (establishes the pattern).
-
-**TODO-7: Action hints on advisory cards.**
-TODO-1 adds hints to critical cards only. Advisory cards have a separate hint set — some require more careful wording than criticals (Protected Users gap, non-privileged Kerberoast, medium-risk legacy protocol). Plan and implement separately after TODO-1 ships.
-Blocked by: TODO-1.
 
 ## Roadmap Overview
 
@@ -46,35 +38,8 @@ Blocked by: TODO-1.
 | **Plan 2** | Remediation/Monitoring/Cleanup functions + tests | Not started |
 | **Plan 3** | Start-MonarchAudit interactive wrapper + tests | Not started |
 | **Plan 4** | Comparison functions (GPO, baseline, CIS) + tests | Not started |
-| **Plan 5** | OctoDoc stratagem integration (after sensor redesign) | Blocked -- waiting on OctoDoc redesign |
-
-Plans are sequential. Each plan depends on the one before it. Plan 5 is triggered externally (OctoDoc redesign), not by Plan 4 completion.
 
 ---
-
-## Plan 1: Discovery Phase -- COMPLETE
-
-28 functions, 162 Pester tests, all passing. Implemented in 14 steps.
-
-**Full archive:** `docs/archive/01-discovery/CLAUDE-DEV-PLAN-v1.md`
-**Step subplans:** `docs/archive/01-discovery/STEP-{4,5,5b,7-14}-SUBPLAN.md`
-
-### What was built
-
-| Steps | Scope | Functions |
-|-------|-------|-----------|
-| 1-3 | Module skeleton, config layer, DC resolution | `Import-MonarchConfig`, `Get-MonarchConfigValue`, `Resolve-MonarchDC` |
-| 4 | Audit & Compliance baseline | `New-DomainBaseline` |
-| 5 | Infrastructure Health | `Get-ForestDomainLevel`, `Get-FSMORolePlacement`, `Get-SiteTopology`, `Get-ReplicationHealth` |
-| 6 | Security Posture | `Get-PasswordPolicyInventory`, `Find-WeakAccountFlag`, `Test-ProtectedUsersGap`, `Find-LegacyProtocolExposure` |
-| 7 | Privileged Access | `Get-PrivilegedGroupMembership`, `Find-AdminCountOrphan`, `Find-KerberoastableAccount`, `Find-ASREPRoastableAccount` |
-| 8 | Identity Lifecycle | `Find-DormantAccount` |
-| 9 | Group Policy | `Export-GPOAudit`, `Find-UnlinkedGPO`, `Find-GPOPermissionAnomaly` |
-| 10 | Backup & Recovery | `Get-BackupReadinessStatus`, `Test-TombstoneGap` |
-| 11 | DNS | `Test-SRVRecordCompleteness`, `Get-DNSScavengingConfiguration`, `Test-ZoneReplicationScope`, `Get-DNSForwarderConfiguration` |
-| 12 | Audit & Compliance (remaining) | `Get-AuditPolicyConfiguration`, `Get-EventLogConfiguration` |
-| 13 | Reporting | `New-MonarchReport` |
-| 14 | Orchestrator | `Invoke-DomainAudit` |
 
 ### Universal Patterns (apply to all plans)
 
@@ -97,13 +62,35 @@ Every public function returns one or more `[PSCustomObject]` with a `Domain` pro
 All functions read from `$script:Config` (module-scoped variable set at import time). Never from `$Global:` or by re-reading the config file. Config keys are accessed with a helper that falls back to built-in defaults: `Get-MonarchConfigValue -Key 'DormancyThresholdDays'`.
 
 **Test strategy:**
-- Pester 5+ tests in `Tests/Monarch.Tests.ps1`, organized by `Describe` blocks per function
+- Pester 5+ tests in `tests/Monarch.Tests.ps1`, organized by `Describe` blocks per function
 - All AD/DNS/GPO cmdlets are mocked -- tests run without a domain
 - Every function's tests verify: return object has correct properties, correct `Domain` and `Function` values, `Timestamp` is populated, `Warnings` is an array
 - Functions with business logic get additional tests: exclusion logic, threshold comparisons, config overrides
 - Tests are written alongside code at each step, not after
 
 ---
+
+## Plan 1: Discovery Phase -- COMPLETE
+
+**Full archive:** `docs/archive/01-discovery/CLAUDE-DEV-PLAN-v1.md`
+**Step subplans:** `docs/archive/01-discovery/STEP-{4,5,5b,7-14}-SUBPLAN.md`
+
+### What was built
+
+| Steps | Scope | Functions |
+|-------|-------|-----------|
+| 1-3 | Module skeleton, config layer, DC resolution | `Import-MonarchConfig`, `Get-MonarchConfigValue`, `Resolve-MonarchDC` |
+| 4 | Audit & Compliance baseline | `New-DomainBaseline` |
+| 5 | Infrastructure Health | `Get-ForestDomainLevel`, `Get-FSMORolePlacement`, `Get-SiteTopology`, `Get-ReplicationHealth` |
+| 6 | Security Posture | `Get-PasswordPolicyInventory`, `Find-WeakAccountFlag`, `Test-ProtectedUsersGap`, `Find-LegacyProtocolExposure` |
+| 7 | Privileged Access | `Get-PrivilegedGroupMembership`, `Find-AdminCountOrphan`, `Find-KerberoastableAccount`, `Find-ASREPRoastableAccount` |
+| 8 | Identity Lifecycle | `Find-DormantAccount` |
+| 9 | Group Policy | `Export-GPOAudit`, `Find-UnlinkedGPO`, `Find-GPOPermissionAnomaly` |
+| 10 | Backup & Recovery | `Get-BackupReadinessStatus`, `Test-TombstoneGap` |
+| 11 | DNS | `Test-SRVRecordCompleteness`, `Get-DNSScavengingConfiguration`, `Test-ZoneReplicationScope`, `Get-DNSForwarderConfiguration` |
+| 12 | Audit & Compliance (remaining) | `Get-AuditPolicyConfiguration`, `Get-EventLogConfiguration` |
+| 13 | Reporting | `New-MonarchReport` |
+| 14 | Orchestrator | `Invoke-DomainAudit` |
 
 ## Plan 2: Remediation, Monitoring, and Cleanup Functions
 
@@ -177,23 +164,3 @@ All functions read from `$script:Config` (module-scoped variable set at import t
 | `Test-TieredAdminCompliance` | Privileged Access | Tier model definition in config |
 
 **Test focus:** Delta detection (field added, removed, changed). Classification of changes (expected, advisory, requires-review). Handles missing previous baseline gracefully. CIS baseline comparison accepts generic baseline definition format.
-
----
-
-## Plan 5: OctoDoc Stratagem Integration
-
-**Prerequisite:** Plan 1 complete AND OctoDoc redesigned with `Invoke-DCProbes` and probe registry.
-
-**Scope:** Refactor functions that should use stratagems instead of direct AD queries.
-
-**Functions affected:**
-- Infrastructure Health: replication, time sync (compose Replication + TimeSync stratagems)
-- Backup & Recovery: backup readiness (compose WSBackup + BackupVendorDetection stratagems)
-
-**What changes:** Internal implementation of affected functions switches from direct AD cmdlets to stratagem composition + `Invoke-DCProbes` + result interpretation. Return contracts stay identical -- consumers see no change.
-
-**What doesn't change:** Function signatures, return contracts, config keys, test assertions (add new tests for stratagem path, keep existing tests for direct-query fallback).
-
-**OctoDoc probe registry integration:** When OctoDoc supports self-describing probe menus, add a `Get-MonarchStratagem` function that maps monarch domains to available probes. This enables LLM agents to dynamically compose stratagems based on what the sensor layer can actually check.
-
-**Blocked until:** OctoDoc redesign ships with `Invoke-DCProbes`, probe registry, and the standard probe result contract (CheckName, Status, Success, Value, Timestamp, Error, ErrorCategory, ExecutionTime).
