@@ -25,7 +25,7 @@ Row count == 0 → no `<details>`. Row count ≥ cap+1 → no `<details>`; CSV l
 Five new `Export-Csv` blocks appended after the existing roastable combine at `Monarch.psm1:3162-3190`. Discovery function return contracts stay frozen — CSV synthesis is a reporting concern.
 
 ### D5. HTML escape via single helper applied at every value-into-HTML site
-Helper `ConvertTo-HtmlSafe` (internal, not exported) wrapping `[System.Net.WebUtility]::HtmlEncode` (PS 5.1 native). Applied at the boundary between data and HTML structure — never to assembled HTML strings (would destroy structural tags) and never input-side validation (rejects legitimate forest data).
+Helper `ConvertTo-HtmlSafe` (internal, not exported) wrapping `[System.Net.WebUtility]::HtmlEncode` (PS 5.1 native). Applied at the boundary between data and HTML structure — never to assembled HTML strings (would destroy structural tags) and never input-side validation (rejects legitimate forest data). Joins, concatenations, and transformations happen on raw data. Escapes always happen last, at the single boundary. 
 
 ### D6. Sort priority per advisory
 
