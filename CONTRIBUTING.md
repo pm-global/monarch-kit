@@ -109,6 +109,10 @@ Run each reviewer lens below. For each finding:
 
 **Reviewer Findings must cite specific functions, sections, or behaviors. Each finding states the real-world failure mode and a concrete change. A plan with zero findings has not been reviewed — iterate until all findings are resolved or explicitly acknowledged as non-issues.**
 
+Resolved findings are folded into Engineering Decisions as settled choices. Raw findings, superseded reasoning, and corrected errors are not preserved in the plan file.
+
+**A plan without a Reviewer Findings section is not valid and cannot move to `docs/plans/`.**
+
 ---
 
 ### Reviewer 1: Staff Engineer / Tech Lead
@@ -153,6 +157,18 @@ Run each reviewer lens below. For each finding:
 - Does the plan contain implicit assumptions that are obvious to the author but absent from the text?
 - Are there contradictions between this plan and existing `docs/` files? If yes, which document wins and is that stated explicitly?
 - Is the instruction density appropriate — specific enough to constrain behavior, not so verbose that key points are buried?
+
+---
+
+### Reviewer 5: Adversarial Design Critic
+
+*Argues the design is wrong, not incomplete. Identifies assumptions that break the entire design if false.*
+
+- What is the single assumption this design cannot survive being wrong about?
+- What input, state, or caller behavior would satisfy every acceptance criterion while violating the intent?
+- What pipeline stage, ordering dependency, or trust boundary does this design treat as settled but hasn't proven?
+
+**This reviewer must produce at least one finding. Zero findings means the lens was not applied — iterate.**
 
 ---
 
