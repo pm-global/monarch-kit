@@ -112,3 +112,17 @@ Current phase: 2. Active plans: `docs/plans/`.
 - Functions with business logic get additional tests: exclusion logic, threshold comparisons, config overrides.
 - Tests are written alongside code at each step, never after.
 - Live domain testing is not yet implemented — see `docs/raw/todo-live-domain-tests.md`.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues (`pm-global/monarch-kit`), managed via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout — `CONTEXT.md` + `docs/adr/` at repo root (created lazily by `/domain-modeling`, don't exist yet). See `docs/agents/domain.md`.
