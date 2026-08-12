@@ -27,15 +27,40 @@ Five new `Export-Csv` blocks appended after the existing roastable combine at `M
 ### D5. HTML escape via single helper applied at every value-into-HTML site
 Helper `ConvertTo-HtmlSafe` (internal, not exported) wrapping `[System.Net.WebUtility]::HtmlEncode` (PS 5.1 native). Applied at the boundary between data and HTML structure — never to assembled HTML strings (would destroy structural tags) and never input-side validation (rejects legitimate forest data). Joins, concatenations, and transformations happen on raw data. Escapes always happen last, at the single boundary. 
 
-### D6. Sort priority per advisory
+### D6. Row filter and sort priority per advisory
 
-| Advisory | Sort |
-|----------|------|
-| Replication links | Status desc (Failed → Warning → Healthy), then Source, Partner |
-| FSMO placement | Reachable=false first, then Role |
-| Weak account flags | IsPrivileged desc, Flag, SamAccountName |
-| Legacy protocol findings | Risk desc (High → Medium → Low), DCName |
-| DA members, AdminCount orphans, Kerberoastable, ASREP, ProtectedUsers gaps, Unlinked GPOs | Alpha on first column |
+Filter (applied before sort; `none` = render all source rows):
+
+| Advisory | Source on `$r` | Filter | Rationale |
+|----------|-----------------|--------|-----------|
+| Replication links | `$r.Links` | `Where-Object { $_.Status -ne 'Healthy' }` | Healthy is noise on a verification surface; advisory only fires when Failed/Warning exist |
+| FSMO placement | `$r.Roles` | none — show all 5 | Both triggers (unreachable, single-DC) need the full role table for verification |
+| DA members | `($r.Groups \| Where GroupSID -like '*-512' \| Select -First 1).Members` | none | Whole point is "which members?" |
+| Kerberoastable | `$r.Accounts` | none | Source already filtered |
+| AS-REP | `$r.Accounts` | none | Source already filtered |
+| AdminCount orphans | `$r.Orphans` | none | Source already filtered |
+| ProtectedUsers gaps | `$r.GapAccounts` | none | Source already filtered |
+| Unlinked GPOs | `$r.UnlinkedGPOs` | none | Source already filtered |
+| Weak account flags | `$r.Findings` | none | Source already filtered |
+| Legacy protocol | `$r.DCFindings` | none | Source already filtered to non-compliant |
+
+Sort (module-scope rank constants, declared in Pass 3 — see D12; drive `Sort-Object -Expression` only, cell values always render via the column's `Property`/`Format` per D12 — HTML shows `Failed`, never `0`):
+
+```
+$script:StatusRank = @{ 'Failed' = 0; 'Warning' = 1; 'Healthy' = 2 }
+$script:RiskRank   = @{ 'High'   = 0; 'Medium'  = 1; 'Low'     = 2 }
+```
+
+| Advisory | Sort-Object expression |
+|----------|------------------------|
+| Replication links | `@{ Expression = { $script:StatusRank[$_.Status] } }, SourceDC, PartnerDC` |
+| FSMO placement | `@{ Expression = { -not $_.Reachable }; Descending = $true }, Role` |
+| Weak account flags | `@{ Expression = 'IsPrivileged'; Descending = $true }, Flag, SamAccountName` |
+| Legacy protocol | `@{ Expression = { $script:RiskRank[$_.Risk] } }, DCName` |
+| DA / Kerberoastable / AS-REP / AdminCount / ProtectedUsers | `SamAccountName` |
+| Unlinked GPOs | `DisplayName` |
+
+Naive `Sort-Object Status -Descending` gives `Warning, Healthy, Failed` (alphabetical) — wrong. Rank-map lookup is the standard PowerShell idiom for ordered-categorical sort.
 
 ### D7. Sorted column header is bold-weight (700)
 Existing header default is 600 (v5 CSS:284). Apply `font-weight: 700` to the sort column's `<th>` via `class='sorted'`. Smallest possible signal. No icon, no color, no underline.
@@ -84,7 +109,20 @@ This forces every `<details>` body visible at print time regardless of `[open]` 
 ### D11. Adjacency: dropdown directly under its advisory
 Drilldown table renders as the last child of `<div class='card w-advisory'>`, after description and DiagnosticHint.
 
-### D12. Helper and column-spec shapes (referenced by passes)
+### D12. Helper and column-spec shapes (referenced by passes) — keystone
+
+Column property contract: two optional properties, separate concerns.
+
+| Property | Type | Purpose | Default |
+|----------|------|---------|---------|
+| `Format` | scriptblock or absent | returns display string for cell, receives row via `$_` | `$_.<Property>` |
+| `CssClass` | scriptblock OR string OR absent | returns class string for `<td>` | no class attr emitted |
+
+Why two separate properties, not one merged: 5+ columns need `Format` only (dates, bools, joined arrays) — wrapping every Format-only column in a hashtable to express `CssClass=$null` is noise. 2+ columns need `CssClass` only (`DisplayName`, `Value` — both static `wrap-ok`). 1 column (`Status`) needs both. Single Responsibility per property: troubleshoot Status color → look at `CssClass`; troubleshoot date format → look at `Format`. A merged single scriptblock would surface both bugs in the same property.
+
+`CssClass` accepts both forms: string for a static per-column class (e.g. `CssClass = 'wrap-ok'` on `DisplayName`/`Value` columns), scriptblock for per-row variation (e.g. `CssClass = { "status-$($_.Status.ToLower())" }`). Don't normalize to scriptblock-only — `'wrap-ok'` is cleaner as a literal.
+
+Design-system reference (`docs/design-system.md`): `.wrap-ok` (opt-in cell wrapping for long content) and `.status-healthy`/`.status-warning`/`.status-failed` are already-specified design primitives; the v5 CSS reference (`docs/report-v5-to-be-superseded.html`, same range Pass 5 already copies from) defines them, brought in verbatim by Pass 5 — not new. `CssClass` is `wrap-ok`'s only delivery mechanism; without it the helper would special-case "is this DisplayName? apply wrap-ok," coupling the helper to advisory shape.
 
 ```
 ConvertTo-HtmlSafe -Value $any -> [string]
@@ -93,7 +131,7 @@ ConvertTo-HtmlSafe -Value $any -> [string]
 
 Format-AdvisoryDrilldown
     -Rows [array]
-    -Columns [array of @{ Header; Property; Sorted=$bool; CssClass }]
+    -Columns [array of @{ Header; Property; Sorted=$bool; Format; CssClass }]
     -Cap [int]
     -CsvRelativePath [string|null]
     -SummaryText [string]
@@ -103,8 +141,25 @@ Format-AdvisoryDrilldown
     if $Rows.Count -eq 0:           return ''
     if $Rows.Count -gt $Cap:        return CSV-link span
     else:                           return <details>...<table>...</table></details>
-    Every cell value passes through ConvertTo-HtmlSafe.
     Header for column with Sorted=$true gets class='sorted'.
+
+  Per-cell rendering (inside the row loop, $row = current row, $_ bound to $row):
+    foreach ($col in $Columns) {
+        $val = if ($col.Format) { & $col.Format } else { $row.($col.Property) }
+        $cls = if ($col.CssClass -is [scriptblock]) { & $col.CssClass }
+               else { [string]$col.CssClass }
+        $clsAttr = if ($cls) { " class='$cls'" } else { '' }
+        $cells += "<td$clsAttr>$(ConvertTo-HtmlSafe $val)</td>"
+    }
+
+Locked column hashtable shape:
+    @{
+        Header   = 'Status'                                       # required: display header text
+        Property = 'Status'                                       # required: source property on row
+        Sorted   = $false                                         # required: bool, exactly one column has $true
+        Format   = { ... }                                        # optional: scriptblock returning display string
+        CssClass = 'wrap-ok' | { "status-$($_.Status.ToLower())" } # optional: string OR scriptblock returning class
+    }
 
 DrilldownSpec attached to advisories (by build-site code in Pass 6):
     @{
@@ -114,6 +169,37 @@ DrilldownSpec attached to advisories (by build-site code in Pass 6):
         CsvRelativePath = '<dir>/<file>.csv' or $null
     }
 ```
+
+### D13. Date format strings + null handling
+
+Existing convention `'MMMM d, yyyy HH:mm'` (used for header timestamps in `New-MonarchReport` — grep the literal format string) has no precedent for tabular dates.
+
+- Time-relevant dates (`LastSuccess`, `LastAttempt`, `LastLogon`): `.ToString('yyyy-MM-dd HH:mm')`.
+- Calendar-only dates (`CreatedTime`, `ModifiedTime`): `.ToString('yyyy-MM-dd')`.
+- Null/`MinValue` handling:
+  - `LastLogon`, `LastSuccess`, `LastAttempt` → `'Never'` (security signal — never logged on, replication never succeeded).
+  - `CreatedTime`, `ModifiedTime` → `'--'` (factual absence; ASCII per project rule, no em dash).
+
+ISO-style sorts correctly when scanning columns; the existing header format doesn't (`April < January` alphabetically). Header context is a single value and doesn't need sort; table cells do. Applied via the column's `Format` scriptblock (D12).
+
+### D14. Format-AdvisoryDrilldown call form
+
+Explicit parameter binding, NOT splat:
+
+```
+$drillHtml = ''
+if ($a.PSObject.Properties['DrilldownSpec'] -and $a.DrilldownSpec) {
+    $spec = $a.DrilldownSpec
+    $drillHtml = Format-AdvisoryDrilldown `
+        -Rows            $spec.Rows `
+        -Columns         $spec.Columns `
+        -Cap             $cap `
+        -CsvRelativePath $spec.CsvRelativePath `
+        -SummaryText     $spec.SummaryText
+}
+```
+
+`$a.DrilldownSpec` is a hashtable on a `PSCustomObject`; `@var` splat needs a bare name, forcing two lines (`$spec = ...; @spec`) for no win. Splat also hides parameter names in the render loop — read often, write once. `-Cap` is added at the call site; splatting would couple the spec's shape to the parameter list (needing `-Cap` excluded from the spec to avoid duplicate-binding errors) — explicit binding decouples cleanly.
 
 ---
 
@@ -129,6 +215,7 @@ DrilldownSpec attached to advisories (by build-site code in Pass 6):
 8. `AdvisoryDropdownInlineCap` validated at module init (positive integer).
 9. Print rendering requires no PowerShell-side flag.
 10. The drilldown table is a child of its advisory card.
+11. CSV link presence is decoupled from CSV file existence at render time. Synthesis failure produces a broken link; the corresponding `Write-Warning` (Pass 4) is the audit trail.
 
 ---
 
@@ -175,7 +262,7 @@ Group `Describe "Advisory Drilldown — HTML Escape"`:
 7. `<div>`, `<table>`, `<th>` structural tags present in output (helper does not encode the structure).
 
 Group `Describe "Advisory Drilldown — Sort"`:
-8. Replication links with mixed Failed/Warning/Healthy rows → in output HTML, the row index of the first `Failed` < first `Warning` < first `Healthy`.
+8. Replication links with mixed Failed/Warning/Healthy mock input → output HTML contains Failed and Warning rows but NO Healthy rows. Among rendered rows, first Failed appears before first Warning. (Single test asserts both the D6 filter and the D6 sort.)
 9. FSMO with one `Reachable=$false` and four `$true` → unreachable role appears first.
 10. The sort column header carries `class='sorted'`. Other headers do not.
 
@@ -190,6 +277,12 @@ Group `Describe "Config Validation — AdvisoryDropdownInlineCap"`:
 14. Module reimport with `AdvisoryDropdownInlineCap = 'oops'` in config → throws with a message containing the key name and the bad value.
 15. Module reimport with `AdvisoryDropdownInlineCap = 0` → throws (not a positive integer).
 16. Module reimport with default config → `Get-MonarchConfigValue 'AdvisoryDropdownInlineCap'` returns 15.
+
+Group `Describe "Advisory Drilldown — Format and CssClass Contract"`:
+17. Mock data with `Status` = `'Healthy'`/`'Warning'`/`'Failed'` → rendered `<td>` carries `class='status-healthy'`/`'status-warning'`/`'status-failed'` respectively (one `It` per status value).
+18. Mock data on a `DisplayName` column (any in-scope advisory using it) → rendered `<td class='wrap-ok'>`, asserting the `CssClass`-as-string path.
+19. Mock date column with `$null`/`[DateTime]::MinValue` input on a `LastLogon`-type field → renders `'Never'`; same on a `CreatedTime`-type field → renders `'--'`. Asserts the `Format` scriptblock's null branch (D13).
+20. Replication input `[Healthy, Healthy, Failed]` → output (after D6 filter) contains only `[Failed]`. Replication input `[Warning, Failed]` → output order is `[Failed, Warning]` (rank-map order, not alphabetical) — asserts ordinal sort, not `Sort-Object -Descending` on the raw string.
 
 **Mocking guidance:**
 - Mock the discovery functions to return canned `PSCustomObject` payloads with predictable rows and counts.
@@ -237,12 +330,12 @@ Group `Describe "Config Validation — AdvisoryDropdownInlineCap"`:
 
 ---
 
-### PASS 3 — Helpers (`ConvertTo-HtmlSafe` + `Format-AdvisoryDrilldown`)
+### PASS 3 — Helpers (`ConvertTo-HtmlSafe` + `Format-AdvisoryDrilldown`) + rank constants
 
-**Goal:** Add the two internal helpers. Tests 5, 6, 7, 10 (escape + sorted-class behavior of `Format-AdvisoryDrilldown` in isolation) become testable directly.
+**Goal:** Add the two internal helpers and the D6 sort rank constants. Tests 5, 6, 7, 10 (escape + sorted-class behavior of `Format-AdvisoryDrilldown` in isolation) become testable directly.
 
 **Files touched:**
-- `Monarch.psm1` — add helpers near the top of the script alongside other utility functions (suggest: just after `Get-MonarchConfigValue` at ~line 102)
+- `Monarch.psm1` — add helpers and rank constants near the top of the script alongside other utility functions (suggest: just after `Get-MonarchConfigValue` at ~line 102)
 
 **Depends on:** Pass 2
 
@@ -255,18 +348,24 @@ Group `Describe "Config Validation — AdvisoryDropdownInlineCap"`:
 - `ConvertTo-HtmlSafe 'foo & <bar>'` returns `'foo &amp; &lt;bar&gt;'`.
 - `ConvertTo-HtmlSafe (ConvertTo-HtmlSafe 'A & B')` returns `'A &amp;amp; B'` (idempotency is the caller's responsibility, not the helper's — this is documented behavior, not a bug).
 - `Format-AdvisoryDrilldown` returns `''` for empty rows.
-- `Format-AdvisoryDrilldown` returns a `<a class='csv-link'>...</a>` span when `Rows.Count > Cap` and CsvRelativePath is set.
+- `Format-AdvisoryDrilldown` returns a `<a class='csv-link'>...</a>` span when `Rows.Count > Cap` and CsvRelativePath is set, link text containing both the row count and `Split-Path -Leaf` of the CSV path.
 - `Format-AdvisoryDrilldown` returns a `<details>...</details>` block when `1 <= Rows.Count <= Cap`.
 - The header for the column with `Sorted=$true` carries `class='sorted'`.
-- All cell values are run through `ConvertTo-HtmlSafe` before insertion.
+- Every cell value is run through `ConvertTo-HtmlSafe`; `Format` (if present) runs first, `CssClass` (string or scriptblock, per D12) resolves independently.
+- `$script:StatusRank` and `$script:RiskRank` are defined and match D6.
 
 **Implementation steps:**
-1. Add `ConvertTo-HtmlSafe` per D12 shape. Single function, no extra logic. Internal (not in the manifest's exported function list — confirm `Monarch.psd1` does not auto-export by wildcard; if it does, narrow the export list).
+1. Add `ConvertTo-HtmlSafe` per D12 shape. Single function, no extra logic. `Monarch.psd1`'s `FunctionsToExport` is an explicit allow-list (comment: "Explicit function exports -- no wildcards") — helpers stay private by absence; no manifest edit needed.
 2. Add `Format-AdvisoryDrilldown` per D12 shape:
    - Empty: return `''`.
-   - Overflow: return `"<a class='csv-link' href='$([System.Web.HttpUtility]::UrlPathEncode... NO — use simple path)'>Full list ($($Rows.Count) rows): $(Split-Path $CsvRelativePath -Leaf)</a>"`. Use a simple href = `$CsvRelativePath` (paths are file-system safe, no special escape needed for the values we control).
-   - Inline: build `<details>` with `<summary>$SummaryText</summary>` followed by `<table>` with `<thead>` (apply `class='sorted'` on the matching `<th>`) and `<tbody>` rows. Each `<td>` value passes through `ConvertTo-HtmlSafe`.
+   - Overflow: return `"<a class='csv-link' href='$CsvRelativePath'>View all $($Rows.Count) -- open $(Split-Path $CsvRelativePath -Leaf)</a>"`. `href` is the relative path verbatim — paths are constructed by us per D9, no user data, no escaping needed. Two ASCII hyphens `--` separate count and filename (project rule: no em dash).
+   - Inline: build `<details>` with `<summary>$SummaryText</summary>` followed by `<table>` with `<thead>` (apply `class='sorted'` on the matching `<th>`) and `<tbody>` rows, using D12's per-cell rendering loop (`Format` then `CssClass`, both against `$_` bound to the row). Each cell value passes through `ConvertTo-HtmlSafe`.
 3. Do NOT export the helpers via `Export-ModuleMember` or the manifest. They are internal.
+4. Add module-scope rank constants per D6, near `Get-MonarchConfigValue`:
+   ```
+   $script:StatusRank = @{ 'Failed' = 0; 'Warning' = 1; 'Healthy' = 2 }
+   $script:RiskRank   = @{ 'High'   = 0; 'Medium'  = 1; 'Low'     = 2 }
+   ```
 
 ---
 
@@ -289,7 +388,7 @@ Group `Describe "Config Validation — AdvisoryDropdownInlineCap"`:
   - `./test-out/02-GPO-Audit/unlinked-gpos.csv` (columns: DisplayName, Id, CreatedTime, ModifiedTime, Owner)
   - `./test-out/05-Security-Posture/protected-users-gaps.csv` (columns: SamAccountName, PrivilegedGroups, HasSPN; PrivilegedGroups joined with `; `)
   - `./test-out/05-Security-Posture/weak-account-flags.csv` (columns: SamAccountName, DisplayName, Flag, IsPrivileged, Enabled)
-  - `./test-out/05-Security-Posture/legacy-protocol-findings.csv` (columns: DCName, Finding, Risk — match the actual `DCFindings[]` shape; verify by reading `Find-LegacyProtocolExposure` return)
+  - `./test-out/05-Security-Posture/legacy-protocol-findings.csv` (columns: DCName, Finding, Value, Risk — `Find-LegacyProtocolExposure`'s `DCFindings[]` rows carry all four properties)
 - A synthesis failure on any one block is wrapped in try/catch with `Write-Warning`; report generation still completes.
 - `$dirs.Security` is created if missing.
 
@@ -313,7 +412,7 @@ Group `Describe "Config Validation — AdvisoryDropdownInlineCap"`:
    - **Replication links:** Function `Get-ReplicationHealth`, prop `Links`, bucket `Baseline`, file `replication-links.csv`. Flatten directly (already PSCustomObject-shaped).
    - **Protected Users gaps:** Function `Test-ProtectedUsersGap`, prop `GapAccounts`. Flatten with `PrivilegedGroups = ($_.PrivilegedGroups -join '; ')`. Bucket `Security`, file `protected-users-gaps.csv`.
    - **Weak account flags:** Function `Find-WeakAccountFlag`, prop `Findings`. Flatten direct. Bucket `Security`, file `weak-account-flags.csv`.
-   - **Legacy protocol findings:** Function `Find-LegacyProtocolExposure`, prop `DCFindings`. **Verify the actual property name and shape by reading the function around line 1614 before implementing.** Bucket `Security`, file `legacy-protocol-findings.csv`.
+   - **Legacy protocol findings:** Function `Find-LegacyProtocolExposure`, prop `DCFindings`. Rows carry `DCName, Finding, Value, Risk` — flatten all four. Bucket `Security`, file `legacy-protocol-findings.csv`.
    - **Unlinked GPOs:** Function `Find-UnlinkedGPO`, prop `UnlinkedGPOs`. Flatten direct. Bucket `GPO`, file `unlinked-gpos.csv`.
 
 ---
@@ -361,7 +460,7 @@ Group `Describe "Config Validation — AdvisoryDropdownInlineCap"`:
 **Files touched:**
 - `Monarch.psm1` (advisory build sites, ~lines 2559-2680)
 
-**Depends on:** Pass 4 (knows the CSV file paths to point at)
+**Depends on:** Pass 3 (rank constants, column-spec contract), Pass 4 (knows the CSV file paths to point at)
 
 **Reuse pointers:**
 - Each advisory's source data is available via `$r` in the build loop (the per-function result PSCustomObject).
@@ -375,42 +474,60 @@ Group `Describe "Config Validation — AdvisoryDropdownInlineCap"`:
   - ProtectedUsers gaps: `Test-ProtectedUsersGap.GapAccounts[]` with `SamAccountName`, `PrivilegedGroups`, `HasSPN` (`:1577-1581`)
   - Unlinked GPOs: `Find-UnlinkedGPO.UnlinkedGPOs[]` with `DisplayName`, `Id`, `CreatedTime`, `ModifiedTime`, `Owner` (`:1094-1100`)
   - Weak flags: `Find-WeakAccountFlag.Findings[]` with `SamAccountName`, `DisplayName`, `Flag`, `IsPrivileged`, `Enabled` (`:1451-1457`)
-  - Legacy protocol: `Find-LegacyProtocolExposure.DCFindings[]` — **read the function at ~1614 to confirm shape** before implementing.
+  - Legacy protocol: `Find-LegacyProtocolExposure.DCFindings[]` with `DCName, Finding, Value, Risk` (all four properties confirmed present).
 
 **Acceptance:**
 - For each in-scope advisory category in D8, the advisory hashtable now includes a `DrilldownSpec = @{ Rows; Columns; SummaryText; CsvRelativePath }` property.
-- `Rows` is sorted per D6.
+- `Rows` is filtered then sorted per D6 (Replication excludes `Healthy`; all others render their full already-filtered source).
 - One column in `Columns` has `Sorted=$true`, matching D6.
 - `CsvRelativePath` matches D9.
-- `SummaryText` follows the v5 example: `View N <thing> (<breakdown>)`.
+- `SummaryText` matches the locked per-advisory template below.
 - Out-of-scope advisories have NO `DrilldownSpec` property (or `$null`).
 
 **Implementation steps:**
-1. For each in-scope advisory in the build loop, add `DrilldownSpec` to the `[PSCustomObject]@{}` literal already being added to `$advisories` or `$criticals`. Sort `Rows` inline using `Sort-Object` with the D6 priority (multi-key sorts: use a hashtable expression like `@{ Expression = { ... }; Descending = $true }`).
-2. Define `Columns` as an array of hashtables, ordered for display. Mark exactly one with `Sorted=$true` per D6.
-3. Compute `SummaryText` from the row count and any breakdown counts already in `$r` (e.g., `$r.HealthyLinkCount`, `$r.WarningLinkCount`, `$r.FailedLinkCount` for replication).
+1. For each in-scope advisory in the build loop, add `DrilldownSpec` to the `[PSCustomObject]@{}` literal already being added to `$advisories` or `$criticals`. Apply the D6 filter first (Replication only: `Where-Object { $_.Status -ne 'Healthy' }`), then sort `Rows` using the exact `Sort-Object` expression from D6 for that advisory.
+2. Define `Columns` as an array of hashtables, ordered for display, per the table below. Mark exactly one with `Sorted=$true` per D6.
+3. Compute `SummaryText` from the locked template below (`$rows` = post-filter `Rows`, `$r` = the source function's result object — they differ only for Replication).
 4. Set `CsvRelativePath` from D9. Use forward-slash separator (cross-OS-friendly in browsers).
+
+**SummaryText templates (locked):**
+
+| Advisory | SummaryText |
+|----------|-------------|
+| Replication | `"View $($rows.Count) replication links ($($r.FailedLinkCount) failed, $($r.WarningLinkCount) warning)"` |
+| FSMO placement | `"View $($r.Roles.Count) FSMO roles ($($r.UnreachableCount) unreachable)"` |
+| DA members | `"View $($rows.Count) Domain Admin members"` |
+| Kerberoastable | `"View $($r.Count) kerberoastable accounts ($($r.PrivilegedCount) privileged)"` |
+| AS-REP | `"View $($r.Count) AS-REP accounts ($privCount privileged)"` (`$privCount` computed inline, same pattern as the existing Kerberoastable privileged-count derivation) |
+| AdminCount orphans | `"View $($r.Count) AdminCount orphans"` |
+| ProtectedUsers gaps | `"View $($r.GapAccounts.Count) accounts not in Protected Users"` |
+| Unlinked GPOs | `"View $($rows.Count) unlinked GPOs"` |
+| Weak account flags | `"View $($r.Findings.Count) weak-flag accounts"` |
+| Legacy protocol | `"View $($rows.Count) legacy protocol findings ($highRisk high, $medRisk medium)"` |
+
+Whole template passes through `ConvertTo-HtmlSafe` once at render (no-op for integers/literals, consistent with every other value).
 
 **Per-advisory column spec (concrete, drop-in):**
 
-| Advisory | Columns (Header, Property, Sorted) | Sort priority |
-|----------|------------------------------------|---------------|
-| Replication links | Source/SourceDC/false; Partner/PartnerDC/false; Partition/Partition/false; Status/Status/true; LastSuccess/LastSuccess/false | Status desc (Failed→Warning→Healthy), then SourceDC, PartnerDC |
-| FSMO placement | Role/Role/false; Holder/Holder/false; Site/Site/false; Reachable/Reachable/true | Reachable=$false first, then Role |
-| DA members | Account/SamAccountName/true; Display Name/DisplayName/false; Type/ObjectType/false; Direct/IsDirect/false; Last Logon/LastLogon/false | Alpha SamAccountName |
-| Kerberoastable | Account/SamAccountName/true; Display Name/DisplayName/false; Privileged/IsPrivileged/false; Pwd Age (d)/PasswordAgeDays/false; Enabled/Enabled/false | Alpha SamAccountName |
-| AS-REP | Account/SamAccountName/true; Display Name/DisplayName/false; Privileged/IsPrivileged/false; Enabled/Enabled/false | Alpha SamAccountName |
-| AdminCount orphans | Account/SamAccountName/true; Display Name/DisplayName/false; Enabled/Enabled/false | Alpha SamAccountName |
-| ProtectedUsers gaps | Account/SamAccountName/true; Privileged Groups/PrivilegedGroups/false; Has SPN/HasSPN/false | Alpha SamAccountName |
-| Unlinked GPOs | Display Name/DisplayName/true; Created/CreatedTime/false; Modified/ModifiedTime/false; Owner/Owner/false | Alpha DisplayName |
-| Weak flags | Account/SamAccountName/false; Display Name/DisplayName/false; Flag/Flag/false; Privileged/IsPrivileged/true | IsPrivileged desc, Flag, SamAccountName |
-| Legacy protocol | DC/DCName/false; Finding/Finding/false; Risk/Risk/true | Risk desc (High→Medium→Low), DCName |
+Sort priority per column now lives in D6 (rank-map expressions) — not repeated here. `Format`/`CssClass` per D12; `Yes`/`No` and joined-array formatting are `Format` scriptblocks, `wrap-ok`/status coloring are `CssClass`.
 
-For boolean and joined fields, format inline:
-- `IsDirect` / `IsPrivileged` / `Enabled` / `HasSPN` / `Reachable`: render `'Yes'` / `'No'`
-- `PrivilegedGroups` (array): render `($v -join '; ')`
-- `LastLogon` / `CreatedTime` / `ModifiedTime`: render via existing date-display convention (check repo for existing pattern; default `.ToString('yyyy-MM-dd')` if unsure)
-- `Status` ∈ {Healthy, Warning, Failed}: wrap value in `<span class='status-healthy/warning/failed'>` via the column's optional `CssClass` lambda
+| Advisory | Columns (Header/Property/Sorted, with Format/CssClass noted where non-default) |
+|----------|----------------------------------------------------------------------------------|
+| Replication links | Source/SourceDC/false; Partner/PartnerDC/false; Partition/Partition/false; Status/Status/true, CssClass=`{ "status-$($_.Status.ToLower())" }`; LastSuccess/LastSuccess/false, Format=D13 time-relevant |
+| FSMO placement | Role/Role/false; Holder/Holder/false; Site/Site/false; Reachable/Reachable/true, Format=Yes-No |
+| DA members | Account/SamAccountName/true; Display Name/DisplayName/false, CssClass=`wrap-ok`; Type/ObjectType/false; Direct/IsDirect/false, Format=Yes-No; Last Logon/LastLogon/false, Format=D13 time-relevant |
+| Kerberoastable | Account/SamAccountName/true; Display Name/DisplayName/false, CssClass=`wrap-ok`; Privileged/IsPrivileged/false, Format=Yes-No; Pwd Age (d)/PasswordAgeDays/false; Enabled/Enabled/false, Format=Yes-No |
+| AS-REP | Account/SamAccountName/true; Display Name/DisplayName/false, CssClass=`wrap-ok`; Privileged/IsPrivileged/false, Format=Yes-No; Enabled/Enabled/false, Format=Yes-No |
+| AdminCount orphans | Account/SamAccountName/true; Display Name/DisplayName/false, CssClass=`wrap-ok`; Enabled/Enabled/false, Format=Yes-No |
+| ProtectedUsers gaps | Account/SamAccountName/true; Privileged Groups/PrivilegedGroups/false, Format=join `'; '`; Has SPN/HasSPN/false, Format=Yes-No |
+| Unlinked GPOs | Display Name/DisplayName/true, CssClass=`wrap-ok`; Created/CreatedTime/false, Format=D13 calendar-only; Modified/ModifiedTime/false, Format=D13 calendar-only; Owner/Owner/false |
+| Weak flags | Account/SamAccountName/false; Display Name/DisplayName/false, CssClass=`wrap-ok`; Flag/Flag/false; Privileged/IsPrivileged/true, Format=Yes-No |
+| Legacy protocol | DC/DCName/false; Finding/Finding/false; Value/Value/false, CssClass=`wrap-ok`; Risk/Risk/true |
+
+Shared `Format` scriptblock shapes (reused across columns above):
+- `Yes-No`: `{ if ($_.<Property>) { 'Yes' } else { 'No' } }` — applies to `IsDirect`, `IsPrivileged`, `Enabled`, `HasSPN`, `Reachable`.
+- join `'; '`: `{ $_.PrivilegedGroups -join '; ' }`.
+- D13 time-relevant / calendar-only: per D13's format string and null handling, applied per date column above.
 
 ---
 
@@ -434,11 +551,12 @@ For boolean and joined fields, format inline:
   </div>
   ```
 - All values inside the advisory loop pass through `ConvertTo-HtmlSafe`.
+- `DiagnosticHint` may be a string OR an array (`Get-ReplicationHealth` emits plural `DiagnosticHints`, others emit singular `DiagnosticHint`) — the `@(...)` wrapping in the loop above handles both by design; property-name cardinality is intentional, not inconsistency.
 - An advisory without a `DrilldownSpec` renders identically to today (no drilldown markup).
 - Tests 1, 2, 3, 4, 8, 9, 12, 13 pass.
 
 **Implementation steps:**
-1. Replace the existing advisory loop body (`:2895-2899`) with:
+1. Replace the existing advisory loop body (locate the advisory render `foreach` in `New-MonarchReport`) with:
    ```
    foreach ($a in $domainAdvisories) {
        $descSafe = ConvertTo-HtmlSafe $a.Description
@@ -447,13 +565,19 @@ For boolean and joined fields, format inline:
                    | ForEach-Object { "<div class='diagnostic-hint'>$(ConvertTo-HtmlSafe $_)</div>" }) -join ''
        $drillHtml = ''
        if ($a.PSObject.Properties['DrilldownSpec'] -and $a.DrilldownSpec) {
-           $drillHtml = Format-AdvisoryDrilldown @($a.DrilldownSpec) -Cap $cap
+           $spec = $a.DrilldownSpec
+           $drillHtml = Format-AdvisoryDrilldown `
+               -Rows            $spec.Rows `
+               -Columns         $spec.Columns `
+               -Cap             $cap `
+               -CsvRelativePath $spec.CsvRelativePath `
+               -SummaryText     $spec.SummaryText
        }
        $html += "<div class='card w-advisory'><div class='adv-label'>Advisory</div><div class='description'>$descSafe</div>$hintHtml$drillHtml</div>"
    }
    ```
+   Call form per D14 — explicit parameter binding, not splat.
 2. `$cap` is read once at the top of `New-MonarchReport` via `Get-MonarchConfigValue 'AdvisoryDropdownInlineCap'`.
-3. Update the splat call: `Format-AdvisoryDrilldown @($a.DrilldownSpec) -Cap $cap` — verify splat syntax matches PowerShell expectations for hashtable splatting (use `@spec` form: `Format-AdvisoryDrilldown @spec -Cap $cap` where `$spec = $a.DrilldownSpec`).
 
 ---
 
@@ -501,7 +625,7 @@ For boolean and joined fields, format inline:
 **Depends on:** all prior passes
 
 **Acceptance:**
-- `Invoke-Pester ./tests/Monarch.Tests.ps1 -Output Detailed` — all tests pass (existing + 16 new from Pass 1).
+- `Invoke-Pester ./tests/Monarch.Tests.ps1 -Output Detailed` — all tests pass (existing + 20 new from Pass 1).
 - `Invoke-DomainAudit -Phase Discovery -OutputPath ./test-out` against a populated lab produces:
   - All 5 NEW CSV files per D9 with sane row counts.
   - HTML report with drilldowns for advisories that have ≤15 rows; CSV-link spans for advisories with ≥16 rows.
