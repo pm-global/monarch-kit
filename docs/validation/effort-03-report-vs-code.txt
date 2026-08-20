@@ -1,0 +1,140 @@
+Validation Effort 3: report-design-system.md + the report samples vs report-generation code
+
+demo_report_v9.html is the baseline: a real client report, anonymized, showing what the module produces today. demo_report_v5.html is a fabricated mockup that was never implemented, so the renderer is not a regression from it -- v5 is an unmet aspiration, and report-design-system.md was extracted from it. v10 is v9 plus whatever of v5 is still wanted. This pass inventories both samples feature-by-feature, then checks what the renderer actually produces. The question is what changed and what is missing, never how to get back to v5.
+
+--- Issue 0: HTML-rendering code needs its own file ---
+
+The report-HTML-building code lives inline in the main script and has grown large enough, and is edited often enough, that it should be extracted into its own file. Not performed as part of this pass -- flagged only.
+Destination: Issue.
+
+--- Known Drift: decisions that override any reference file ---
+
+Every reference file in this doc (v5.html, v9.html, design-system.md) is ground truth by convention only. The user is the actual final authority -- these are explicit user calls that supersede any file, and always will. Files get updated to match the decisions; decisions never get overridden by what a file happens to say.
+
+[D1] Domain order: Group Policy before Identity Lifecycle. Both v5.html and v9.html currently render Identity Lifecycle before Group Policy -- decided this is wrong, target order for the next implementation swaps them (GPO first). Neither sample reflects this yet; v9 has the same (old) order as v5, doesn't confirm the decision. v5.html itself is not going to be edited to match -- it's frozen, not the live reference anymore. The decision applies going forward to the actual implementation, not to patching the demo file.
+
+[D2] Collapse rule is not "no advisories = collapse." It's "category has no baseline data at all = collapse." Two different things:
+  - NEVER collapse, regardless of advisory count: Backup & Recovery, Infrastructure Health, Privileged Access. These always have baseline metrics that matter on their own (backup tool/tier, DC count/site count/functional level, admin counts) even with zero findings -- the subhead info is load-bearing by itself.
+  - CAN collapse, when genuinely empty: Identity Lifecycle (no dormant accounts, no never-logged-on), Security Posture, DNS, Audit & Compliance -- these can have real zero-result states with nothing worth a subhead.
+  design-system.md's current wording ("domains with no findings collapsed") is wrong/imprecise per this -- needs correction, not just v5.html.
+  GPO resolved as its own case, not on either list: NEVER collapse. Total GPO count stays load-bearing even at zero findings because baseline comparison (Compare-DomainBaseline, Plan 4, not yet built) will need it as a tracked value going forward -- collapsing it now would remove a number future functionality depends on.
+  Backup & Recovery's status on the NEVER-collapse list is under active reconsideration -- see [I4] below. Don't treat it as settled until that redesign work lands.
+
+[D3] Critical-finding tracking is a confirmed real mechanism, not drift: the script builds a critical-findings array during the run, applied at report-generation time to populate the Critical Findings section. That's all it does -- it says nothing about the order domain sections render in below it. Domain section order is not prescribed or hardcoded; don't infer an ordering rule from a small sample of examples. Backend logic, not a render component -- belongs with mechanism-decisions.md material, not the v5 feature inventory.
+
+--- Issues flagged for follow-up (not resolved in this pass) ---
+
+[I2] Expandable tables were never correctly implemented -- the original build never made them, not a case of them being dropped or evolving away between v5 and v9. Their absence in v9 is wrong, not an acceptable state. Restoring them may require changes at the module level, not just the render layer. Includes restoring the print rules that depended on them -- also wrong to be missing, same root cause. Highest-priority fix identified in this validation pass.
+Destination: Issue.
+
+[I3] Hint lines (per-advisory context/action text, design-system.md's action-hint / v9's renamed-but-unused diagnostic-hint) are missing from real output. Each advisory was meant to carry its own hint reducing time-to-solution. Second-highest-priority fix identified in this pass.
+Destination: Issue.
+
+[I4] Backups: detection design needs dedicated R&D -- too many vendor-specific backup solutions to parse reliably without real-world testing help. Current behavior of hiding the whole domain subhead when there are no advisories is wrong regardless of the redesign's outcome: baseline info (tombstone lifetime, Recycle Bin status) is always knowable and shouldn't be hidden alongside the vendor-dependent tier data that isn't. Whether Backup & Recovery belongs on D2's NEVER-collapse list stays unresolved until this lands.
+Destination: Issue, needs research/grilling first.
+
+[I5] Errors-pill cluster -- one decision, not three: whether the stats-bar Errors pill stays (currently absent from v9's Checks-fraction redesign), whether the Function Errors section survives at all (present only as a commented-out example in v5, absent even as a comment in v9), and the duplicate `.failure-item.*` / `.card.*` fn-name/fn-error CSS rule sets (two parallel definitions for the same concept, neither demonstrated with real data in either sample). Resolve together, not piecemeal.
+Destination: Issue, needs research/grilling first.
+
+[I6] Audit & Compliance domain subhead content is undefined -- v9 renders an empty domain-metrics container for this category, no baseline metrics at all. Needs checked against what the module's audit/event-log functions (Get-AuditPolicyConfiguration, Get-EventLogConfiguration, per Validation Effort 2 findings) actually return before deciding what belongs there.
+Destination: fact-check against code first, Issue after if a subhead is warranted.
+
+[I7] Output file-tree section is another instance needing research, not a clean "file X is wrong, code is right" case like D1/D2. The real output-file section went through multiple redesigns before becoming functional -- v5.html's depiction may predate current actual behavior, and even v9's depiction (item [V9-14]) is only one sample run's worth of evidence (e.g. the absent "02-XML-Backup" path -- unconfirmed whether that's conditional-on-content or something else). `docs/sample-report/demo_report_v7_badblood/00-Discovery-Report.html` is an older real generated report, not currently trusted as a reference (see [V9] notes -- it predates the fixes that produced v9 and is known stale).
+  Confirmed separately, not in question: the >5-sibling-files folder-collapse rule works as designed for GPO exports (demonstrated in v9's "01-HTML-Reports/* (20 files)" line) -- that part isn't what needs research, the overall section's reliability/completeness across different run conditions is.
+Destination: Issue, needs research/grilling first.
+
+--- Reference inventory: demo_report_v5.html, farmed feature-by-feature ---
+
+[1] Document title -- "Discovery Report — {domain}" (browser tab title, line 6).
+
+[2] Report title block -- .report-title, domain name inline in the heading text itself (not a separate field), accent-primary color.
+
+[3] Report meta line -- DC source (no prefix, per design-system.md's "absence of annotation means healthy selection" rule -- v5 shows plain "DC01.contoso.com", no fallback annotation demonstrated), timestamp with explicit timezone abbreviation ("March 25, 2026 14:32 EDT"), duration ("Duration: 47 minutes"). Flex-wrapped, comma-free, space-separated via flex gap.
+
+[4] Stats bar -- 4 stat pills in fixed order: Critical, Advisory, Functions, Errors. Each is number+label. 4 visual variants demonstrated: critical fill (white text), advisory fill (dark text), outline (non-zero), outline+zero (dimmed text-3, only Errors shows this variant here since its value is 0).
+
+[5] Critical Findings section -- section-label "Critical Findings" (critical color) + critical-weight cards. Card = domain-tag (which domain the finding belongs to) + description (bold-ish summary line) + action-hint (supporting detail/numbers). 2 example findings shown (Backup & Recovery, Infrastructure Health).
+
+[6] Domain section structure -- repeated per domain: h2 heading (domain name), domain-metrics row (label: **bold value** pairs, flex-wrapped, 4 metrics per domain in examples), then 0+ advisory/neutral cards, then 0+ expandable detail tables.
+
+[7] Domain metrics content per domain (6 domains shown):
+  - Backup & Recovery: Tombstone Lifetime, Recycle Bin, Detection Tier, Backup Tool
+  - Infrastructure Health: Domain Controllers, Sites, Functional Level, FSMO
+  - Privileged Access: Domain Admins, Enterprise Admins, Kerberoastable (privileged), AdminCount Orphans
+  - Identity Lifecycle: Dormant Accounts, Never Logged On, Threshold, Excluded (with parenthetical reason)
+  - Group Policy: Total GPOs, Unlinked, With User Rights, With Scripts
+  - Security Posture: Password Never Expires, Protected Users Gaps, Legacy Protocol Exposure
+
+[8] Domain ordering -- severity-first: the 2 domains with critical findings (Backup & Recovery, Infrastructure Health) appear first, in the same order as the Critical Findings cards above them. Remaining domains (Privileged Access, Identity Lifecycle, Group Policy, Security Posture) follow, all advisory-only, no stated ordering rule distinguishing them from each other.
+
+[9] Advisory card content -- one card per distinct finding, "Advisory" adv-label + description sentence. Multiple advisory cards per domain when there are multiple distinct findings (Infrastructure Health has 2, Privileged Access has 3).
+
+[10] Expandable tables (<details>/<summary>) -- 3 examples:
+  - Replication links: summary text includes count breakdown ("View 12 replication links (8 healthy, 1 warning, 3 failed)"), table columns Source/Partner/Partition/Age/Status, status column uses status-healthy/warning/failed classes, Age uses relative-duration format not raw timestamp ("2 hours", "22 hours", "Never" for unresolved).
+  - FSMO role placement: summary with no count breakdown (fixed 5 roles), table columns Role/Holder/Site/Reachable, Reachable uses status-healthy only (binary, no warning/failed shown).
+  - Domain Admins membership: summary includes member count only ("View Domain Admins (7 members)", no healthy/warning/failed breakdown -- membership isn't a health status), table columns Account/Display Name/Type/Direct/Logon Age, Display Name column uses wrap-ok class, Type distinguishes User vs Group rows, Logon Age shows "Active (SPN)" and "—" (em dash) as non-numeric states alongside normal day counts.
+
+[11] Clean domains line -- single muted line listing domains with zero findings by name, comma-separated ("No findings: DNS, Audit & Compliance"). Distinct from a domain-section block -- no heading, no metrics, no cards for these domains at all.
+
+[12] Function Errors section -- present in markup only as an HTML comment (commented out, "Uncomment for failures demo"), not rendered in this example. Structure when active: section-label "Function Errors" (neutral) + neutral-weight cards using monospace font, fn-name (function name, bold) + fn-error (error text, on its own line below).
+
+[13] Output Files file-tree -- grouped by top-level output folder. Each group = folder link (clickable, opens directory) + indented tree-children list. Tree items are either plain text (no meaningful target, e.g. subfolder names like "02-XML-Backup/") or clickable links (actual files, e.g. "dormant-accounts.csv"). Visual connector via ::before, not literal characters in markup. No example of the >5-sibling-files folder-collapse behavior described in design-system.md -- every group in v5 has 5 or fewer children, so that rule is documented but not demonstrated in the reference file.
+
+[14] Report footer -- version tag ("monarch-kit v1.0") + generated timestamp with timezone, flex space-between layout.
+
+[15] Narrow viewport -- @media (max-width: 600px) reduces container padding from 40px to 16px. No other layout change (still single column at all widths, per design-system.md's "no sidebar, no multi-column" rule).
+
+[16] Print stylesheet -- @media print: strips backgrounds/fills, converts critical/advisory borders to grayscale (critical→4px black, advisory→4px/3px gray depending on element), stat containers gain 1px border, file-tree links print their href in parenthetical text after the link, headings/domain-sections avoid page-break splits, <details> markers hidden (assumes generator or wrapper pre-opens <details> before print -- CSS comment in the file states this explicitly, matches design-system.md's caveat).
+
+[17] Container/layout -- max-width 960px centered, 40px padding (16px under 600px), single column throughout, no component in the file breaks this.
+
+--- Reference inventory: demo_report_v9.html, farmed standalone (post-repair sample, believed close to current script output) ---
+
+Describes only what's in this file. No comparison to v5 or to design-system.md here -- that's its own pass, done separately.
+
+[V9-1] Document title -- "Discovery Report: {domain}" (colon separator). Domain shown as "Contoso.local" in this sample.
+
+[V9-2] Report title block -- .report-title, domain name inline in the heading text, accent-primary color.
+
+[V9-3] Report meta line -- DC name (plain, no prefix), date/time string ("April 21, 2026 21:24" -- no timezone abbreviation present in the string), duration ("33 seconds"). Flex-wrapped.
+
+[V9-4] Stats bar -- 3 pills: Critical, Advisory, Checks. Checks pill shows a fraction value ("25/25"), not a plain integer. CSS defines critical-fill, advisory-fill, outline, and outline+zero variants; only critical-fill, advisory-fill, and outline appear in this sample's markup.
+
+[V9-5] Per-domain check-count -- every domain h2 heading has a trailing `<span class="check-count">N/N checks</span>` (e.g. "Infrastructure Health 4/4 checks"). `--t5` size, `--text-3` color, 8px left margin.
+
+[V9-6] Critical Findings section -- section-label "Critical Findings" + 1 critical-weight card in this sample. Card content: domain-tag + description. No further content line in this card.
+
+[V9-7] Card CSS defines 4 optional inner elements: domain-tag, description, diagnostic-hint, adv-label. In this sample's markup, diagnostic-hint is never used inside any card -- every card renders only domain-tag/adv-label + description.
+
+[V9-8] Card CSS also defines `.card .fn-name` and `.card .fn-error`, alongside the pre-existing `.failure-item .fn-name` / `.failure-item .fn-error` rules -- both rule sets present in the stylesheet. Neither is demonstrated in this sample's markup (zero failures present).
+
+[V9-9] Domain sections rendered, in this order: Infrastructure Health, Privileged Access, Identity Lifecycle, Group Policy, Security Posture, Audit & Compliance, DNS.
+
+[V9-10] Domain metrics content per rendered domain:
+  - Infrastructure Health: Domain Controllers, Sites, Functional Level, FSMO
+  - Privileged Access: Domain Admins, Enterprise Admins, Kerberoastable (privileged), AdminCount Orphans
+  - Identity Lifecycle: Dormant Accounts, Never Logged On, Threshold, Excluded
+  - Group Policy: Total GPOs, Unlinked, With User Rights, With Scripts
+  - Security Posture: Password Never Expires, Protected Users Gaps, Legacy Exposure (value format: DC name plus a parenthetical count, e.g. "DC.Contoso.local (2)")
+  - Audit & Compliance: domain-metrics container present, empty -- no metric entries
+  - DNS: domain-metrics container present, empty -- no metric entries
+
+[V9-11] Advisory cards -- adv-label "Advisory" + description sentence, one card per distinct finding. Multiple cards appear in a domain when there are multiple distinct findings (Security Posture has 4, Group Policy has 2).
+
+[V9-12] No `<details>`, `<summary>`, `.status-healthy`/`.status-warning`/`.status-failed`, or `.wrap-ok` present anywhere in this file's CSS or markup.
+
+[V9-13] Clean domains line -- single muted line, one domain named in this sample ("No findings: Backup & Recovery"). Backup & Recovery has no domain-section block of its own in this render.
+
+[V9-14] Output Files file-tree -- grouped by top-level output folder (01-Baseline/, 02-GPO-Audit/, 03-Privileged-Access/, 04-Dormant-Accounts/). Every tree-item in this sample is a clickable link with a full relative path. One collapsed entry present: "01-HTML-Reports/* (20 files)", styled with an inline `style="color:var(--text-3)"` attribute rather than a CSS class. The index file for that folder ("00-INDEX.html") renders as its own separate clickable entry, positioned above the collapsed line. The 02-GPO-Audit group in this sample has no entry for a "02-XML-Backup" path.
+
+[V9-15] Report footer -- "monarch-kit" (no version number shown) + generated timestamp string ("April 23, 2026 21:25" -- no timezone abbreviation present), flex space-between layout.
+
+[V9-16] Narrow viewport + print -- @media (max-width:600px) reduces container padding to 16px. No `<details>`/`summary`-related rules in the print media query block (none of that markup exists in this file). Remaining print rules: stat/card color overrides, file-tree href-in-parens, heading/domain-section page-break avoidance.
+
+[V9-17] Container/layout, spacing tokens (--gap-micro/tight/related/separate), color tokens, and type scale (--t1 through --t5) as declared in :root.
+
+--- Next ---
+
+Two separate passes, not yet performed:
+1. Diff [1]-[17] (v5) against [V9-1]-[V9-17] (v9) -- what changed between the two samples.
+2. Check both samples (and the actual report-rendering code) against design-system.md and Known Drift (D1-D4) for spec conformance -- what's right or wrong per the standard, independent of which sample shows it.

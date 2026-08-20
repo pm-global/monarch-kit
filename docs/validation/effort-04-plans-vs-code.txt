@@ -1,0 +1,28 @@
+Validation Effort 4: docs/plans/*.md vs code (implementation status)
+
+Status: not started. This file is a stub.
+
+Scope and success criteria are in docs/working-plan.md, section "Validation Efforts", effort 4.
+Ticket: #23.
+
+--- What this pass must produce ---
+
+Per named piece of work inside each plan, not per file: not-started / partial / complete.
+Re-verify every line-number anchor before using it. One unrelated code edit invalidates every
+reference below it.
+
+Respect the dependency ordering stated inside the plans. roastable-consolidation-plan.md lands
+before advisory-drilldown-plan.md.
+
+--- Findings carried over from the ledger, unverified here ---
+
+todo-privaccess-output.md -- partial. Get-PrivilegedGroupMembership and Find-AdminCountOrphan
+have -OutputPath. Find-KerberoastableAccount and Find-ASREPRoastableAccount do not.
+
+roastable-consolidation-plan.md -- not started.
+
+advisory-drilldown-plan.md -- not started, blocked on roastable-consolidation-plan.md.
+
+--- Findings ---
+
+(none yet)

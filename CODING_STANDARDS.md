@@ -58,7 +58,7 @@ function getStatus(name, host = "local") {
 
 The pattern matters. The language does not matter.
 
-**Maintainer note:** add a real example from this repo here when one exists. A real example that ships carries more weight than invented pseudocode.
+**Optional, maintainer only.** The example is pseudocode. The repo owner can swap in real code. No agent starts this.
 
 ---
 
@@ -96,6 +96,38 @@ A partial failure must leave the system in a state you can diagnose and recover.
 An abstraction — a config layer, a wrapper, a base class, a plugin system — needs two concrete callers to exist now.
 
 One caller means duplication costs less than the wrong abstraction. Keep the duplication until a second real use case shows you the right shape.
+
+---
+
+## Pre-Commit Checklist
+
+Required for every change. The rules above explain each item; this list is the check itself.
+
+**Safety**
+- [ ] No production state is modified without dry-run and confirmation support
+- [ ] Destructive operations are gated on explicit confirmation
+- [ ] Partial failures leave the system in a diagnosable state
+- [ ] Idempotency is documented for every state-changing function
+
+**Correctness**
+- [ ] All modified functions return objects, not formatted strings
+- [ ] Return contracts are unchanged, or the change is intentional and documented in the plan
+- [ ] All callers of modified functions are accounted for
+
+**Tests**
+- [ ] New functionality has tests at the same granularity as existing tests
+- [ ] Tests assert behavior, not implementation
+- [ ] No test passes by asserting the obvious
+
+**Code Budget**
+- [ ] Every line added has a specific failure it prevents or a contract it enforces
+- [ ] Guards are at boundaries, not scattered through logic
+- [ ] No helper function exists with only one caller (unless it is a boundary wrapper)
+
+**Documentation**
+- [ ] Non-obvious decisions have a comment explaining *why*, not *what*
+- [ ] Any change to public function behavior is reflected in the documentation that describes it
+- [ ] The repo's agent-orientation file states the current state of the work
 
 ---
 

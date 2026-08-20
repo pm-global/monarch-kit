@@ -12,7 +12,7 @@
     # =========================================================================
 
     # Days since last logon before an account is considered dormant.
-    # Aligns with PCI/NIST/Microsoft guidance.
+    # 90 days per PCI, see ADR-0007
     # DormancyThresholdDays = 90
 
     # Days to wait before flagging never-logged-on accounts.

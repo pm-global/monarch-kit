@@ -1,4 +1,5 @@
 # Working Summary
+This file is a single file that captures the decisions and development of all the legacy documentation within the monarch-kit project. it is necessary to organize this so it can be processed into CONTEXT.md, ADRs, and Github Issues so the repo is compatible with Matt Pocock's /grill-with-docs skill and other programming skills. Without those initial files, all of his other skills/tools are... useless. having the docs in place means the skills are vastly more functional, existing work can be checked against the design in a strategic and complete way, and future development in the repo is easier. Matt's skills assume an empty repo or a pre-existing repo doc format. Since this repo is neither, this file is part of a strategy to get there.
 
 Source: `docs/archive/phase-01-discovery/01-discovery/CLAUDE-DEV-PLAN-v1.md`, lines 1–585 (Plan 1, Steps 1–7; all `[x]` shipped).
 

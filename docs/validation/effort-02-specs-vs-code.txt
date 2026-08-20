@@ -1,0 +1,168 @@
+Validation Effort 2: domain-specs.md + mechanism-decisions.md vs code
+
+--- mechanism-decisions.md, section by section ---
+
+[1/8] Configuration Model (doc lines 7-41) -- CONFIRMED w/ gap noted
+- Config load mechanism (defaults built-in, file optional, merge/fallback) matches Monarch.psm1:76-100 exactly.
+- All Identity Lifecycle/Privileged Access/Infrastructure/Compliance values match $script:DefaultConfig (psm1:16-71) and Monarch-Config.psd1 exactly: 90/60/30, zQuarantine-Dormant, extensionAttribute15/14, BREAKGLASS list, 5/10, adm|admin, GPO editor list, 24hr, 7yr.
+- GAP: 5 keys defined but never consumed anywhere in Monarch.psm1: QuarantineOUName, DisableDateAttribute, RollbackDataAttribute, HoldPeriodMinimumDays, AdminAccountPattern.
+  Root cause: consuming functions don't exist yet -- no Suspend-/Disable-/Restore-/Remove-DormantAccount, no admin-naming-convention check function. Only Find-DormantAccount (discovery) and Find-AdminCountOrphan implemented; lifecycle-action functions missing.
+  DeletionArchiveRetentionYears also unused but doc says "not enforced by module" -- expected, not a gap.
+- No hardcoding-rule violation found (values aren't hardcoded elsewhere bypassing config; they're just orphaned pending functions).
+- ADR-eligible: yes, for the config-model mechanism itself (Ghostty-style layered config, defaults+optional file+merge). Value table and the 5-key implementation gap are relevant context to carry into working-summary, not ADR content by themselves.
+
+[2/8] Disable Date Tracking (doc lines 44-61) -- SOUND DESIGN, correctly unimplemented
+- Zero corresponding code in Monarch.psm1: no Disable-DormantAccount function, no read/write of extensionAttribute15, no [DateTime]::Parse ISO-8601 logic, no "No monarch-kit disable date found" hint. Identity Lifecycle region (617-759) contains only Find-DormantAccount (discovery).
+- NOT a silent gap: working-summary.md:50 and docs/phases/phase-02-remediation.md:11-13 both already list Suspend-/Restore-/Remove-DormantAccount as planned Plan 2 (Remediation), not yet built, built on this exact extensionAttribute14/15 mechanism. Doc and phase plan agree.
+- Engineering judgment check: extensionAttribute-over-info-field reasoning, no-whenChanged-fallback rule, ISO 8601 format choice -- all sound, no red flags.
+- ADR-eligible: yes, mechanism decision, sound rationale. Implementation status: not started, matches phase-02 plan (no drift to flag).
+
+[3/8] Rollback Data Archiving (doc lines 65-88) -- SOUND DESIGN, unimplemented, one unaddressed risk
+- Zero implementation in Monarch.psm1: no sourceOU/group-JSON serialization, no Suspend-/Restore-DormantAccount, no extensionAttribute14 read/write. ("rollback" hits in file are unrelated USN-rollback backup terminology.) Matches working-summary.md:50 planned Plan 2 -- not drift.
+- GAP not in this doc but flagged elsewhere: docs/phases/phase-02-remediation.md:30 notes extensionAttributes 1-15 have a 1024-byte rangeUpper cap. mechanism-decisions.md's JSON-in-extensionAttribute14 design (sourceOU + group DNs) gives no fallback/truncation strategy for users in many groups -- real risk, currently undocumented in this file.
+- ADR-eligible: yes, core mechanism (extensionAttribute over info field, JSON format) sound. Carry the size-limit risk forward into the ADR as an open item.
+
+[4/8] Privileged Group Matching -- RID Suffix Patterns (doc lines 91-102) -- CONFIRMED
+- RID suffix (*-512/*-519/*-518) + well-known local SID exception (S-1-5-32-544/548/549/551) applied consistently at 7 spots: Monarch.psm1:646,781,893,963,1028,1471,1530 (+2 DA-only shorthand at 856,2591). No hardcoded full SIDs anywhere. Doc's "etc." covers the 549/551 SIDs not explicitly named in doc text.
+- FLAG (code quality, not decision soundness): identical 3-line condition block duplicated verbatim 7x instead of one shared helper function. Future SID-list change means editing 7 call sites correctly or risking silent drift. Separate refactor note, not a doc/decision problem.
+- ADR-eligible: yes, decision sound and consistently implemented.
+
+[5/8] GPO High-Risk Detection (doc lines 106-120) -- CONFIRMED, exactly as specified
+- All 4 string matches present verbatim: Monarch.psm1:1200-1203 (UserRightsAssignment, SecurityOptions, <Script>, SoftwareInstallation).
+- Doc's explicit requirement ("document this decision in code with a comment") met: line 1199 comment cross-references mechanism-decisions.md by name.
+- No gaps, no drift. Cleanest section so far.
+- ADR-eligible: yes, fully confirmed both directions.
+
+[6/8] Replication Partition Awareness (doc lines 124-132) -- CONFIRMED
+- Per-partition classification: Monarch.psm1:534-541 (Schema, Configuration, DomainDNS, ForestDNS, default Domain). DiagnosticHint for partial failures at 575-592, same concept as doc example, different wording, functionally matches.
+- Doc's "Application partition should be checked explicitly" (AD-integrated DNS) -- confirmed, and more granular than doc asks: code splits into DomainDnsZones + ForestDnsZones as two categories vs doc's one generic "Application" bucket. Superset, not a gap.
+- ADR-eligible: yes, confirmed, implementation slightly exceeds doc spec.
+
+[7/8] Backup Detection Strategy (doc lines 136-192) -- CONFIRMED core, 2 real gaps
+- Confirmed: AD Recycle Bin check (1714-1718) exact. Tier 2 third-party service enum matches KnownBackupServices hashtable/config exactly. Critical Gap Detection formula + hint text (1792-1801) near-verbatim match. No-silent-skip requirement honored -- Test-TombstoneGap gives explicit "not provided" hint, not a silent skip.
+- GAP 1: Tier 2 Windows Server Backup weaker than documented. Doc specifies Event Log (Microsoft-Windows-Backup, Event ID 4) or WMI MSFT_WBJob, filtered to system-state type. Code (line 1729) only checks wbengine SERVICE EXISTS -- "tool installed" not "backup completed." Real confidence-level mismatch.
+- GAP 2: EventLog integration type documented (doc's Tier 3 config text: "VeeamModule | CLI | Registry | EventLog") but not implemented -- switch at line 1761 has no EventLog case, falls to default {$null} silently. User setting Type='EventLog' gets silent no-op.
+- MINOR: doc's tombstone-lifetime default distinguishes 180d (2003 SP1+) vs 60d (older); code always defaults 180 regardless of functional level. Low-impact (only matters if AD query fails).
+- FLAG (code quality): tombstone-lookup block (1706-1712) duplicated verbatim in Test-TombstoneGap (1832-1838). Same pattern as section 4.
+- ADR-eligible: yes, core mechanism sound, but the 2 real gaps (WSB detection method, missing EventLog type) should be resolved -- fix code or amend doc -- before ADR conversion, don't carry the contradiction forward.
+
+[8/8] Monitoring Phase Guidance (doc lines 196-213) -- SOUND GUIDANCE, unverifiable vs code (expected), 1 internal doc inconsistency
+- Zero code to check against -- confirmed no Get-DormantAccountMonitoringMetrics or related function exists, matches sections 2/3 (whole Plan 2 lifecycle layer unbuilt). Pure process guidance, evaluated on merit only.
+- Sound: metrics list, daily/weekly checkpoints, hold-period-complete gate -- standard, reasonable practice, consistent w/ PCI/NIST framing elsewhere.
+- INCONSISTENCY (cross-section, not vs code): this section's hold-period-complete checkpoint says "minimum period elapsed (30-90 days)" but Section 1 Config Defaults (doc line 23) says HoldPeriodMinimumDays: 30 (configurable 30-365). Two different upper bounds (90 vs 365) for the same setting in the same file.
+- MINOR: "deletions replicate to all DCs within 15 minutes" only reliable for intra-site replication w/ default settings; multi-site depends on configured inter-site schedule. Unstated assumption, not wrong.
+- ADR-eligible: yes, as process guidance (not a code-mechanism ADR) -- fix the 30-90 vs 30-365 contradiction before conversion.
+
+=== ALL 8 SECTIONS REVIEWED ===
+Summary: 6/8 confirmed clean-to-minor-caveat (Config Model, Privileged Group Matching, GPO High-Risk Detection, Replication Partition Awareness, Disable Date Tracking, Rollback Data Archiving). 1/8 had 2 real doc-vs-code gaps (Backup Detection Strategy). 1/8 had a cross-section internal doc inconsistency (Monitoring Phase Guidance: 30-90 vs 30-365).
+Code-quality flags (not doc problems): RID-match block duplicated 7x; tombstone-lookup block duplicated 2x.
+Next: user decides how to handle findings (fix code, amend doc, or note as open items) before any ADR conversion or working-summary entry -- not part of this pass.
+
+--- domain-specs.md, section by section (sort into (a) code-catalog/drop vs (b) institutional-knowledge/migrate) ---
+
+[1/8] Infrastructure Health (doc lines 7-27)
+- (a) All 5 Functions bullets confirmed against Monarch.psm1, redundant with code, safe to drop:
+  - FSMO role placement + reachability -> Get-FSMORolePlacement (psm1:250) -- matches exactly, queries Get-ADDomain/Get-ADForest directly (not OctoDoc) as doc states.
+  - Replication topology health per-link/partition -> Get-ReplicationHealth (psm1:487) -- matches.
+  - Site/subnet topology -> Get-SiteTopology (psm1:362) -- matches; detects unassigned subnets + empty sites exactly as doc's "highest-value checks" describes.
+  - Forest/domain functional level + schema version -> Get-ForestDomainLevel (psm1:179) -- matches. Function's own doc-comment already states "Overlaps with New-DomainBaseline intentionally" -- that rationale already has a home in code, no migration needed.
+  - DNS zone health / SRV completeness -> Test-SRVRecordCompleteness + Test-ZoneReplicationScope (psm1:2262, 2353) -- behavior matches, but both are code-tagged Domain='DNS' and are the same functions separately (and correctly) catalogued by name in Section 8 (doc lines 192-196). Not an error -- Section 1 describes DNS as a capability Infrastructure Health depends on in prose, Section 8 is the named catalog. Worth noting so a dedup pass doesn't try to "fix" this as a duplicate.
+- (b) Institutional knowledge, no other home yet, needs migrate:
+  - Doc lines 25 (trailing paragraph): "graduated confidence pattern" (Healthy/Warning/Failed three states) + claim that DNS Application partition failures are "the most common partial-replication scenario in practice." The 3-state logic itself is in code (psm1:520-541) and self-evident from reading it. The empirical claim ("most common in practice") is NOT in code anywhere -- pure operational knowledge, needs to land in CONTEXT.md/ADR.
+- GAP (doc-vs-code, not a/b): "Stratagems composed" bullet 3 -- "Time sync with PDC emulator awareness: TimeSync + FSMO role query" -- has no matching Functions bullet in this section and no TimeSync/w32tm code anywhere in Monarch.psm1 (confirmed zero hits). NOT a silent gap: working-summary.md:53 lists time-sync under "Plan 5 -- OctoDoc stratagem integration," explicitly blocked on OctoDoc redesign, not just unscheduled. Doc and working-summary agree this is unbuilt; only issue is domain-specs.md doesn't say so itself (mechanism-decisions.md's unbuilt-function sections do flag their own status inline, this one doesn't).
+- Other 2 "Stratagems composed" bullets (DC reachability: NTDS/Ping/RPC; Replication health: Replication/DNS/NTDS) are informal descriptions of what each function queries internally, not literal code constructs ("stratagem" isn't a code term) -- consistent with the Functions bullets they correspond to, nothing to flag.
+
+[2/8] Identity Lifecycle (doc lines 29-59)
+- (a) Find-DormantAccount (psm1:617) -- redundant with code, safe to drop. Confirmed exactly: MSA/gMSA exclusion (objectClass filter, 634), lastLogonTimestamp first pass + cross-DC LastLogon refinement for near-threshold accounts only (nearCutoff = threshold - 15 days, 664-682), CSV export columns match doc verbatim (SamAccountName, DisplayName, LastLogon, DaysSinceLogon, PasswordAgeDays, MemberOfGroups, DormantReason -- psm1:735-736), "no stratagem" true (direct AD queries only).
+- 4 Functions bullets NOT built, no code found (Suspend-/Restore-/Remove-DormantAccount, Get-DormantAccountMonitoringMetrics) -- already known, cross-referenced as planned Plan 2/3 in working-summary.md:50 and phase-02-remediation.md:11-13. Not a silent gap. The doc's inline behavior spec for these (archive-to-extensionAttribute14, WhatIf requirement, etc.) is prospective build spec, not (a) or (b) -- neither redundant-with-code nor retrospective rationale, it's forward design intent. Leave as-is until built; mechanism-decisions.md already carries the underlying mechanism rationale.
+- GAP, different tier from above: "User provisioning" and "Stale computer account discovery" Functions bullets -- zero code in Monarch.psm1, and unlike the 4 dormant-account functions, ZERO cross-reference anywhere in working-summary.md or docs/phases/*.md. These aren't confirmed-planned like the others; they're either stale placeholder content or undocumented future scope. Worth a decision: prune or promote to an actual phase plan.
+- (b) Institutional knowledge, no other home yet, needs migrate:
+  - Cross-DC LastLogon aggregation rationale: WHY lastLogonTimestamp-first is used ("this optimization matters at scale") -- code does it but doesn't explain why.
+  - Quarantine OU naming rationale: "z prefix sorts to bottom" -- the value (zQuarantine-Dormant) is already in config/mechanism-decisions.md, but the naming reason isn't anywhere in code.
+  - MSA/gMSA exclusion rationale: "these are AD objects, not user accounts, will produce false positives" -- code does the filter (line 634) but doesn't say why.
+  - **Human gate pattern** (doc line 54): "the automated system never decides which accounts to disable" -- this is the core safety-design rationale for the whole Remediation phase. Not in code anywhere (code just accepts a CSV path param). Highest-value (b) item in this section, should migrate first.
+- (a) Redundant, already covered elsewhere, safe to drop:
+  - Service account exclusion keywords, 60-day grace period, 30-day minimum hold -- all just restate config values already captured in mechanism-decisions.md Config Model section (section 1 of that file).
+  - Disable date tracking (extensionAttribute15) / Rollback data (extensionAttribute14) bullets -- doc already says "see mechanism-decisions.md", pointer already exists, no migration needed.
+  - **NOTE:** this doc's "30-day minimum hold period" is stated as a bare fact with no range. mechanism-decisions.md's own Monitoring Phase Guidance section already has a confirmed internal contradiction on this same value (30-90 vs 30-365, docs/work [8/8] above) -- this is a third data point on the same setting, worth folding into that same open item rather than treating as new.
+- **v0 scripts** bullet -- legacy script-name mapping (Find-DormantAccounts.ps1 etc.), low-value historical breadcrumb, technically (b) but not worth prioritizing.
+- **Visual language** bullet -- just a pointer to docs/design-system.md, not content itself, nothing to migrate.
+
+[3/8] Privileged Access (doc lines 61-84)
+- (a) All 4 built Functions bullets confirmed exact against Monarch.psm1, redundant, safe to drop -- cleanest section so far, doc reads almost like generated-from-code:
+  - Get-PrivilegedGroupMembership (psm1:765) -- CSV columns, sort order, CSVPath-null-when-empty all match verbatim.
+  - Find-AdminCountOrphan (psm1:876) -- CSV columns match verbatim, MemberOf DN join with `'; '` confirmed.
+  - Find-KerberoastableAccount (psm1:946) -- confirmed returns ALL SPN users (not privileged-only) with IsPrivileged flag, exactly as doc specifies.
+  - Find-ASREPRoastableAccount (psm1:1011) -- confirmed DoesNotRequirePreAuth filter, no -OutputPath param, matches doc.
+  - **Orchestrator combine** bullet (roastable-accounts.csv, psm1:3161-3186) -- exact match including column order (ThreatType, SamAccountName, DisplayName, IsPrivileged, Enabled, SPNs, PasswordAgeDays), ASREP rows getting null SPNs/PasswordAgeDays, and file-not-written-when-zero-rows behavior. Doc is precise enough to regenerate this logic from.
+- 3 Functions bullets not built, no code -- but all 3 are cross-referenced as planned, unlike section 2's silent gap: Remove-AdminCountOrphan and Grant-TimeBoundGroupMembership -> working-summary.md:50 + phase-02-remediation.md:14-15 (Plan 2). Test-TieredAdminCompliance -> working-summary.md:52 + phase-04-comparison.md:14 (Plan 4, needs tier-model config). Not a gap, just prospective spec like section 2's dormant-account functions.
+- (a) Institutional knowledge bullets, all redundant/already-homed, safe to drop:
+  - RID suffix pattern -- doc already says "see mechanism-decisions.md", pointer exists (finding [4/8] above, confirmed 7 call sites).
+  - DA thresholds 5/10, admin naming pattern `adm|admin` -- both already in mechanism-decisions.md Config Model table (finding [1/8] above).
+  - **Connects to an existing gap, not new:** the admin-naming-pattern bullet references `AdminAccountPattern` config key, which finding [1/8] already flagged as defined-but-never-consumed (psm1:38, grep confirms zero usage elsewhere). No enforcing function exists for this pattern yet -- domain-specs.md doesn't claim one does, so no new doc-vs-code conflict, just noting the two findings describe the same underlying gap.
+- **v0 scripts:** Audit-PrivilegedAccess.ps1 -- same low-value historical breadcrumb as section 2, not prioritized.
+
+[4/8] Group Policy (doc lines 86-116) -- most real gaps of any section so far, all in Export-GPOAudit's sub-bullets
+- (a) All 6 Institutional-knowledge bullets confirmed redundant, safe to drop -- no real (b) content this section, unlike 1/2:
+  - High-risk detection via string matching + category list -- pointer to mechanism-decisions.md already exists. MINOR: doc's category name "Scripts" is imprecise vs the actual matched literal `<Script>` (angle brackets, singular) -- mechanism-decisions.md finding [5/8] already has the precise version, this is just a looser restatement, not a new conflict.
+  - Permitted GPO editors list -- already in mechanism-decisions.md Config Model table.
+  - Numbered output folder convention + "why" (review priority order) -- both the structure AND the rationale are already in code: psm1:1175 has the exact comment "numbered for review priority order". Nothing to migrate.
+  - Filename sanitization char list, GPO owner field -- both self-evident from code (psm1:1252 regex matches doc's char list exactly; Owner field present in summary CSV).
+- Export-GPOAudit (psm1:1162) -- CSV summary fields (13 cols) confirmed exact match. Numbered folder structure confirmed exact match. Filename sanitization confirmed exact match. Overpermissioned-GPO export confirmed. But 3 real gaps found in the sub-bullets:
+  - GAP 1: doc claims linkage CSV has 5 columns "GPOName, LinkedTo, Enabled, NoOverride, Order" -- code (psm1:1224-1230) only produces 4, no `Order` field anywhere (grepped, zero hits). Link precedence order isn't captured at all.
+  - GAP 2: doc claims WMI filter export includes "name, description, WQL query, dates" -- code (psm1:1307) only requests/exports `msWMI-Name`, `msWMI-Parm2` (query), `whenCreated`, `whenChanged`. No `msWMI-Parm1` (the actual AD attribute for filter description) is queried or exported -- description is silently absent.
+  - GAP 3: doc claims executive summary includes "numbered review priorities" -- code's summary text (psm1:1327-1333) is just 5 stat lines (total/unlinked/disabled/high-risk counts). No prioritized or numbered list of GPOs to review exists anywhere in the function.
+  - MINOR (not a gap, superset): permission CSV doc description ("trustee, SID, type, permission level, inherited flag" -- 5 concepts) undercounts vs code's actual 6 fields (adds `Denied`, which is load-bearing -- used in the overpermission filter itself, not decorative).
+- **New forward-design risk, not in either bucket:** doc's Functions list has a planned `Backup-GPO (Remediation)` monarch-kit function (Plan 2, cross-referenced in working-summary.md:50) -- but `Export-GPOAudit` already calls the *native* GroupPolicy module cmdlet `Backup-GPO -All` internally (psm1:1275). Once the monarch-kit remediation function is built with the same name, it will shadow the native cmdlet within the module scope -- Export-GPOAudit's internal call would then hit the new wrapper instead of the native cmdlet unless deliberately scoped (e.g. `Microsoft.GroupPolicy\Backup-GPO`). Worth flagging before that function gets built, not after.
+- Find-UnlinkedGPO (psm1:1073), Find-GPOPermissionAnomaly (psm1:1115) -- (a) confirmed exist, doc correctly notes both are "also surfaced as part of Export-GPOAudit" output, consistent overlap, not a duplicate-function complaint.
+- Backup-GPO, Compare-GPO Functions bullets -- not built as monarch-kit functions, but cross-referenced as planned: Backup-GPO in working-summary.md:50 (Plan 2), Compare-GPO in working-summary.md:52 (Plan 4). Not silent gaps.
+- **v0 scripts:** Export-GPOAudit.ps1 -- name reused directly as the actual function name (unlike other sections' v0 scripts, which were renamed/reorganized). Low-value breadcrumb, not prioritized.
+
+[5/8] Security Posture (doc lines 118-133) -- clean, no dedicated "Institutional knowledge" header this section
+- (a) 4/5 Functions confirmed against Monarch.psm1, redundant, safe to drop:
+  - Get-PasswordPolicyInventory (psm1:1371) -- returns default policy + all fine-grained PSOs, matches doc.
+  - Find-WeakAccountFlag (psm1:1426) -- confirmed exactly 3 flags: PasswordNeverExpires, ReversibleEncryption, DESOnly (doc's "etc." not needed, count matches). Also cross-references IsPrivileged, extra detail beyond doc's one-liner, not a gap.
+  - Test-ProtectedUsersGap (psm1:1509) -- doc's most prescriptive requirement in this section (specific DiagnosticHint warning content: Kerberos delegation disabled, NTLM blocked, no blanket addition) is honored close to verbatim (psm1:1591-1595). Hint only fires when gap accounts actually have SPNs -- correctly scoped, not a blanket warning. This rationale is now fully self-documenting in the code's own hint string, nothing left to migrate.
+  - Find-LegacyProtocolExposure (psm1:1614) -- NTLMv1 (LmCompatibilityLevel) + LM hash storage confirmed; code adds a 3rd check (LDAPSigningDisabled) beyond doc's "NTLMv1, LM hashes, etc." -- superset, doc's "etc." covers it, not a gap.
+- Compare-CISBaseline -- not built, no code. Cross-referenced as planned: working-summary.md:52 (Plan 4, needs prior Discovery data or external baseline file). Not a silent gap.
+- Trailing paragraph (doc line 131): "accepts external baseline definition rather than hardcoding a specific benchmark version... comparison mechanism is generic" -- same category as section 2's unbuilt-function design notes: prospective build spec for Compare-CISBaseline, neither (a) redundant-with-code nor (b) retrospective rationale since the function doesn't exist yet. Leave as-is until built.
+- No v0 script listed for this section (doc has none) -- consistent, this domain didn't exist as a standalone v0 script.
+
+[6/8] Backup & Recovery Readiness (doc lines 135-168) -- mostly a pointer to mechanism-decisions.md, one new symptom of an already-known gap
+- (a) Both Functions confirmed against Monarch.psm1, redundant, safe to drop:
+  - Get-BackupReadinessStatus (psm1:1697) -- 3-tier structure (Universal/WSB/Vendor/VendorIntegration) matches doc's "Stratagems composed" bullets exactly, tier progression logic matches.
+  - Test-TombstoneGap (psm1:1821) -- matches doc's one-liner exactly: no-op hint when BackupAgeDays not supplied, critical-gap comparison when it is.
+- **Critical return contract block (doc lines 152-166), checked field-by-field against actual return object:**
+  - All 11 doc-listed fields present in code's return object (psm1:1811-1819), plus boilerplate Function/Timestamp/Warnings the doc omits for brevity -- not a gap, every function in the module has those 3.
+  - GAP (not new, same root cause as mechanism-decisions.md finding [7/8] GAP 2): doc's `BackupToolSource` comment lists `EventLog` as a possible value -- code's Tier 2/3 logic can only ever set `WSB`, `ServiceEnum`, or leave it unset. `EventLog` is never producible, same missing-switch-case issue already flagged.
+  - NEW SYMPTOM of the same root gap (not previously called out this specifically): doc's enums also claim `BackupToolSource` can be `VendorIntegration` and `BackupAgeSource` can be `WSB` -- neither is true in code. Tier 3 never touches `$backupToolSource` (stays whatever Tier 2 left it), and Tier 2's WSB check never sets `$backupAgeSource` at all (matches finding [7/8] GAP 1 -- WSB only confirms tool-installed, not backup-completed, so no age exists to source). Net effect: of the 4 enum values across both fields that the contract advertises as reachable, only 2 are ever actually reachable (`WSB`/`ServiceEnum` for ToolSource, `VendorIntegration`/null for AgeSource) -- the contract as documented overstates what the current implementation can produce.
+- Doc's opening line ("See mechanism-decisions.md for the complete backup detection strategy") is accurate -- this section adds the literal return-shape contract on top, which the code confirms field-for-field except for the enum-completeness issue above.
+
+[7/8] Audit & Compliance (doc lines 170-184) -- clean, no gaps, no dedicated institutional-knowledge header
+- (a) 3/4 Functions confirmed against Monarch.psm1, redundant, safe to drop:
+  - New-DomainBaseline (psm1:1869) -- doc's one-liner ("functional levels, DCs, FSMO, OUs, object counts, password policy") confirmed complete, all 6 elements present in both the CSV exports and return object. Function's own doc-comment already flags itself as "Pattern-setting function: all subsequent API functions follow this contract" -- real architectural rationale, but already self-documented in code, nothing to migrate.
+  - Get-AuditPolicyConfiguration (psm1:2154) -- matches "per-DC audit policy settings"; code adds a cross-DC `Consistent` check not mentioned in doc's one-liner -- extra detail, not a gap.
+  - Get-EventLogConfiguration (psm1:2206) -- matches "log size/retention per DC"; checks Security/System/Directory Service logs, returns MaxSizeKB + OverflowAction (LogMode) as the retention-policy proxy. Reasonable match, doc doesn't claim more.
+- Compare-DomainBaseline -- not built, no code. Cross-referenced as planned: working-summary.md:52 (Plan 4). Doc's inline spec ("classify changes as expected/advisory/requires-review") is prospective design intent for this unbuilt function, same category as other Plan 4 items -- not (a) or (b), leave as-is until built.
+- v0 scripts: Create-NetworkBaseline.ps1 -- consistent naming lineage with New-DomainBaseline, low-value breadcrumb.
+
+[8/8] DNS (AD-Integrated) (doc lines 186-198) -- clean, no gaps, no institutional-knowledge header, no v0 scripts listed
+- (a) All 4 Functions confirmed against Monarch.psm1, redundant, safe to drop. This is the section's complete function set -- no more, no less, exact 1:1 match with code's 4 DNS-domain functions:
+  - Test-SRVRecordCompleteness (psm1:2262) -- already confirmed in section 1's cross-domain note.
+  - Get-DNSScavengingConfiguration (psm1:2312) -- matches "scavenging settings per zone" exactly (ScavengingEnabled, NoRefreshInterval, RefreshInterval, DS-integrated zones only).
+  - Test-ZoneReplicationScope (psm1:2353) -- already confirmed in section 1's cross-domain note.
+  - Get-DNSForwarderConfiguration (psm1:2393) -- matches "forwarder config per DC"; adds cross-DC `Consistent` check, extra detail beyond doc's one-liner, not a gap.
+- MINOR naming-convention inconsistency (not a doc-vs-code gap, a code-quality note): `Test-ZoneReplicationScope` is the only `Test-*` function in the whole module with no boolean/verdict field in its return object -- it just enumerates zone replication scope with no pass/fail judgment. Every other `Test-*` function returns a verdict (`Test-SRVRecordCompleteness` -> `AllComplete`, `Test-TombstoneGap` -> `CriticalGap`, `Test-ProtectedUsersGap` -> per-account gap list). Doc's phrasing ("verify zone is replicated to appropriate DCs") implies active verification the function doesn't actually do -- it's descriptive/informational only. Worth a decision: rename to `Get-ZoneReplicationScope`, or add the verdict logic to match the `Test-` naming convention.
+
+--- errata: "The Three-Layer Execution Model" (domain-specs.md lines 200-268) ---
+
+Not reviewed above -- out of scope for doc-vs-code checking. It belongs in user documentation (README/deployment-guide), not CONTEXT.md or an ADR: phase list, output-directory convention, and wrapper UX are usage content, not glossary terms or a hard-to-reverse decision. Already specified in docs/phases/phase-03-wrapper.md pending Start-MonarchAudit's build. No action needed here.
+
+--- 2 additional code-quality observations, noticed in passing across sections during the pass, not written up at the time ---
+
+- FLAG (code quality, same category as mechanism-decisions.md [4/8] RID-match dup and [7/8] tombstone-lookup dup, not previously counted): the `schemaDN = "CN=Schema,CN=Configuration,$($domainInfo.DistinguishedName)"` + `Get-ADObject -Properties objectVersion` block is duplicated verbatim in 2 spots -- Get-ForestDomainLevel (psm1:229) and New-DomainBaseline (psm1:1924). Same pattern: a schema-version change means editing both call sites correctly. Not a doc problem, a third instance of the same duplication habit already flagged twice elsewhere in this file.
+  - Destination: **Issue**, not CONTEXT.md or ADR. It's a refactor-now defect (extract shared helper), not a decision to record or knowledge to preserve. Same destination as the RID-match and tombstone-lookup dup flags it's grouped with -- if those become one refactor ticket, this is a third line item on it, not a separate ADR concern.
+
+- FLAG (efficiency, not previously noted): the full privileged-group discovery block (`Get-ADGroup -Filter '*' -Properties SID`, then filter by RID suffix/well-known SID) is recomputed from scratch by 7 separate functions -- Find-DormantAccount (644), Get-PrivilegedGroupMembership (778), Find-AdminCountOrphan (890), Find-KerberoastableAccount (960), Find-ASREPRoastableAccount (1025), Find-WeakAccountFlag (1468), Test-ProtectedUsersGap (1524). Each one does a full domain-wide group enumeration independently rather than computing the privileged-group DN set once and passing it in. Notable because domain-specs.md section 2 explicitly documents a *different* optimization ("this optimization matters at scale," re: LastLogon cross-DC queries) as institutional knowledge worth preserving -- the module already cares about this class of problem, just didn't apply the same instinct here. At real domain scale (thousands of groups), this is likely the more expensive repeated query of the two, and unlike the LastLogon case it's not documented anywhere as a deliberate tradeoff.
+  - Destination: **Issue** for the fix itself (compute once, pass to callers or cache per-orchestrator-run). Arguably also a one-line **CONTEXT.md** candidate once fixed -- "privileged-group DN set is computed once per Discovery run and threaded through, not per-function" would be a non-obvious architectural fact worth stating so nobody reintroduces the per-function re-query later. Not ADR-eligible on its own -- it's an optimization, not a decision with real alternatives/tradeoffs to justify.
+

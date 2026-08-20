@@ -49,3 +49,32 @@ If the concept you need isn't in the glossary yet, that's a signal — either yo
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
 
 > _Contradicts ADR-0007 (event-sourced orders) — but worth reopening because…_
+
+## monarch-kit ADR conventions
+
+`docs/agents/adr-format.md` holds the format, the frontmatter rules, what qualifies as a
+decision, and the command that rebuilds the index. Read it before writing an ADR.
+
+An ADR is written for both agents and people, so it stays readable as prose. Name a related ADR
+in the body when the link matters.
+
+This repo expects many more ADRs than a greenfield project, because most of its decisions were
+already made and their reasons live nowhere but in one person's head. Recovering a reason is
+the point.
+
+### Where a finding goes
+
+- A term this project defines or narrows goes in `CONTEXT.md`, as a definition, and nothing
+  else goes there.
+- A rule about how the code is built goes in the ADR that records the decision.
+- A defect goes in a GitHub issue.
+
+A structural rule such as "the privileged-group DN set is computed once per run and threaded
+through" is an ADR line, not a glossary line, even though it reads like a fact about the
+domain.
+
+### Citations
+
+Give the standard, the control identifier, and the revision: `NIST SP 800-53 Rev. 5, AC-2(3)`.
+Use a URL for community sources that carry no control identifier. Mark a citation unverified
+when you did not read it in the source. Never invent one.

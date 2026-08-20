@@ -152,17 +152,17 @@ Find-DormantAccount -Server dc01.contoso.com -OutputPath .\dormant-accounts
 
 This repo includes development artifacts alongside the module code:
 
-- [`CLAUDE.md`](CLAUDE.md) — machine-readable project specification (architecture, conventions, probe contracts)
+- [`AGENTS.md`](AGENTS.md) — project identity, sitemap, and conventions
 - [`docs/domain-specs.md`](docs/domain-specs.md) — audit categories with function lists and return contracts
 - [`docs/mechanism-decisions.md`](docs/mechanism-decisions.md) — technical decisions with rationale
-- [`docs/design-system.md`](docs/design-system.md) — visual language specification for report output
+- [`docs/reference/report-design-system.md`](docs/reference/report-design-system.md) — visual language specification for report output
 - [`docs/checklists.md`](docs/checklists.md) — expert-curated review phase checklists
 
-Reading order for contributors: this README, then [`CLAUDE.md`](CLAUDE.md), then [`docs/domain-specs.md`](docs/domain-specs.md) for the category you're working on.
+Reading order for contributors: this README, then [`AGENTS.md`](AGENTS.md), then [`docs/domain-specs.md`](docs/domain-specs.md) for the category you're working on.
 
 ## Compliance
 
-Dormant account policy aligns with PCI DSS v4.0.1, NIST SP 800-53 Rev 5, and Microsoft 2026 guidance. See [`docs/dormant-account-policy.md`](docs/dormant-account-policy.md).
+Dormant account policy aligns with PCI DSS v4.0.1, NIST SP 800-53 Rev 5, and Microsoft 2026 guidance. See [`docs/reference/dormant-account-standard.md`](docs/reference/dormant-account-standard.md).
 
 ## Related Tools
 

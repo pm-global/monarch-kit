@@ -1,0 +1,24 @@
+Validation Effort 7: dormant-account-standard.md citation verification
+
+Status: not started. This file is a stub.
+
+Scope and success criteria are in docs/working-plan.md, section "Validation Efforts", effort 7.
+Ticket: #21.
+
+--- What this pass must produce ---
+
+A /research pass re-verifying that the PCI DSS v4.0.1, NIST 800-53 and Microsoft 2026 guidance
+citations in docs/reference/dormant-account-standard.md are still current and accurately
+represented. One flag per citation: confirmed, outdated, or needs-update.
+
+--- Rules that apply ---
+
+Cite standard, control identifier, and revision. Example: NIST SP 800-53 Rev. 5, AC-2(3). Use a
+URL for community sources that carry no control identifier.
+
+A citation not verified in the source is marked unverified. It is never invented. Where the
+document says "per NIST" with no control identifier, record the gap rather than filling it.
+
+--- Findings ---
+
+(none yet)

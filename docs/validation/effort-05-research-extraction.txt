@@ -1,0 +1,27 @@
+Validation Effort 5: gpo-review-workflow.md + research-brief.md + research-brief-draft.md
+extraction pass
+
+Status: not started. This file is a stub.
+
+Scope and success criteria are in docs/working-plan.md, section "Validation Efforts", effort 5.
+Tickets: #14 (GPO review choices) and #15 (the two research briefs).
+
+--- What this pass must produce ---
+
+Each file read for decision-relevant content: anything that actually informed a mechanism
+decision, a domain-spec entry, or the report's design. Each finding maps a source paragraph to
+the ADR or CONTEXT.md entry it belongs in.
+
+The source files survive. docs/working-plan.md records why: AD research carries breadth an ADR
+must not absorb, including attack paths, community consensus, and places where Microsoft's own
+guidance is contested.
+
+--- Known before starting ---
+
+research-brief.md and research-brief-draft.md are one brief plus one revision, not two topics.
+The draft carries tail material the later version dropped: "What You Likely Missed", "Most
+useful additions", "Trust features", and "What I'd prioritize next".
+
+--- Findings ---
+
+(none yet)

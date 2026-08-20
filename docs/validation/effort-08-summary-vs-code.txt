@@ -1,0 +1,20 @@
+Validation Effort 8: working-summary.md vs code
+
+Status: not started. This file is a stub.
+
+Scope and success criteria are in docs/working-plan.md, section "Validation Efforts", effort 8.
+Ticket: #12.
+
+--- What this pass must produce ---
+
+Every claimed decision and every complete-or-planned item in docs/working-summary.md checked
+against the current Monarch.psm1 and tests/Monarch.Tests.ps1, marked valid, stale, or wrong.
+
+Nothing carries into CONTEXT.md or an ADR until it clears this check.
+
+GitHub issues not yet reflected in working-summary.md get reconciled into it in the same pass,
+never handled separately.
+
+--- Findings ---
+
+(none yet)

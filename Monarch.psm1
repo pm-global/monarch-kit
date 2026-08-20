@@ -16,6 +16,7 @@ Set-StrictMode -Version Latest
 $script:DefaultConfig = @{
 
     # Identity Lifecycle
+    # 90 days per PCI, see ADR-0007
     DormancyThresholdDays      = 90
     NeverLoggedOnGraceDays     = 60
     HoldPeriodMinimumDays      = 30

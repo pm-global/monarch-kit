@@ -2,7 +2,8 @@
 
 Active Directory audit and administration suite for mid-market domains (100-10,000 users).
 
-Contribution process and merge requirements: see `CONTRIBUTING.md`.
+Commit conventions and merge requirements: see `CONTRIBUTING.md`. Rules that judge the agent,
+including when a change needs a plan: see `AGENT_CONDUCT.md`.
 
 ## Module Identity
 
@@ -25,22 +26,35 @@ Current phase: 2. Active plans: `docs/plans/`.
 ├── Monarch-Config.psd1         ← default configuration values
 ├── preflight-win.ps1           ← Windows environment check
 ├── AGENTS.md                   ← project identity and sitemap (this file)
-├── CONTRIBUTING.md             ← contribution process and merge requirements
+├── CONTRIBUTING.md             ← commit conventions and merge requirements
+├── AGENT_CONDUCT.md            ← rules that judge the worker, any repo
+├── CODING_STANDARDS.md         ← function-level code rules, any language
 ├── tests/
 │   └── Monarch.Tests.ps1       ← all tests
 └── docs/
+    ├── adr/                    ← architecture decision records
+    ├── agents/                 ← agent skill configuration
+    ├── reference/              ← standing how-to and AD research
+    │   └── ad-research/
+    ├── validation/             ← evidence from doc-versus-code checks
     ├── phases/                 ← phase scope definitions (stable, one per phase)
     ├── plans/                  ← implementation-ready specs (active work)
-    ├── raw/                    ← identified issues and undesigned items
-    ├── archive/                ← completed work, one folder per phase
-    │   └── phase-01-discovery/
-    ├── sample-report/          ← real scan output examples
-    │   └── report-v7-badblood/
-    ├── report-v5-to-be-superseded.html  ← legacy feature showcase (temporary)
-    └── *.md                    ← stable design decisions and specs
+    ├── sample-report/          ← report samples, see its README for which is authoritative
+    ├── archive/                ← historical, nothing load-bearing
+    │   ├── phase-01-discovery/
+    │   └── raw/                ← undesigned items, several are specs for open issues
+    └── *.md                    ← ledgers and documents pending dissolution
 ```
 
 ## Documentation Sitemap
+
+### Read these first
+
+Read `docs/adr/README.md` and the records it lists before any other document in this repo.
+The records in `docs/adr/` hold the decisions. Where any document disagrees with an ADR, the
+ADR wins and the other document is wrong.
+
+Read `CONTEXT.md` next. It defines the terms this project narrows.
 
 ### Key Files
 
@@ -51,21 +65,26 @@ Current phase: 2. Active plans: `docs/plans/`.
 | `Monarch-Config.psd1` | Default configuration values and thresholds | Config or threshold work |
 | `preflight-win.ps1` | Windows environment check (server/workstation aware) | First run on a new Windows host |
 | `tests/Monarch.Tests.ps1` | Full test suite (Pester 5+, mock-only) | Writing or modifying tests |
-| `CONTRIBUTING.md` | Contribution process, class definitions, merge requirements | Planning a contribution |
+| `CONTRIBUTING.md` | Commit conventions, attribution, merge requirements | Committing or merging |
+| `AGENT_CONDUCT.md` | Change classes, plan requirements, the five reviewer lenses | Planning any change |
 | `docs/phases/phase-02-remediation.md` | Phase 2 scope: remediation, monitoring, cleanup functions | Phase 2 implementation work |
 | `docs/phases/phase-03-wrapper.md` | Phase 3 scope: interactive wrapper (Start-MonarchAudit) | Phase 3 implementation work |
 | `docs/phases/phase-04-comparison.md` | Phase 4 scope: comparison and compliance functions | Phase 4 implementation work |
-| `docs/sample-report/report-v7-badblood/` | Completed scan output against a BadBlood domain | Understanding component output format |
-| `docs/report-v5-to-be-superseded.html` | Feature showcase from earlier mockup | Implementing report features not yet in v7 |
+| `docs/sample-report/README.md` | Which report sample is authoritative and why | Any report work |
+| `docs/sample-report/demo_report_v9.html` | Current real report output, anonymized. The baseline | Reporting changes |
+| `docs/sample-report/demo_report_v7_badblood/` | First real scan output, against a BadBlood lab domain | Understanding component output format |
+| `docs/sample-report/demo_report_v5.html` | Unimplemented mockup. Design target, never shipped | Implementing report features not yet in v9 |
 | `docs/domain-specs.md` | Audit domains, functions per phase, return contracts | Function implementation or orchestrator work |
 | `docs/mechanism-decisions.md` | Technical decisions (config, lastLogonTimestamp, backup tiers, etc.) | Logic involving config, thresholds, or interpretation |
 | `docs/checklists.md` | Human review checklists and institutional knowledge | Remediation or interactive wrapper work |
-| `docs/design-system.md` | HTML report visuals and console output rules | Reporting changes |
-| `docs/dormant-account-policy.md` | Dormant account compliance policy | Dormant account features |
-| `docs/deployment-guide.md` | Environment setup, RSAT, first-run validation | Preflight or deployment work |
-| `docs/gpo-review-guide.md` | GPO review methods and priorities | Group Policy work |
-| `docs/gap-research.md` | Implementation gap analysis vs industry standards | Gap analysis or roadmap work |
-| `docs/initial-research.md` | Foundational research on AD audit tools and patterns | Design validation or research context |
+| `docs/reference/report-design-system.md` | HTML report visuals and console output rules | Reporting changes |
+| `docs/reference/dormant-account-standard.md` | External compliance standard the code conforms to | Dormant account features |
+| `docs/reference/deployment-guide.md` | Environment setup, RSAT, first-run validation | Preflight or deployment work |
+| `docs/reference/gpo-review-workflow.md` | GPO review methods and priorities | Group Policy work |
+| `docs/reference/ad-research/research-brief.md` | Implementation gap analysis vs industry standards | Gap analysis or roadmap work |
+| `docs/reference/ad-research/research-brief-draft.md` | Earlier, wider version of the brief | Design validation or research context |
+| `docs/validation/` | Evidence from doc-versus-code validation efforts | Before trusting any document |
+| `CODING_STANDARDS.md` | Function-level code rules, any language | Writing or reviewing code |
 
 **Strict loading rule:** Only load a file when it clearly matches the current task. Use filesystem commands (`find`, `ls`, `grep`) first before reading full files.
 
@@ -83,7 +102,7 @@ Current phase: 2. Active plans: `docs/plans/`.
 - All functions return structured `[PSCustomObject]` with at minimum: `Domain`, `Function`, `Timestamp`, `Warnings`.
 - `Domain` names the functional domain (e.g., `'InfrastructureHealth'`, `'IdentityLifecycle'`).
 - Functions that also produce file output return the structured object AND write files. The object includes paths to generated files.
-- No formatted strings as primary output. No `Write-Host` in API functions.
+- No `Write-Host` in API functions.
 
 ### Config Access
 
@@ -110,8 +129,7 @@ Current phase: 2. Active plans: `docs/plans/`.
 - All AD/DNS/GPO cmdlets are mocked — tests run without a domain.
 - Every function's tests verify: correct return object properties, correct `Domain` and `Function` values, `Timestamp` populated, `Warnings` is an array.
 - Functions with business logic get additional tests: exclusion logic, threshold comparisons, config overrides.
-- Tests are written alongside code at each step, never after.
-- Live domain testing is not yet implemented — see `docs/raw/todo-live-domain-tests.md`.
+- Live domain testing is not yet implemented — see `docs/archive/raw/todo-live-domain-tests.md`.
 
 ## Agent skills
 
@@ -125,4 +143,4 @@ Default five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `
 
 ### Domain docs
 
-Single-context layout — `CONTEXT.md` + `docs/adr/` at repo root (created lazily by `/domain-modeling`, don't exist yet). See `docs/agents/domain.md`.
+Single-context layout — `CONTEXT.md` + `docs/adr/` at repo root. See `docs/agents/domain.md`.
